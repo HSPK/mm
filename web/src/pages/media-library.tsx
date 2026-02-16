@@ -573,7 +573,7 @@ const MediaTile = memo(function MediaTile({
                 loading="lazy"
                 className={cn(
                     "h-full w-full object-cover transition-all duration-200 will-change-transform",
-                    selectionMode && selected && "scale-[0.90] rounded-lg",
+                    selectionMode && selected && "scale-[0.95] rounded-lg",
                     selectionMode && !selected && "scale-100",
                     !selectionMode && "group-hover:scale-[1.03]",
                 )}
