@@ -63,6 +63,7 @@ def cli(ctx: click.Context, db: Path) -> None:
 def _register() -> None:
     from uom.cli.db import db  # noqa: F811
     from uom.cli.dedup import dedup  # noqa: F811
+    from uom.cli.geo import geo  # noqa: F811
     from uom.cli.info import info  # noqa: F811
     from uom.cli.organize import organize  # noqa: F811
     from uom.cli.scan import scan  # noqa: F811
@@ -78,6 +79,7 @@ def _register() -> None:
     cli.add_command(info)
     cli.add_command(server)
     cli.add_command(db)
+    cli.add_command(geo)
 
 
 _register()

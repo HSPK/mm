@@ -10,6 +10,9 @@ export interface Media {
     date_taken?: string | null
     camera_model?: string | null
     duration?: number | null
+    gps_lat?: number | null
+    gps_lon?: number | null
+    location_label?: string | null
 }
 
 export interface MediaMetadata {
@@ -26,6 +29,9 @@ export interface MediaMetadata {
     duration: number | null
     gps_lat: number | null
     gps_lon: number | null
+    location_label?: string | null
+    location_country?: string | null
+    location_city?: string | null
     orientation: number | null
 }
 

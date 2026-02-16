@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@vidstack/react": "^0.6.15",
+    "gcoord": "^1.0.7",
     "vidstack": "^0.6.15",
     "yet-another-react-lightbox": "^3.29.1"
   }

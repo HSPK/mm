@@ -71,6 +71,9 @@ def serialize_media_brief(m: Any, md: Any = None) -> dict[str, Any]:
         result["date_taken"] = md.date_taken.isoformat() if md.date_taken else None
         result["camera_model"] = md.camera_model or None
         result["duration"] = md.duration
+        result["gps_lat"] = md.gps_lat
+        result["gps_lon"] = md.gps_lon
+        result["location_label"] = md.location_label
     return result
 
 
@@ -107,6 +110,9 @@ async def serialize_media(m: Any, repo: Any) -> dict[str, Any]:
             "gps_lat": md.gps_lat,
             "gps_lon": md.gps_lon,
             "orientation": md.orientation,
+            "location_label": md.location_label,
+            "location_country": md.location_country,
+            "location_city": md.location_city,
         }
     else:
         result["metadata"] = None

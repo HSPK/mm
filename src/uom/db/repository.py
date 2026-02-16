@@ -63,6 +63,9 @@ class Metadata:
     gps_lat: float | None = None
     gps_lon: float | None = None
     orientation: int | None = None
+    location_label: str | None = None
+    location_country: str | None = None
+    location_city: str | None = None
 
 
 @dataclass
@@ -131,9 +134,21 @@ class Repository:
 
     def _migrate(self) -> None:
         """Apply schema migrations that create_tables(safe=True) cannot handle."""
-        columns = {col.name for col in database.get_columns("media")}
-        if "rating" not in columns:
+        # Media Table
+        cursor = database.execute_sql("PRAGMA table_info(media)")
+        media_cols = {row[1] for row in cursor.fetchall()}
+        if "rating" not in media_cols:
             database.execute_sql("ALTER TABLE media ADD COLUMN rating SMALLINT NOT NULL DEFAULT 0")
+
+        # Metadata Table
+        cursor = database.execute_sql("PRAGMA table_info(metadata)")
+        meta_cols = {row[1] for row in cursor.fetchall()}
+        if "location_label" not in meta_cols:
+            database.execute_sql("ALTER TABLE metadata ADD COLUMN location_label VARCHAR(256)")
+        if "location_country" not in meta_cols:
+            database.execute_sql("ALTER TABLE metadata ADD COLUMN location_country VARCHAR(64)")
+        if "location_city" not in meta_cols:
+            database.execute_sql("ALTER TABLE metadata ADD COLUMN location_city VARCHAR(64)")
 
     # ------------------------------------------------------------------
     # Media CRUD
@@ -505,6 +520,39 @@ class Repository:
         except MetadataModel.DoesNotExist:
             return None
         return self._to_metadata(row)
+
+    def get_metadata_needing_geo_update(
+        self, limit: int = 1000, force_reparse: bool = False
+    ) -> list[Metadata]:
+        """
+        Get metadata records that need location update.
+        If force_reparse=False, only items with NO location_label (missing completely).
+        If force_reparse=True, items with GPS but missing country/city details even if label exists.
+        """
+        query = MetadataModel.select().where(
+            MetadataModel.gps_lat.is_null(False),
+            MetadataModel.gps_lon.is_null(False),
+        )
+
+        if not force_reparse:
+            query = query.where(MetadataModel.location_label.is_null())
+        else:
+            # Force reparse: Find items with GPS but missing country OR city
+            query = query.where(
+                (MetadataModel.location_country.is_null()) | (MetadataModel.location_city.is_null())
+            )
+
+        query = query.limit(limit)
+
+        return [self._to_metadata(m) for m in query]
+
+    def update_location_label(
+        self, metadata_id: int, label: str, country: str | None = None, city: str | None = None
+    ) -> None:
+        """Update location label for a metadata record."""
+        MetadataModel.update(
+            location_label=label, location_country=country, location_city=city
+        ).where(MetadataModel.id == metadata_id).execute()
 
     # ------------------------------------------------------------------
     # Tag CRUD

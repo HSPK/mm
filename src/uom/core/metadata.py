@@ -20,11 +20,14 @@ from uom.db.repository import Metadata
 def _run_json(cmd: list[str]) -> dict[str, Any]:
     """Run a command and return parsed JSON output (or empty dict on failure)."""
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        # Use errors='replace' to avoid UnicodeDecodeError on weird metadata
+        result = subprocess.run(
+            cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=30
+        )
         if result.returncode != 0:
             return {}
         return json.loads(result.stdout)  # type: ignore[no-any-return]
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError, UnicodeError):
         return {}
 
 
@@ -32,6 +35,16 @@ def _parse_exif_date(value: str | None) -> datetime | None:
     """Parse EXIF date strings like '2023:07:15 19:43:48'."""
     if not value:
         return None
+    # Try ISO format first (handles Z, T, etc.)
+    try:
+        # standard ISO parsing (Python 3.7+)
+        dt_obj = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        # Naive datetime is usually preferred in this app context, so remove tzinfo if needed
+        # But let's just return what we get for now, or strip if consistent with existing logic
+        return dt_obj.replace(tzinfo=None)
+    except ValueError:
+        pass
+
     for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
             return datetime.strptime(value.strip(), fmt)
@@ -139,22 +152,81 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
     date_str = (
         tags.get("creation_time")
         or exif.get("EXIF:DateTimeOriginal")
+        or exif.get("QuickTime:CreationDate")
         or exif.get("QuickTime:CreateDate")
+        or exif.get("Keys:CreationDate")
     )
+
+    # Try to extract GPS from QuickTime/Keys tags
+    gps_lat: float | None = None
+    gps_lon: float | None = None
+
+    # Check common GPS keys in exiftool output
+    lat_ref = str(
+        exif.get("Composite:GPSLatitudeRef", "") or exif.get("EXIF:GPSLatitudeRef", "")
+    ).upper()
+    lon_ref = str(
+        exif.get("Composite:GPSLongitudeRef", "") or exif.get("EXIF:GPSLongitudeRef", "")
+    ).upper()
+
+    lat_val = _safe_float(
+        exif.get("Composite:GPSLatitude")
+        or exif.get("EXIF:GPSLatitude")
+        or exif.get("QuickTime:GPSCoordinates-lat")
+        or exif.get("Keys:GPSCoordinates-lat")
+    )
+    lon_val = _safe_float(
+        exif.get("Composite:GPSLongitude")
+        or exif.get("EXIF:GPSLongitude")
+        or exif.get("QuickTime:GPSCoordinates-lon")
+        or exif.get("Keys:GPSCoordinates-lon")
+    )
+
+    # Some tools return signed float directly (e.g. QuickTime:GPSCoordinates is often a string like "30.123 120.456")
+    # But usually exiftool -n -j gives decimal degrees.
+    # If not using -n (which we use), we might get "30 deg 12' 34""
+    # But we use -n in _extract_exiftool, so values should be decimal.
+
+    # QuickTime:GPSCoordinates sometimes is "lat, lon, alt" string
+    if lat_val is None and lon_val is None:
+        coords = exif.get("QuickTime:GPSCoordinates")
+        if coords and isinstance(coords, str):
+            parts = coords.replace("+", "").split()  # "30.1234 120.5678"
+            if len(parts) >= 2:
+                lat_val = _safe_float(parts[0])
+                lon_val = _safe_float(parts[1])
+
+    if lat_val is not None:
+        gps_lat = lat_val
+        # Adjust for Ref if value is positive but Ref is South (rare with -n?)
+        # With -n, exiftool usually returns signed value for Composite tags.
+        # But for EXIF tags it might follow Ref.
+        # Let's trust the value if it's signed (handled by exiftool -n).
+
+    if lon_val is not None:
+        gps_lon = lon_val
 
     return Metadata(
         media_id=media_id,
         date_taken=_parse_exif_date(date_str),
         camera_make=str(
-            exif.get("EXIF:Make", "") or tags.get("com.apple.quicktime.make", "") or ""
+            exif.get("EXIF:Make", "")
+            or tags.get("com.apple.quicktime.make", "")
+            or exif.get("QuickTime:Make", "")
+            or ""
         ),
         camera_model=str(
-            exif.get("EXIF:Model", "") or tags.get("com.apple.quicktime.model", "") or ""
+            exif.get("EXIF:Model", "")
+            or tags.get("com.apple.quicktime.model", "")
+            or exif.get("QuickTime:Model", "")
+            or ""
         ),
         lens_model=str(exif.get("EXIF:LensModel", "") or ""),
         width=_safe_int(ff.get("width") or ff.get("coded_width")),
         height=_safe_int(ff.get("height") or ff.get("coded_height")),
         duration=_safe_float(ff.get("duration")),
+        gps_lat=gps_lat,
+        gps_lon=gps_lon,
     )
 
 

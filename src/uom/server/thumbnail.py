@@ -198,6 +198,8 @@ def _generate_video(source_path: str, dest: Path, max_size: tuple[int, int]) -> 
                     "1",
                     "-an",
                     "-y",
+                    "-threads",
+                    "1",
                     "-loglevel",
                     "error",
                     tmp_png,

@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import os
 from collections.abc import Generator
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from uom.config import (
     ALL_MEDIA_EXTENSIONS,
@@ -16,7 +18,42 @@ from uom.config import (
     VIDEO_EXTENSIONS,
 )
 from uom.db.models import MediaType
-from uom.db.repository import Media
+from uom.db.repository import Media, Metadata
+
+
+@dataclass
+class ScanResult:
+    """Serialisable result combining file stats and extracted metadata."""
+
+    path: str
+    filename: str
+    extension: str
+    media_type: str
+    file_size: int
+    file_hash: str
+    created_at: str  # ISO format or ""
+    modified_at: str
+    # metadata fields
+    md_date_taken: str
+    md_camera_make: str
+    md_camera_model: str
+    md_lens_model: str
+    md_focal_length: float | None
+    md_aperture: float | None
+    md_shutter_speed: str
+    md_iso: int | None
+    md_width: int | None
+    md_height: int | None
+    md_duration: float | None
+    md_gps_lat: float | None
+    md_gps_lon: float | None
+    md_orientation: int | None
+    error: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Core scanning logic
+# ---------------------------------------------------------------------------
 
 
 def classify_extension(ext: str) -> MediaType | None:
@@ -68,4 +105,132 @@ def scan_file(path: Path, compute_hash: bool = True) -> Media:
         if hasattr(stat, "st_birthtime")
         else datetime.fromtimestamp(stat.st_ctime),
         modified_at=datetime.fromtimestamp(stat.st_mtime),
+    )
+
+
+def scan_and_extract(path: Path, compute_hash: bool = True) -> ScanResult:
+    """Scan a file and extract its metadata, handling errors gracefully."""
+    try:
+        from uom.core.metadata import extract_metadata  # lazy import
+
+        media = scan_file(path, compute_hash=compute_hash)
+
+        # Extract metadata (use dummy ID 0)
+        md = extract_metadata(path, 0)
+
+        return ScanResult(
+            path=media.path,
+            filename=media.filename,
+            extension=media.extension,
+            media_type=media.media_type.value,
+            file_size=media.file_size,
+            file_hash=media.file_hash,
+            created_at=media.created_at.isoformat() if media.created_at else "",
+            modified_at=media.modified_at.isoformat() if media.modified_at else "",
+            md_date_taken=md.date_taken.isoformat() if md.date_taken else "",
+            md_camera_make=md.camera_make,
+            md_camera_model=md.camera_model,
+            md_lens_model=md.lens_model,
+            md_focal_length=md.focal_length,
+            md_aperture=md.aperture,
+            md_shutter_speed=md.shutter_speed,
+            md_iso=md.iso,
+            md_width=md.width,
+            md_height=md.height,
+            md_duration=md.duration,
+            md_gps_lat=md.gps_lat,
+            md_gps_lon=md.gps_lon,
+            md_orientation=md.orientation,
+        )
+    except Exception as e:
+        # Fallback for error case
+        return ScanResult(
+            path=str(path.resolve()),
+            filename=path.name,
+            extension=path.suffix.lower(),
+            media_type=MediaType.PHOTO.value,
+            file_size=0,
+            file_hash="",
+            created_at="",
+            modified_at="",
+            md_date_taken="",
+            md_camera_make="",
+            md_camera_model="",
+            md_lens_model="",
+            md_focal_length=None,
+            md_aperture=None,
+            md_shutter_speed="",
+            md_iso=None,
+            md_width=None,
+            md_height=None,
+            md_duration=None,
+            md_gps_lat=None,
+            md_gps_lon=None,
+            md_orientation=None,
+            error=str(e),
+        )
+
+
+def save_scan_result(repo: Any, result: ScanResult) -> int:
+    """Save a ScanResult to the database using the provided repository."""
+    # We use 'Any' for repo to avoid circular imports, but it expects a Repository instance
+
+    media = Media(
+        path=result.path,
+        filename=result.filename,
+        extension=result.extension,
+        media_type=MediaType(result.media_type),
+        file_size=result.file_size,
+        file_hash=result.file_hash,
+        created_at=datetime.fromisoformat(result.created_at) if result.created_at else None,
+        modified_at=datetime.fromisoformat(result.modified_at) if result.modified_at else None,
+    )
+    media_id = repo.upsert_media(media)
+
+    md = Metadata(
+        media_id=media_id,
+        date_taken=datetime.fromisoformat(result.md_date_taken) if result.md_date_taken else None,
+        camera_make=result.md_camera_make,
+        camera_model=result.md_camera_model,
+        lens_model=result.md_lens_model,
+        focal_length=result.md_focal_length,
+        aperture=result.md_aperture,
+        shutter_speed=result.md_shutter_speed,
+        iso=result.md_iso,
+        width=result.md_width,
+        height=result.md_height,
+        duration=result.md_duration,
+        gps_lat=result.md_gps_lat,
+        gps_lon=result.md_gps_lon,
+        orientation=result.md_orientation,
+    )
+    repo.upsert_metadata(md)
+    return media_id
+
+
+def process_pool_worker(args: tuple[str, bool]) -> ScanResult:
+    """Worker function for ProcessPoolExecutor that unpacks arguments."""
+    path_str, compute_hash = args
+    return scan_and_extract(Path(path_str), compute_hash=compute_hash)
+
+
+def scan_result_to_metadata(result: ScanResult) -> Metadata:
+    """Convert a ScanResult back to a Metadata object (e.g. for display)."""
+    return Metadata(
+        # We don't have media_id here, use 0 or None
+        media_id=0,
+        date_taken=datetime.fromisoformat(result.md_date_taken) if result.md_date_taken else None,
+        camera_make=result.md_camera_make,
+        camera_model=result.md_camera_model,
+        lens_model=result.md_lens_model,
+        focal_length=result.md_focal_length,
+        aperture=result.md_aperture,
+        shutter_speed=result.md_shutter_speed,
+        iso=result.md_iso,
+        width=result.md_width,
+        height=result.md_height,
+        duration=result.md_duration,
+        gps_lat=result.md_gps_lat,
+        gps_lon=result.md_gps_lon,
+        orientation=result.md_orientation,
     )

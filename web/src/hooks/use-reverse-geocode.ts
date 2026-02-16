@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react"
+import { api } from "@/api/client"
 
 /** Simple in-memory cache keyed by rounded lat,lon */
 const cache = new Map<string, string>()
@@ -8,7 +9,7 @@ function cacheKey(lat: number, lon: number) {
 }
 
 /**
- * Reverse geocode lat/lon → city-level place name via OpenStreetMap Nominatim.
+ * Reverse geocode lat/lon → city-level place name via BACKEND API.
  * Results are cached in memory to avoid redundant requests.
  */
 export function useReverseGeocode(lat: number | null | undefined, lon: number | null | undefined) {
@@ -22,31 +23,19 @@ export function useReverseGeocode(lat: number | null | undefined, lon: number | 
 
         let cancelled = false
 
-        fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=10&accept-language=zh`,
-            { headers: { "User-Agent": "uom-media-app/1.0" } }
-        )
-            .then((r) => r.json())
-            .then((data) => {
+        // Fetch from backend API instead of OSM directly
+        api.get("/media/geocode", { params: { lat, lon } })
+            .then((res) => {
                 if (cancelled) return
-                const addr = data.address ?? {}
-                const city =
-                    addr.city ||
-                    addr.town ||
-                    addr.county ||
-                    addr.state_district ||
-                    addr.state ||
-                    data.display_name?.split(",").slice(0, 2).join(",") ||
-                    `${lat.toFixed(4)}, ${lon.toFixed(4)}`
-                const country = addr.country || ""
-                const label = country && city !== country ? `${city}, ${country}` : city
+                const label = res.data.city || `${lat.toFixed(4)}, ${lon.toFixed(4)}`
                 cache.set(key, label)
                 setResolved((prev) => new Map(prev).set(key, label))
             })
             .catch(() => {
                 if (!cancelled) {
+                    // Fallback on error
                     const fallback = `${lat.toFixed(4)}, ${lon.toFixed(4)}`
-                    cache.set(key, fallback)
+                    // Do NOT cache failures aggressively in case network recovers
                     setResolved((prev) => new Map(prev).set(key, fallback))
                 }
             })

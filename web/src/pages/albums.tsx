@@ -298,42 +298,24 @@ export default function AlbumsPage() {
     const locations = useMemo(() => clusterLocations(geoData), [geoData])
     const [locationNames, setLocationNames] = useState<Record<string, string>>({})
 
-    // Batch reverse-geocode location clusters → city names
+    // Batch reverse-geocode location clusters → city names via Backend
     useEffect(() => {
         if (locations.length === 0) return
         let cancelled = false
         const toResolve = locations.slice(0, 20)
 
-        // Stagger requests slightly to respect Nominatim rate limit (1 req/s)
         const promises = toResolve.map((loc, i) =>
             new Promise<[string, string]>((resolve) =>
                 setTimeout(() => {
                     const key = `${loc.lat},${loc.lon}`
-                    fetch(
-                        `https://nominatim.openstreetmap.org/reverse?lat=${loc.lat}&lon=${loc.lon}&format=json&zoom=10&accept-language=zh`,
-                        { headers: { "User-Agent": "uom-media-app/1.0" } }
-                    )
-                        .then((r) => r.json())
-                        .then((data) => {
-                            const addr = data.address ?? {}
-                            // Prioritize city-level names, falling back to smaller administrative units
-                            const city =
-                                addr.city ||
-                                addr.town ||
-                                addr.county ||
-                                addr.district ||
-                                addr.suburb ||
-                                addr.village ||
-                                addr.hamlet ||
-                                addr.state_district ||
-                                addr.state ||
-                                // Fallback to first part of display name (usually most specific) if no address parts found
-                                data.display_name?.split(",")[0] ||
-                                loc.name
+                    // Call new backend geocode API
+                    api.get("/media/geocode", { params: { lat: loc.lat, lon: loc.lon } })
+                        .then((res) => {
+                            const city = res.data.city || loc.name
                             resolve([key, city])
                         })
                         .catch(() => resolve([key, loc.name]))
-                }, i * 1100)
+                }, i * 300)
             )
         )
 
@@ -575,15 +557,14 @@ export default function AlbumsPage() {
                                 title={locationNames[`${loc.lat},${loc.lon}`] ?? loc.name}
                                 count={loc.count}
                                 coverId={loc.sampleId}
-                                onClick={() =>
-                                    goLibraryWith({
+                                onClick={() => {
+                                    setFilters({
                                         lat: loc.lat,
                                         lon: loc.lon,
-                                        radius: 25,
-                                        sort: "date_taken",
-                                        order: "desc",
+                                        radius: 5, // Default search radius 5km
                                     })
-                                }
+                                    navigate("/")
+                                }}
                                 color="bg-emerald-500/5"
                             />
                         ))}

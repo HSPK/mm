@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { createPortal } from "react-dom"
+import { useNavigate } from "react-router-dom"
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch"
 
 import { api } from "@/api/client"
@@ -21,6 +22,7 @@ import {
 } from "lucide-react"
 import { StarRating } from "@/components/ui/star-rating"
 import { useReverseGeocode } from "@/hooks/use-reverse-geocode"
+import { useMediaStore } from "@/stores/media"
 
 // ─── Constants ─────────────────────────────────────────────
 
@@ -64,17 +66,23 @@ function InfoDialog({
     mediaId,
     open,
     onClose,
+    onNavigate,
 }: {
     mediaId: number
     open: boolean
     onClose: () => void
+    onNavigate: () => void
 }) {
+    const navigate = useNavigate()
+    const setFilters = useMediaStore((s) => s.setFilters)
     const [detail, setDetail] = useState<MediaDetailType | null>(null)
     const [loading, setLoading] = useState(false)
     const [tagInput, setTagInput] = useState("")
 
     const md = detail?.metadata ?? null
-    const placeName = useReverseGeocode(md?.gps_lat, md?.gps_lon)
+    // Use stored location label if available, otherwise reverse geocode on the fly
+    const dynamicPlace = useReverseGeocode(!md?.location_label ? md?.gps_lat : null, !md?.location_label ? md?.gps_lon : null)
+    const placeName = md?.location_label || dynamicPlace
 
     useEffect(() => {
         if (!open || !mediaId) return
@@ -240,11 +248,47 @@ function InfoDialog({
                             )}
 
                             {/* GPS */}
-                            {md?.gps_lat != null && md?.gps_lon != null && (
-                                <div className="flex gap-3">
-                                    <MapPin className="h-[15px] w-[15px] text-white/25 mt-[3px] shrink-0" />
-                                    <div className="text-white/50 text-xs">
-                                        {placeName ?? `${md.gps_lat.toFixed(4)}, ${md.gps_lon.toFixed(4)}`}
+                            {(md?.gps_lat != null && md?.gps_lon != null) && (
+                                <div className="flex gap-4 items-start">
+                                    <div className="mt-1">
+                                        <MapPin className="h-4 w-4 text-primary/70 shrink-0" />
+                                    </div>
+                                    <div className="flex flex-col gap-0.5 min-w-0">
+                                        {/* Main Label: specific place or city */}
+                                        <div
+                                            title="Filter by this location"
+                                            className="text-white/90 text-[13px] font-medium leading-tight cursor-pointer hover:text-primary transition-colors hover:underline decoration-white/20 underline-offset-4"
+                                            onClick={() => {
+                                                if (md.gps_lat == null || md.gps_lon == null) return;
+                                                setFilters({ lat: md.gps_lat, lon: md.gps_lon, radius: 5 });
+                                                navigate("/");
+                                                onClose();
+                                                onNavigate();
+                                            }}
+                                        >
+                                            {placeName || md.location_city || "Unknown Location"}
+                                        </div>
+
+                                        {/* City / Country: if not redundant with label */}
+                                        {(md.location_city || md.location_country) && (
+                                            <div className="text-white/50 text-[11px] font-medium tracking-wide">
+                                                {[
+                                                    (md.location_city !== placeName ? md.location_city : null),
+                                                    (md.location_country !== placeName ? md.location_country : null)
+                                                ].filter(Boolean).join(", ")}
+                                            </div>
+                                        )}
+
+                                        {/* Coordinates - Open in Amap (Gaode) */}
+                                        <a
+                                            href={`https://uri.amap.com/marker?position=${md.gps_lon},${md.gps_lat}&name=${encodeURIComponent(md.location_label || "Location")}&coordinate=wgs84`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[10px] font-mono text-white/30 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.04] hover:bg-white/10 hover:text-white/60 transition-colors w-fit block mt-1.5"
+                                            title="Open in Amap"
+                                        >
+                                            {md.gps_lat.toFixed(5)}, {md.gps_lon.toFixed(5)}
+                                        </a>
                                     </div>
                                 </div>
                             )}
@@ -316,6 +360,7 @@ interface Props {
 }
 
 export function MediaDetailPanel({ items, startIndex, onClose }: Props) {
+    const navigate = useNavigate()
     const [showInfo, setShowInfo] = useState(false)
     const [currentIndex, setCurrentIndex] = useState(startIndex)
     const [isZoomed, setIsZoomed] = useState(false)
@@ -475,6 +520,7 @@ export function MediaDetailPanel({ items, startIndex, onClose }: Props) {
                 mediaId={currentItem?.id ?? 0}
                 open={showInfo}
                 onClose={() => setShowInfo(false)}
+                onNavigate={onClose}
             />
         </div>,
         document.body,

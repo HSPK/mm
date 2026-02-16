@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from uom.db.repository import User
@@ -15,11 +16,31 @@ from uom.server.utils import stream_file
 router = APIRouter(prefix="/api/media", tags=["media"])
 
 
+@router.get("/geocode")
+async def get_city(
+    lat: float,
+    lon: float,
+) -> dict[str, str | None]:
+    """Reverse geocode lat/lon to city name."""
+    try:
+        from uom.server.geocoding import reverse_geocode
+
+        label, country, gl_city = await reverse_geocode(lat, lon)
+        city = label
+        if not city:
+            # Fallback if geocoding fails or returns nothing
+            city = f"{lat:.2f}, {lon:.2f}"
+        return {"city": city, "label": label, "country": country, "location_city": gl_city}
+    except Exception:
+        # Graceful fallback logic
+        return {"city": f"{lat:.2f}, {lon:.2f}"}
+
+
 @router.get("")
 async def list_media(
     request: Request,
     page: int = Query(1, ge=1),
-    per_page: int = Query(60, ge=1, le=200),
+    per_page: int = Query(60, ge=1, le=5000),
     type: str | None = None,
     tag: str | None = None,
     camera: str | None = None,
@@ -33,6 +54,7 @@ async def list_media(
     lat: float | None = None,
     lon: float | None = None,
     radius: float | None = None,
+    has_location: bool = False,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
     repo = get_repo(request)
@@ -53,14 +75,13 @@ async def list_media(
         lat=lat,
         lon=lon,
         radius=radius,
+        has_location=has_location,
     )
     # Batch-fetch metadata for all items
     meta_map: dict[int, Any] = {}
-    for m in items:
-        if m.id:
-            md = await repo.get_metadata(m.id)
-            if md:
-                meta_map[m.id] = md
+    media_ids = [m.id for m in items if m.id]
+    if media_ids:
+        meta_map = await repo.get_metadata_for_ids(media_ids)
     return {
         "items": [serialize_media_brief(m, meta_map.get(m.id)) for m in items],
         "total": total,
@@ -95,10 +116,8 @@ async def get_thumbnail_file(
     if not m:
         raise HTTPException(404, "Media not found")
 
-    # This is potentially blocking (CPU/IO), but short term OK or needs wrapper
-    # Using run_in_threadpool if strictly async required,
-    # but for now calling directly is fine unless getting huge traffic.
-    thumb = get_thumbnail(m.path, media_id, size)
+    # Offload potentially blocking I/O (disk check + image processing) to threadpool
+    thumb = await run_in_threadpool(get_thumbnail, m.path, media_id, size)
     if not thumb:
         raise HTTPException(404, "Thumbnail generation failed")
 
@@ -120,8 +139,8 @@ async def get_preview_image(
     if not m:
         raise HTTPException(404, "Media not found")
 
-    # Generate or return xl preview (1080p typically)
-    thumb = get_thumbnail(m.path, media_id, "xl")
+    # Offload preview generation
+    thumb = await run_in_threadpool(get_thumbnail, m.path, media_id, "xl")
     if not thumb:
         raise HTTPException(404, "Preview generation failed")
 

@@ -289,9 +289,10 @@ class AsyncRepository:
         lat: float | None = None,
         lon: float | None = None,
         radius: float | None = None,
+        has_location: bool = False,
     ) -> tuple[list[Media], int]:
         need_metadata_join = bool(
-            camera or date_from or date_to or lat or lon or sort == "date_taken"
+            camera or date_from or date_to or lat or lon or sort == "date_taken" or has_location
         )
 
         query = MediaModel.select()
@@ -332,6 +333,11 @@ class AsyncRepository:
             query = query.where(MetadataModel.date_taken >= date_from)
         if date_to:
             query = query.where(MetadataModel.date_taken <= f"{date_to} 23:59:59")
+
+        if has_location:
+            query = query.where(
+                (MetadataModel.gps_lat.is_null(False)) & (MetadataModel.gps_lon.is_null(False))
+            )
 
         if lat is not None and lon is not None and radius is not None:
             # Roughly 111km per degree
@@ -478,6 +484,15 @@ class AsyncRepository:
             return self._to_metadata(md)
         except MetadataModel.DoesNotExist:
             return None
+
+    async def get_metadata_for_ids(self, media_ids: list[int]) -> dict[int, Metadata]:
+        if not media_ids:
+            return {}
+        query = MetadataModel.select().where(MetadataModel.media << media_ids)
+        # Type note: peewee-aio returns a list of model instances
+        rows = await self.objects.fetchall(query)
+        # Using .media_id to access the FK value without triggering a query
+        return {r.media_id: self._to_metadata(r) for r in rows}
 
     async def tags_for_media(self, media_id: int) -> list[tuple[Tag, float]]:
         query = (

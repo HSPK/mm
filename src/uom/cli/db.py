@@ -231,12 +231,8 @@ def db_sync(ctx: Context, directory: Path, jobs: int, yes: bool) -> None:
     if changed_ids:
         import multiprocessing as _mp
         from concurrent.futures import ProcessPoolExecutor, as_completed
-        from datetime import datetime
 
-        from uom.cli.scan import ScanResult, _scan_one
-        from uom.db.models import MediaType
-        from uom.db.repository import Media
-        from uom.db.repository import Metadata as MetadataDTO
+        from uom.core.scanner import ScanResult, process_pool_worker, save_scan_result
 
         # Delete old records so they'll be re-inserted fresh
         repo.bulk_delete_media(changed_ids)
@@ -249,7 +245,7 @@ def db_sync(ctx: Context, directory: Path, jobs: int, yes: bool) -> None:
         results: list[ScanResult] = []
         errors = 0
         with ProcessPoolExecutor(max_workers=num_workers) as pool:
-            futures = {pool.submit(_scan_one, item): item for item in work_items}
+            futures = {pool.submit(process_pool_worker, item): item for item in work_items}
             with click.progressbar(length=len(futures), label="Scanning") as bar:
                 for future in as_completed(futures):
                     r = future.result()
@@ -261,34 +257,6 @@ def db_sync(ctx: Context, directory: Path, jobs: int, yes: bool) -> None:
                     bar.update(1)
 
         for r in results:
-            media = Media(
-                path=r.path,
-                filename=r.filename,
-                extension=r.extension,
-                media_type=MediaType(r.media_type),
-                file_size=r.file_size,
-                file_hash=r.file_hash,
-                created_at=datetime.fromisoformat(r.created_at) if r.created_at else None,
-                modified_at=datetime.fromisoformat(r.modified_at) if r.modified_at else None,
-            )
-            media_id = repo.upsert_media(media)
-            md = MetadataDTO(
-                media_id=media_id,
-                date_taken=datetime.fromisoformat(r.md_date_taken) if r.md_date_taken else None,
-                camera_make=r.md_camera_make,
-                camera_model=r.md_camera_model,
-                lens_model=r.md_lens_model,
-                focal_length=r.md_focal_length,
-                aperture=r.md_aperture,
-                shutter_speed=r.md_shutter_speed,
-                iso=r.md_iso,
-                width=r.md_width,
-                height=r.md_height,
-                duration=r.md_duration,
-                gps_lat=r.md_gps_lat,
-                gps_lon=r.md_gps_lon,
-                orientation=r.md_orientation,
-            )
-            repo.upsert_metadata(md)
+            save_scan_result(repo, r)
 
         click.echo(f"Re-scanned {len(results)} file(s).{f' {errors} error(s).' if errors else ''}")

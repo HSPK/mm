@@ -97,6 +97,9 @@ class MetadataModel(BaseModel):
     gps_lat = FloatField(null=True)
     gps_lon = FloatField(null=True)
     orientation = IntegerField(null=True)
+    location_label = CharField(max_length=256, null=True, default=None)
+    location_country = CharField(max_length=64, null=True, default=None)
+    location_city = CharField(max_length=64, null=True, default=None)
 
     class Meta:
         table_name = "metadata"

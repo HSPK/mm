@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -15,42 +16,8 @@ from uom.cli import Context, pass_ctx
 @pass_ctx
 def info(ctx: Context, file: Path, raw: bool) -> None:
     """Show metadata for a single media file."""
-    resolved = str(file.resolve())
-
-    # Try database first (unless --raw)
-    if not raw:
-        repo = ctx.repo
-        media = repo.get_media_by_path(resolved)
-        if media and media.id is not None:
-            md = repo.get_metadata(media.id)
-            tags_info = repo.tags_for_media(media.id)
-
-            click.echo(f"File     : {media.path}")
-            click.echo(f"Type     : {media.media_type.value}")
-            click.echo(f"Size     : {_fmt_size(media.file_size)}")
-            click.echo(f"Hash     : {media.file_hash or '(not computed)'}")
-            click.echo(f"Scanned  : {media.scanned_at}")
-            click.echo()
-
-            if md:
-                _print_metadata(md)
-            else:
-                click.echo("(no metadata in database)")
-
-            if tags_info:
-                click.echo()
-                click.echo("Tags:")
-                for t, conf in tags_info:
-                    conf_str = f" ({conf:.2f})" if conf < 1.0 else ""
-                    click.echo(f"  {t.name}{conf_str}  [{t.source.value}]")
-            return
-
-    # Fallback: extract directly from file
-    click.echo(f"File     : {resolved}")
-    click.echo(f"Size     : {_fmt_size(file.stat().st_size)}")
-    click.echo()
-
-    from uom.core.metadata import check_tools, extract_metadata
+    from uom.core.metadata import check_tools
+    from uom.core.scanner import scan_and_extract
 
     missing = check_tools()
     if missing:
@@ -61,11 +28,88 @@ def info(ctx: Context, file: Path, raw: bool) -> None:
             err=True,
         )
 
-    md = extract_metadata(file, media_id=0)
-    _print_metadata(md)
+    resolved = str(file.resolve())
+    repo = ctx.repo
+
+    media = None
+    if not raw:
+        media = repo.get_media_by_path(resolved)
+
+    if media and media.id is not None:
+        # DB Mode
+        click.secho(f"Source: Database (ID: {media.id})", fg="cyan")
+        click.echo(f"File     : {media.path}")
+        click.echo(f"Type     : {media.media_type.value}")
+        click.echo(f"Size     : {_fmt_size(media.file_size)}")
+        click.echo(f"Hash     : {media.file_hash or '(not computed)'}")
+        click.echo(f"Scanned  : {media.scanned_at}")
+        click.echo()
+
+        md = repo.get_metadata(media.id)
+        if md:
+            _print_metadata(md)
+        else:
+            click.echo("(no metadata in database)")
+
+        tags_info = repo.tags_for_media(media.id)
+        if tags_info:
+            click.echo()
+            click.echo("Tags:")
+            for t, conf in tags_info:
+                conf_str = f" ({conf:.2f})" if conf < 1.0 else ""
+                click.echo(f"  {t.name}{conf_str}  [{t.source.value}]")
+    else:
+        # RAW Mode (Live extraction via shared scanner logic)
+        source_label = "Disk (Live extraction)" if not raw else "Disk (Force raw)"
+        click.secho(f"Source: {source_label}", fg="yellow")
+
+        # scan_and_extract handles extraction + basic stat
+        # We pass compute_hash=False to keep it fast for 'info' unless needed,
+        # but user sees 'Hash' field, maybe we should just compute it to be accurate?
+        # Let's compute it. It's usually fast enough for one file.
+        res = scan_and_extract(file, compute_hash=True)
+
+        if res.error:
+            click.secho(f"Error scanning file: {res.error}", fg="red")
+            return
+
+        click.echo(f"File     : {res.path}")
+        click.echo(f"Type     : {res.media_type}")
+        click.echo(f"Size     : {_fmt_size(res.file_size)}")
+        click.echo(f"Hash     : {res.file_hash}")
+        click.echo(f"Modified : {res.modified_at}")
+        click.echo()
+
+        # Map ScanResult fields back to a structure compatible with _print_metadata
+        # or just pass ScanResult to a new printer.
+        # reusing _print_metadata is easier if we mock an object or dict.
+        # But _print_metadata expects an object with specific attributes.
+        # ScanResult attribute names have 'md_' prefix.
+
+        # Let's just create a simple adapter class or object
+        class MockMetadata:
+            pass
+
+        md = MockMetadata()
+        md.date_taken = res.md_date_taken
+        md.camera_make = res.md_camera_make
+        md.camera_model = res.md_camera_model
+        md.lens_model = res.md_lens_model
+        md.focal_length = res.md_focal_length
+        md.aperture = res.md_aperture
+        md.shutter_speed = res.md_shutter_speed
+        md.iso = res.md_iso
+        md.width = res.md_width
+        md.height = res.md_height
+        md.duration = res.md_duration
+        md.gps_lat = res.md_gps_lat
+        md.gps_lon = res.md_gps_lon
+        md.orientation = res.md_orientation
+
+        _print_metadata(md)
 
 
-def _print_metadata(md) -> None:  # type: ignore[no-untyped-def]
+def _print_metadata(md: Any) -> None:  # type: ignore[no-untyped-def]
     """Print metadata fields in a readable format."""
     fields = [
         ("Date taken", md.date_taken),
