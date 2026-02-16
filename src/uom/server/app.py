@@ -11,15 +11,18 @@ Features:
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from uom.db.async_repository import AsyncRepository
-from uom.server.routers import auth, batch, media, stats, tags, users
+from uom.server.routers import albums, auth, batch, media, stats, tags, users
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -68,6 +71,43 @@ def create_app(db_path: str | Path) -> FastAPI:
     app.include_router(tags.router)
     app.include_router(stats.router)
     app.include_router(batch.router)
+    app.include_router(albums.router)
+
+    # --- Serve frontend static files (built dist) ---
+    web_dist = Path(os.environ.get("UOM_WEB_DIST", "web/dist"))
+    if not web_dist.is_dir():
+        # Try common relative locations
+        for candidate in [
+            Path(__file__).resolve().parents[3] / "web" / "dist",
+            Path.cwd() / "web" / "dist",
+        ]:
+            if candidate.is_dir():
+                web_dist = candidate
+                break
+
+    if web_dist.is_dir():
+        # Serve /assets (js, css, etc.) from dist/assets
+        assets_dir = web_dist / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
+
+        # Serve other static files at root (favicon, etc.)
+        @app.get("/vite.svg")
+        async def vite_svg():
+            svg = web_dist / "vite.svg"
+            if svg.exists():
+                return FileResponse(str(svg), media_type="image/svg+xml")
+
+        # SPA fallback: serve index.html for all non-API routes
+        @app.get("/{full_path:path}")
+        async def spa_fallback(request: Request, full_path: str):
+            # Don't intercept API or known backend paths
+            if full_path.startswith(("api/", "docs", "openapi.json", "redoc")):
+                return HTMLResponse(status_code=404)
+            index = web_dist / "index.html"
+            if index.exists():
+                return FileResponse(str(index), media_type="text/html")
+            return HTMLResponse(status_code=404)
 
     return app
 
@@ -78,7 +118,6 @@ def create_app(db_path: str | Path) -> FastAPI:
 
 
 # Initialize the global app instance for uvicorn standard usage
-import os
 
 db_path_env = os.environ.get("UOM_DB", "uom.db")
 app = create_app(db_path_env)

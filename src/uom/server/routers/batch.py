@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from uom.db.repository import User
 from uom.server.dependencies import get_current_user, get_repo
-from uom.server.schemas import BatchRatingBody, BatchTagBody, BatchTagRemoveBody
+from uom.server.schemas import BatchDeleteBody, BatchRatingBody, BatchTagBody, BatchTagRemoveBody
 
 router = APIRouter(prefix="/api/batch", tags=["batch"])
 
@@ -63,4 +63,15 @@ async def batch_set_rating(
     for mid in body.media_ids:
         await repo.set_rating(mid, body.rating)
         count += 1
+    return {"status": "ok", "affected": count}
+
+
+@router.post("/delete")
+async def batch_delete(
+    request: Request,
+    body: BatchDeleteBody,
+    _u: User | None = Depends(get_current_user),
+) -> dict[str, Any]:
+    repo = get_repo(request)
+    count = await repo.batch_soft_delete(body.media_ids)
     return {"status": "ok", "affected": count}

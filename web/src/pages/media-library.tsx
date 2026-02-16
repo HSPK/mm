@@ -5,6 +5,7 @@ import { StarRating } from "@/components/ui/star-rating"
 import { Loader2, Film, ImageOff } from "lucide-react"
 import { AuthImage } from "@/components/auth-image"
 import { MediaDetailPanel } from "@/components/media-detail"
+import { cn } from "@/lib/utils"
 import type { Media } from "@/api/types"
 
 // ─── helpers ──────────────────────────────────────────────
@@ -107,6 +108,9 @@ export default function MediaLibraryPage() {
         filters, fetchMedia, resetFilters,
         viewMode, dateGroupMode,
         thumbSize, setThumbSize,
+        removeItem,
+        selectionMode, selectedIds,
+        enterSelectionMode, toggleSelected,
     } = useMediaStore()
 
     const sentinelRef = useRef<HTMLDivElement>(null)
@@ -269,6 +273,10 @@ export default function MediaLibraryPage() {
                                 thumbSize={thumbSize}
                                 viewMode={viewMode}
                                 onSelect={openDetail}
+                                selectionMode={selectionMode}
+                                selectedIds={selectedIds}
+                                onToggleSelect={toggleSelected}
+                                onLongPress={enterSelectionMode}
                             />
                         </div>
                     ))
@@ -278,6 +286,10 @@ export default function MediaLibraryPage() {
                             thumbSize={thumbSize}
                             viewMode={viewMode}
                             onSelect={openDetail}
+                            selectionMode={selectionMode}
+                            selectedIds={selectedIds}
+                            onToggleSelect={toggleSelected}
+                            onLongPress={enterSelectionMode}
                         />
                     )}
 
@@ -297,11 +309,12 @@ export default function MediaLibraryPage() {
             </div>
 
             {/* ── Detail Panel ── */}
-            {detailId != null && currentIndex >= 0 && (
+            {detailId != null && currentIndex >= 0 && !selectionMode && (
                 <MediaDetailPanel
                     items={items}
                     startIndex={currentIndex}
                     onClose={closeDetail}
+                    onDelete={(id) => removeItem(id)}
                 />
             )}
         </div>
@@ -310,17 +323,21 @@ export default function MediaLibraryPage() {
 
 // ─── Subcomponents (memoized) ─────────────────────────────
 
-const GalleryGrid = memo(function GalleryGrid({
-    items,
-    thumbSize,
-    viewMode,
-    onSelect,
-}: {
+interface GalleryGridProps {
     items: Media[]
     thumbSize: number
     viewMode: "justified" | "grid"
     onSelect: (id: number) => void
-}) {
+    selectionMode: boolean
+    selectedIds: Set<number>
+    onToggleSelect: (id: number) => void
+    onLongPress: (id: number) => void
+}
+
+const GalleryGrid = memo(function GalleryGrid({
+    items, thumbSize, viewMode, onSelect,
+    selectionMode, selectedIds, onToggleSelect, onLongPress,
+}: GalleryGridProps) {
     if (viewMode === "grid") {
         return (
             <div
@@ -330,14 +347,20 @@ const GalleryGrid = memo(function GalleryGrid({
                 }}
             >
                 {items.map((item) => (
-                    <SquareTile key={item.id} item={item} onSelect={onSelect} />
+                    <SquareTile
+                        key={item.id} item={item} onSelect={onSelect}
+                        selectionMode={selectionMode}
+                        selected={selectedIds.has(item.id)}
+                        onToggleSelect={onToggleSelect}
+                        onLongPress={onLongPress}
+                    />
                 ))}
             </div>
         )
     }
 
     // Justified Layout - calculate rows to fill container width
-    return <JustifiedGallery items={items} targetHeight={thumbSize} gap={4} onSelect={onSelect} />
+    return <JustifiedGallery items={items} targetHeight={thumbSize} gap={4} onSelect={onSelect} selectionMode={selectionMode} selectedIds={selectedIds} onToggleSelect={onToggleSelect} onLongPress={onLongPress} />
 })
 
 /** Justified gallery that fills each row completely */
@@ -346,11 +369,19 @@ const JustifiedGallery = memo(function JustifiedGallery({
     targetHeight,
     gap,
     onSelect,
+    selectionMode,
+    selectedIds,
+    onToggleSelect,
+    onLongPress,
 }: {
     items: Media[]
     targetHeight: number
     gap: number
     onSelect: (id: number) => void
+    selectionMode: boolean
+    selectedIds: Set<number>
+    onToggleSelect: (id: number) => void
+    onLongPress: (id: number) => void
 }) {
     const containerRef = useRef<HTMLDivElement>(null)
     const [containerWidth, setContainerWidth] = useState(0)
@@ -431,20 +462,17 @@ const JustifiedGallery = memo(function JustifiedGallery({
                     style={{ gap, marginBottom: gap, contentVisibility: 'auto', containIntrinsicSize: `auto ${row[0]?.height ?? targetHeight}px` } as React.CSSProperties}
                 >
                     {row.map(({ item, width, height }) => (
-                        <div
+                        <MediaTile
                             key={item.id}
-                            className="group relative overflow-hidden rounded-sm bg-muted cursor-pointer flex-shrink-0"
+                            item={item}
                             style={{ width, height }}
-                            onClick={() => onSelect(item.id)}
-                        >
-                            <AuthImage
-                                apiSrc={`/media/${item.id}/thumbnail`}
-                                alt=""
-                                loading="lazy"
-                                className="h-full w-full object-cover transition-transform duration-300 will-change-transform group-hover:scale-[1.03]"
-                            />
-                            <Overlay item={item} />
-                        </div>
+                            className="rounded-sm flex-shrink-0"
+                            onSelect={onSelect}
+                            selectionMode={selectionMode}
+                            selected={selectedIds.has(item.id)}
+                            onToggleSelect={onToggleSelect}
+                            onLongPress={onLongPress}
+                        />
                     ))}
                 </div>
             ))}
@@ -455,22 +483,118 @@ const JustifiedGallery = memo(function JustifiedGallery({
 const SquareTile = memo(function SquareTile({
     item,
     onSelect,
+    selectionMode,
+    selected,
+    onToggleSelect,
+    onLongPress,
 }: {
     item: Media
     onSelect: (id: number) => void
+    selectionMode: boolean
+    selected: boolean
+    onToggleSelect: (id: number) => void
+    onLongPress: (id: number) => void
 }) {
     return (
+        <MediaTile
+            item={item}
+            className="aspect-square rounded-md"
+            onSelect={onSelect}
+            selectionMode={selectionMode}
+            selected={selected}
+            onToggleSelect={onToggleSelect}
+            onLongPress={onLongPress}
+        />
+    )
+})
+
+// ─── Shared media tile with long-press selection ──────────
+
+const LONG_PRESS_MS = 400
+
+const MediaTile = memo(function MediaTile({
+    item,
+    onSelect,
+    selectionMode,
+    selected,
+    onToggleSelect,
+    onLongPress,
+    className,
+    style,
+}: {
+    item: Media
+    onSelect: (id: number) => void
+    selectionMode: boolean
+    selected: boolean
+    onToggleSelect: (id: number) => void
+    onLongPress: (id: number) => void
+    className?: string
+    style?: React.CSSProperties
+}) {
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const didLongPress = useRef(false)
+
+    const startPress = useCallback(() => {
+        didLongPress.current = false
+        timerRef.current = setTimeout(() => {
+            didLongPress.current = true
+            // Haptic feedback if supported
+            navigator?.vibrate?.(30)
+            onLongPress(item.id)
+        }, LONG_PRESS_MS)
+    }, [item.id, onLongPress])
+
+    const cancelPress = useCallback(() => {
+        if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+    }, [])
+
+    const handleClick = useCallback(() => {
+        if (didLongPress.current) return
+        if (selectionMode) {
+            onToggleSelect(item.id)
+        } else {
+            onSelect(item.id)
+        }
+    }, [selectionMode, item.id, onSelect, onToggleSelect])
+
+    return (
         <div
-            className="group relative aspect-square overflow-hidden rounded-md bg-muted cursor-pointer"
-            onClick={() => onSelect(item.id)}
+            className={cn("group relative overflow-hidden bg-muted cursor-pointer", className)}
+            style={style}
+            onClick={handleClick}
+            onPointerDown={startPress}
+            onPointerUp={cancelPress}
+            onPointerLeave={cancelPress}
+            onContextMenu={(e) => { e.preventDefault(); onLongPress(item.id) }}
         >
             <AuthImage
                 apiSrc={`/media/${item.id}/thumbnail`}
                 alt=""
                 loading="lazy"
-                className="h-full w-full object-cover transition-transform duration-300 will-change-transform group-hover:scale-[1.03]"
+                className={cn(
+                    "h-full w-full object-cover transition-all duration-200 will-change-transform",
+                    selectionMode && selected && "scale-[0.90] rounded-lg",
+                    selectionMode && !selected && "scale-100",
+                    !selectionMode && "group-hover:scale-[1.03]",
+                )}
             />
-            <Overlay item={item} />
+            {!selectionMode && <Overlay item={item} />}
+
+            {/* Selection indicator */}
+            {selectionMode && (
+                <div className={cn(
+                    "absolute top-[6%] left-[6%] z-10 h-5 w-5 rounded-full flex items-center justify-center transition-all duration-150",
+                    selected
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "border-2 border-white/60 bg-black/20"
+                )}>
+                    {selected && (
+                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                    )}
+                </div>
+            )}
         </div>
     )
 })

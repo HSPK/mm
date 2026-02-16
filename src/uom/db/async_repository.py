@@ -15,6 +15,8 @@ from peewee import fn
 
 from uom.db.models import (
     ALL_TABLES,
+    AlbumMediaModel,
+    AlbumModel,
     EmbeddingModel,
     MediaModel,
     MediaTagModel,
@@ -48,6 +50,8 @@ class AsyncRepository:
             TagModel,
             MediaTagModel,
             EmbeddingModel,
+            AlbumModel,
+            AlbumMediaModel,
         ):
             self.manager.register(model)
 
@@ -62,6 +66,13 @@ class AsyncRepository:
         # Use manager.allow_sync() context manager so peewee-aio permits DDL
         with self.manager.allow_sync():
             self.manager.pw_database.create_tables(ALL_TABLES)
+            # Migration: add deleted_at column if missing
+            try:
+                self.manager.pw_database.execute_sql(
+                    "ALTER TABLE media ADD COLUMN deleted_at DATETIME DEFAULT NULL"
+                )
+            except Exception:
+                pass  # Column already exists
 
         # Seed default admin user if no users exist
         count = await self.count_users()
@@ -151,12 +162,21 @@ class AsyncRepository:
         await self.objects.execute(query)
 
     async def total_size(self) -> int:
-        return await self.objects.fetchval(MediaModel.select(fn.SUM(MediaModel.file_size))) or 0
+        return (
+            await self.objects.fetchval(
+                MediaModel.select(fn.SUM(MediaModel.file_size)).where(
+                    MediaModel.deleted_at.is_null()
+                )
+            )
+            or 0
+        )
 
     async def type_distribution(self) -> dict[str, int]:
-        query = MediaModel.select(
-            MediaModel.media_type, fn.COUNT(MediaModel.id).alias("cnt")
-        ).group_by(MediaModel.media_type)
+        query = (
+            MediaModel.select(MediaModel.media_type, fn.COUNT(MediaModel.id).alias("cnt"))
+            .where(MediaModel.deleted_at.is_null())
+            .group_by(MediaModel.media_type)
+        )
         rows = await self.objects.fetchall(query.dicts())
         return {r["media_type"]: r["cnt"] for r in rows}
 
@@ -169,7 +189,11 @@ class AsyncRepository:
                 MetadataModel.camera_model,
                 fn.COUNT(MetadataModel.id).alias("cnt"),
             )
-            .where((MetadataModel.camera_make != "") | (MetadataModel.camera_model != ""))
+            .join(MediaModel, on=(MetadataModel.media == MediaModel.id))
+            .where(
+                ((MetadataModel.camera_make != "") | (MetadataModel.camera_model != ""))
+                & MediaModel.deleted_at.is_null()
+            )
             .group_by(MetadataModel.camera_make, MetadataModel.camera_model)
             .order_by(fn.COUNT(MetadataModel.id).desc())
         )
@@ -188,7 +212,8 @@ class AsyncRepository:
                 date_expr,
                 fn.COUNT(MetadataModel.id).alias("cnt"),
             )
-            .where(MetadataModel.date_taken.is_null(False))
+            .join(MediaModel, on=(MetadataModel.media == MediaModel.id))
+            .where(MetadataModel.date_taken.is_null(False) & MediaModel.deleted_at.is_null())
             .group_by(SQL("dt"))
             .order_by(SQL("dt DESC"))
         )
@@ -201,7 +226,7 @@ class AsyncRepository:
         return final
 
     async def get_random(self, count: int = 20, media_type: str | None = None) -> list[Media]:
-        query = MediaModel.select()
+        query = MediaModel.select().where(MediaModel.deleted_at.is_null())
         if media_type:
             query = query.where(MediaModel.media_type == media_type)
         query = query.order_by(fn.Random()).limit(count)
@@ -221,7 +246,11 @@ class AsyncRepository:
                 MetadataModel.location_city,
             )
             .join(MetadataModel, on=(MediaModel.id == MetadataModel.media))
-            .where((MetadataModel.gps_lat.is_null(False)) & (MetadataModel.gps_lon.is_null(False)))
+            .where(
+                (MetadataModel.gps_lat.is_null(False))
+                & (MetadataModel.gps_lon.is_null(False))
+                & MediaModel.deleted_at.is_null()
+            )
             .order_by(MetadataModel.date_taken.desc())
             .limit(limit)
         )
@@ -266,7 +295,7 @@ class AsyncRepository:
     # ------------------------------------------------------------------
 
     async def get_total_media_count(self) -> int:
-        return await self.objects.count(MediaModel.select())
+        return await self.objects.count(MediaModel.select().where(MediaModel.deleted_at.is_null()))
 
     async def get_media_by_id(self, media_id: int) -> Media | None:
         try:
@@ -274,6 +303,51 @@ class AsyncRepository:
             return self._to_media(m)
         except MediaModel.DoesNotExist:
             return None
+
+    async def delete_media(self, media_id: int) -> bool:
+        """Permanently delete a media record and all related data (tags, metadata, embeddings via CASCADE)."""
+        query = MediaModel.delete().where(MediaModel.id == media_id)
+        deleted = await self.objects.execute(query)
+        return deleted > 0
+
+    async def soft_delete_media(self, media_id: int) -> bool:
+        """Soft-delete: set deleted_at timestamp."""
+        query = MediaModel.update(deleted_at=dt.datetime.now()).where(
+            (MediaModel.id == media_id) & MediaModel.deleted_at.is_null()
+        )
+        updated = await self.objects.execute(query)
+        return updated > 0
+
+    async def restore_media(self, media_id: int) -> bool:
+        """Restore a soft-deleted media item."""
+        query = MediaModel.update(deleted_at=None).where(
+            (MediaModel.id == media_id) & MediaModel.deleted_at.is_null(False)
+        )
+        updated = await self.objects.execute(query)
+        return updated > 0
+
+    async def list_trash(self) -> list[Media]:
+        """List all soft-deleted media items."""
+        query = (
+            MediaModel.select()
+            .where(MediaModel.deleted_at.is_null(False))
+            .order_by(MediaModel.deleted_at.desc())
+        )
+        models = await self.objects.fetchall(query)
+        return [self._to_media(m) for m in models]
+
+    async def empty_trash(self) -> int:
+        """Permanently delete all soft-deleted items."""
+        query = MediaModel.delete().where(MediaModel.deleted_at.is_null(False))
+        return await self.objects.execute(query)
+
+    async def purge_old_trash(self, days: int = 30) -> int:
+        """Permanently delete items trashed more than N days ago."""
+        cutoff = dt.datetime.now() - dt.timedelta(days=days)
+        query = MediaModel.delete().where(
+            (MediaModel.deleted_at.is_null(False)) & (MediaModel.deleted_at < cutoff)
+        )
+        return await self.objects.execute(query)
 
     async def query_media(
         self,
@@ -298,7 +372,7 @@ class AsyncRepository:
             camera or date_from or date_to or lat or lon or sort == "date_taken" or has_location
         )
 
-        query = MediaModel.select()
+        query = MediaModel.select().where(MediaModel.deleted_at.is_null())
 
         if need_metadata_join:
             query = query.join(
@@ -613,4 +687,85 @@ class AsyncRepository:
             created_at=row.created_at,
             modified_at=row.modified_at,
             scanned_at=row.scanned_at,
+            deleted_at=getattr(row, "deleted_at", None),
         )
+
+    # ------------------------------------------------------------------
+    # Albums
+    # ------------------------------------------------------------------
+
+    async def create_album(self, name: str, description: str = "") -> dict[str, Any]:
+        album = await self.objects.create(AlbumModel, name=name, description=description)
+        return {
+            "id": album.id,
+            "name": album.name,
+            "description": album.description,
+            "cover_media_id": None,
+            "count": 0,
+            "created_at": album.created_at.isoformat() if album.created_at else None,
+        }
+
+    async def list_albums(self) -> list[dict[str, Any]]:
+        query = AlbumModel.select().order_by(AlbumModel.created_at.desc())
+        albums = await self.objects.fetchall(query)
+        results = []
+        for a in albums:
+            count_q = AlbumMediaModel.select().where(AlbumMediaModel.album == a.id)
+            count = await self.objects.count(count_q)
+            results.append(
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "description": a.description,
+                    "cover_media_id": a.cover_media_id if a.cover_media_id else None,
+                    "count": count,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+            )
+        return results
+
+    async def delete_album(self, album_id: int) -> bool:
+        query = AlbumModel.delete().where(AlbumModel.id == album_id)
+        return (await self.objects.execute(query)) > 0
+
+    async def rename_album(self, album_id: int, name: str) -> bool:
+        query = AlbumModel.update(name=name).where(AlbumModel.id == album_id)
+        return (await self.objects.execute(query)) > 0
+
+    async def add_media_to_album(self, album_id: int, media_ids: list[int]) -> int:
+        count = 0
+        for mid in media_ids:
+            try:
+                await self.objects.create(AlbumMediaModel, album=album_id, media=mid)
+                count += 1
+            except peewee.IntegrityError:
+                pass  # already in album
+        # Auto-set cover if none
+        try:
+            album = await self.objects.get(AlbumModel, id=album_id)
+            if not album.cover_media_id and media_ids:
+                await self.objects.execute(
+                    AlbumModel.update(cover_media=media_ids[0]).where(AlbumModel.id == album_id)
+                )
+        except AlbumModel.DoesNotExist:
+            pass
+        return count
+
+    async def remove_media_from_album(self, album_id: int, media_ids: list[int]) -> int:
+        query = AlbumMediaModel.delete().where(
+            (AlbumMediaModel.album == album_id) & (AlbumMediaModel.media.in_(media_ids))
+        )
+        return await self.objects.execute(query)
+
+    async def get_album_media_ids(self, album_id: int) -> list[int]:
+        query = AlbumMediaModel.select(AlbumMediaModel.media).where(
+            AlbumMediaModel.album == album_id
+        )
+        rows = await self.objects.fetchall(query)
+        return [r.media_id for r in rows]
+
+    async def batch_soft_delete(self, media_ids: list[int]) -> int:
+        query = MediaModel.update(deleted_at=dt.datetime.now()).where(
+            (MediaModel.id.in_(media_ids)) & MediaModel.deleted_at.is_null()
+        )
+        return await self.objects.execute(query)

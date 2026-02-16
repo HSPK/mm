@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
+from uom.db.repository import User
 from uom.server.dependencies import get_current_user, get_repo
 from uom.server.schemas import (
     RatingBody,
@@ -74,6 +75,26 @@ async def list_media(
         "per_page": per_page,
         "pages": (total + per_page - 1) // per_page,
     }
+
+
+@router.get("/trash")
+async def list_trash(
+    request: Request,
+    _u: User | None = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    repo = get_repo(request)
+    items = await repo.list_trash()
+    return [serialize_media_brief(m) for m in items]
+
+
+@router.delete("/trash")
+async def empty_trash(
+    request: Request,
+    _u: User | None = Depends(get_current_user),
+) -> dict[str, Any]:
+    repo = get_repo(request)
+    deleted = await repo.empty_trash()
+    return {"status": "ok", "deleted": deleted}
 
 
 @router.get("/{media_id}")
@@ -223,3 +244,41 @@ async def update_media_metadata(
         raise HTTPException(500, "Failed to update metadata")
 
     return await serialize_media(m, repo)
+
+
+@router.delete("/{media_id}")
+async def delete_media(
+    request: Request,
+    media_id: int,
+    permanent: bool = Query(False, description="Permanently delete instead of trash"),
+    delete_file: bool = Query(False, description="Also delete the file from disk"),
+    _u: User | None = Depends(get_current_user),
+) -> dict[str, str]:
+    repo = get_repo(request)
+    m = await repo.get_media_by_id(media_id)
+    if not m:
+        raise HTTPException(404, "Media not found")
+
+    if permanent:
+        if delete_file:
+            fpath = Path(m.path)
+            if fpath.exists():
+                fpath.unlink()
+        await repo.delete_media(media_id)
+    else:
+        await repo.soft_delete_media(media_id)
+
+    return {"status": "ok"}
+
+
+@router.post("/{media_id}/restore")
+async def restore_media(
+    request: Request,
+    media_id: int,
+    _u: User | None = Depends(get_current_user),
+) -> dict[str, str]:
+    repo = get_repo(request)
+    ok = await repo.restore_media(media_id)
+    if not ok:
+        raise HTTPException(404, "Media not found in trash")
+    return {"status": "ok"}

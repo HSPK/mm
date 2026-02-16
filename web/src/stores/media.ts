@@ -33,6 +33,14 @@ interface MediaState {
     viewMode: ViewMode
     dateGroupMode: DateGroupMode
     thumbSize: number
+    activeLabel: string | null
+    albumFilterKeys: Set<string>
+    // Selection mode
+    selectionMode: boolean
+    selectedIds: Set<number>
+    // Trash mode
+    trashMode: boolean
+    trashItems: Media[]
     setViewMode: (mode: ViewMode) => void
     setDateGroupMode: (mode: DateGroupMode) => void
     setThumbSize: (size: number) => void
@@ -40,6 +48,17 @@ interface MediaState {
     setFilter: <K extends keyof Filters>(key: K, value: Filters[K]) => void
     setFilters: (updates: Partial<Filters>) => void
     resetFilters: () => void
+    removeItem: (id: number) => void
+    setActiveLabel: (label: string | null, lockedKeys?: string[]) => void
+    enterSelectionMode: (initialId?: number) => void
+    exitSelectionMode: () => void
+    toggleSelected: (id: number) => void
+    selectAll: () => void
+    removeItems: (ids: number[]) => void
+    enterTrashMode: (items: Media[]) => void
+    exitTrashMode: () => void
+    removeTrashItems: (ids: number[]) => void
+    clearTrash: () => void
 }
 
 const defaultFilters: Filters = {
@@ -67,6 +86,12 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     loading: false,
     error: null,
     filters: { ...defaultFilters },
+    activeLabel: null,
+    albumFilterKeys: new Set<string>(),
+    selectionMode: false,
+    selectedIds: new Set<number>(),
+    trashMode: false,
+    trashItems: [],
     viewMode: (localStorage.getItem("uom-view-mode") === "grid" ? "grid" : "justified") as ViewMode,
     dateGroupMode: (localStorage.getItem("uom-date-group-mode") === "day" ? "day" : "month") as DateGroupMode,
     thumbSize: Math.min(400, Math.max(80, Number(localStorage.getItem("uom-thumb-size")) || 220)),
@@ -142,7 +167,74 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     },
 
     resetFilters: () => {
-        set({ filters: { ...defaultFilters } })
+        set({ filters: { ...defaultFilters }, activeLabel: null, albumFilterKeys: new Set<string>() })
         get().fetchMedia(true)
+    },
+
+    removeItem: (id) => {
+        set((s) => ({
+            items: s.items.filter((i) => i.id !== id),
+            total: Math.max(0, s.total - 1),
+        }))
+    },
+
+    setActiveLabel: (label, lockedKeys) => {
+        set({ activeLabel: label, albumFilterKeys: new Set(lockedKeys ?? []) })
+    },
+
+    enterSelectionMode: (initialId) => {
+        const ids = new Set<number>()
+        if (initialId != null) ids.add(initialId)
+        set({ selectionMode: true, selectedIds: ids })
+    },
+
+    exitSelectionMode: () => {
+        set({ selectionMode: false, selectedIds: new Set<number>() })
+    },
+
+    toggleSelected: (id) => {
+        set((s) => {
+            const next = new Set(s.selectedIds)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            // Auto-exit if nothing selected
+            if (next.size === 0) return { selectionMode: false, selectedIds: next }
+            return { selectedIds: next }
+        })
+    },
+
+    selectAll: () => {
+        set((s) => ({
+            selectedIds: new Set(s.items.map((i) => i.id)),
+        }))
+    },
+
+    removeItems: (ids) => {
+        const idSet = new Set(ids)
+        set((s) => ({
+            items: s.items.filter((i) => !idSet.has(i.id)),
+            total: Math.max(0, s.total - ids.length),
+            selectedIds: new Set([...s.selectedIds].filter((id) => !idSet.has(id))),
+        }))
+    },
+
+    enterTrashMode: (items) => {
+        set({ trashMode: true, trashItems: items, selectionMode: false, selectedIds: new Set<number>(), activeLabel: null, albumFilterKeys: new Set<string>() })
+    },
+
+    exitTrashMode: () => {
+        set({ trashMode: false, trashItems: [], selectionMode: false, selectedIds: new Set<number>(), activeLabel: null, albumFilterKeys: new Set<string>() })
+    },
+
+    removeTrashItems: (ids) => {
+        const idSet = new Set(ids)
+        set((s) => ({
+            trashItems: s.trashItems.filter((i) => !idSet.has(i.id)),
+            selectedIds: new Set([...s.selectedIds].filter((id) => !idSet.has(id))),
+        }))
+    },
+
+    clearTrash: () => {
+        set({ trashItems: [], selectionMode: false, selectedIds: new Set<number>() })
     },
 }))

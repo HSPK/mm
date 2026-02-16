@@ -70,6 +70,7 @@ class MediaModel(BaseModel):
     created_at = DateTimeField(null=True)
     modified_at = DateTimeField(null=True)
     scanned_at = DateTimeField(default=dt.datetime.now)
+    deleted_at = DateTimeField(null=True, default=None)  # soft delete
 
     class Meta:
         table_name = "media"
@@ -77,6 +78,7 @@ class MediaModel(BaseModel):
             (("file_hash",), False),
             (("media_type",), False),
             (("rating",), False),
+            (("deleted_at",), False),
         )
 
 
@@ -151,4 +153,34 @@ class UserModel(BaseModel):
         table_name = "users"
 
 
-ALL_TABLES = [MediaModel, MetadataModel, TagModel, MediaTagModel, EmbeddingModel, UserModel]
+class AlbumModel(BaseModel):
+    id = AutoField()
+    name = CharField(max_length=256)
+    description = CharField(max_length=1024, default="")
+    cover_media = ForeignKeyField(MediaModel, null=True, default=None, on_delete="SET NULL")
+    created_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "albums"
+
+
+class AlbumMediaModel(BaseModel):
+    album = ForeignKeyField(AlbumModel, backref="album_media", on_delete="CASCADE")
+    media = ForeignKeyField(MediaModel, backref="album_media", on_delete="CASCADE")
+    added_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "album_media"
+        primary_key = CompositeKey("album", "media")
+
+
+ALL_TABLES = [
+    MediaModel,
+    MetadataModel,
+    TagModel,
+    MediaTagModel,
+    EmbeddingModel,
+    UserModel,
+    AlbumModel,
+    AlbumMediaModel,
+]

@@ -15,6 +15,7 @@ export interface Media {
     location_label?: string | null
     location_city?: string | null
     location_country?: string | null
+    deleted_at?: string | null
 }
 
 export interface MediaMetadata {

@@ -56,6 +56,19 @@ class BatchRatingBody(PydanticBase):
     rating: int
 
 
+class BatchDeleteBody(PydanticBase):
+    media_ids: list[int]
+
+
+class CreateAlbumBody(PydanticBase):
+    name: str
+    description: str = ""
+
+
+class AlbumMediaBody(PydanticBase):
+    media_ids: list[int]
+
+
 class UpdateMetadataBody(PydanticBase):
     date_taken: datetime | None = None
     gps_lat: float | None = None
@@ -82,6 +95,10 @@ def serialize_media_brief(m: Any, md: Any = None) -> dict[str, Any]:
         "file_size": m.file_size,
         "rating": m.rating,
     }
+    if m.deleted_at:
+        result["deleted_at"] = (
+            m.deleted_at.isoformat() if hasattr(m.deleted_at, "isoformat") else str(m.deleted_at)
+        )
     if md:
         result["width"] = md.width
         result["height"] = md.height

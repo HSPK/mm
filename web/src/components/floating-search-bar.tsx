@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useAuthStore } from "@/stores/auth"
 import { useMediaStore } from "@/stores/media"
@@ -28,6 +28,7 @@ import {
     Camera,
     MapPin,
     ChevronDown,
+    ChevronLeft,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -47,6 +48,9 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         viewMode, setViewMode,
         dateGroupMode, setDateGroupMode,
         thumbSize, setThumbSize,
+        activeLabel, resetFilters,
+        trashMode, trashItems, exitTrashMode,
+        albumFilterKeys,
     } = useMediaStore()
 
     const [searchInput, setSearchInput] = useState(filters.search ?? "")
@@ -55,7 +59,11 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const menuRef = useRef<HTMLDivElement>(null)
     const lastScrollY = useRef(0)
 
-    const isLibrary = location.pathname === "/"
+    // Determine current context
+    const isOnLibrary = location.pathname === "/"
+    const isOnAlbums = location.pathname === "/albums"
+    const isInAlbumView = isOnLibrary && !!activeLabel  // viewing album content on Library tab
+    const showFilters = isOnLibrary  // show media filters when on Library (including album view)
 
     // Sync searchInput when store filter changes externally (during render)
     const [prevFilterSearch, setPrevFilterSearch] = useState(filters.search)
@@ -79,8 +87,100 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
             .catch(() => { })
     }, [])
 
-    // Auto-hide on scroll down, show on scroll up
+    // Clear album/trash state when navigating to Albums page (fixes badge residue on browser back)
     useEffect(() => {
+        if (isOnAlbums) {
+            const state = useMediaStore.getState()
+            if (state.activeLabel) state.resetFilters()
+            if (state.trashMode) state.exitTrashMode()
+        }
+    }, [isOnAlbums])
+
+    // Build active filter tags (shown below search bar on Library page)
+    const filterTags = useMemo(() => {
+        if (!isOnLibrary) return []
+        const tags: { key: string; label: string; color?: string; removable: boolean; onRemove: () => void }[] = []
+        // Only filters whose keys are in albumFilterKeys are locked (non-removable)
+        const locked = albumFilterKeys
+
+        if (trashMode) {
+            tags.push({
+                key: "trash",
+                label: `Recently Deleted · ${trashItems.length}`,
+                color: "destructive",
+                removable: true,
+                onRemove: exitTrashMode,
+            })
+        }
+        if (filters.type) {
+            tags.push({
+                key: "type",
+                label: filters.type === "photo" ? "Photos" : "Videos",
+                removable: !locked.has("type"),
+                onRemove: () => setFilter("type", null),
+            })
+        }
+        if (filters.camera) {
+            tags.push({
+                key: "camera",
+                label: filters.camera,
+                removable: !locked.has("camera"),
+                onRemove: () => setFilter("camera", null),
+            })
+        }
+        if (filters.date_from || filters.date_to) {
+            const fmtShort = (d: string) => {
+                const [y, m, dd] = d.split("-")
+                return `${y.slice(2)}/${m}${dd ? `/${dd}` : ""}`
+            }
+            const from = filters.date_from ? fmtShort(filters.date_from) : ""
+            const to = filters.date_to ? fmtShort(filters.date_to) : ""
+            const label = from && to ? `${from} → ${to}` : from || `→ ${to}`
+            tags.push({
+                key: "date",
+                label,
+                removable: !locked.has("date_from") && !locked.has("date_to"),
+                onRemove: () => setFilters({ date_from: null, date_to: null }),
+            })
+        }
+        if (filters.min_rating) {
+            tags.push({
+                key: "rating",
+                label: `★ ≥ ${filters.min_rating}`,
+                color: "amber",
+                removable: !locked.has("min_rating"),
+                onRemove: () => setFilter("min_rating", null),
+            })
+        }
+        if (filters.lat != null && filters.lon != null) {
+            tags.push({
+                key: "location",
+                label: `${filters.lat.toFixed(1)}°, ${filters.lon.toFixed(1)}°`,
+                color: "emerald",
+                removable: !locked.has("lat"),
+                onRemove: () => setFilters({ lat: null, lon: null, radius: null }),
+            })
+        }
+        if (filters.search) {
+            tags.push({
+                key: "search",
+                label: `"${filters.search}"`,
+                removable: true,
+                onRemove: () => { setFilter("search", null); setSearchInput("") },
+            })
+        }
+
+        return tags
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOnLibrary, filters, albumFilterKeys, trashMode, trashItems.length])
+
+    // Auto-hide on scroll down, show on scroll up
+    // Always visible when in album view or trash mode (need back button)
+    useEffect(() => {
+        if (activeLabel || trashMode) {
+            setVisible(true)
+            return
+        }
         const el = scrollContainer
         if (!el) return
         lastScrollY.current = el.scrollTop
@@ -96,7 +196,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         }
         el.addEventListener("scroll", handle, { passive: true })
         return () => el.removeEventListener("scroll", handle)
-    }, [scrollContainer])
+    }, [scrollContainer, activeLabel, trashMode])
 
     // Close menu on outside click
     useEffect(() => {
@@ -155,15 +255,48 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         >
             <div className="px-4 pt-2.5 pb-1 mx-auto max-w-2xl">
                 <div className="flex items-center gap-2">
-                    {/* Search input — capsule shape */}
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground/40" />
+                    {/* Search input with optional album/trash badge */}
+                    <div className="relative flex-1 flex items-center">
+                        {/* Back button — animates in/out */}
+                        <button
+                            onClick={() => {
+                                if (trashMode) {
+                                    exitTrashMode()
+                                } else if (activeLabel) {
+                                    resetFilters()
+                                    navigate("/albums")
+                                }
+                            }}
+                            className={cn(
+                                "absolute left-2.5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground/50 hover:text-foreground hover:bg-secondary/60 transition-all duration-200 shrink-0",
+                                (activeLabel || trashMode) ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
+                            )}
+                            aria-label="Back"
+                            tabIndex={(activeLabel || trashMode) ? 0 : -1}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+
+                        {/* Search icon — fades when back button is visible */}
+                        <Search className={cn(
+                            "absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground/40 transition-opacity duration-200",
+                            (activeLabel || trashMode) ? "opacity-0" : "opacity-100"
+                        )} />
+
                         <Input
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-                            placeholder="Search…"
-                            className="w-full h-11 pl-11 pr-4 text-sm bg-background/80 backdrop-blur-xl border border-border/60 rounded-full placeholder:text-muted-foreground/40 focus-visible:ring-1 focus-visible:ring-ring/30 shadow-lg shadow-black/10"
+                            placeholder={
+                                trashMode ? "Search deleted…"
+                                    : isInAlbumView ? `Search in ${activeLabel}…`
+                                        : isOnAlbums ? "Search albums…"
+                                            : "Search photos…"
+                            }
+                            className={cn(
+                                "w-full h-11 pr-4 text-sm bg-background/80 backdrop-blur-xl border border-border/60 rounded-full placeholder:text-muted-foreground/40 focus-visible:ring-1 focus-visible:ring-ring/30 shadow-lg shadow-black/10 transition-[padding] duration-200",
+                                (activeLabel || trashMode) ? "pl-10" : "pl-11",
+                            )}
                         />
                     </div>
 
@@ -188,8 +321,8 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                         {/* Dropdown menu */}
                         {menuOpen && (
                             <div className="absolute right-0 top-full mt-2 w-72 rounded-3xl border border-border bg-popover/95 backdrop-blur-2xl shadow-2xl shadow-black/20 py-2 z-50 overflow-hidden max-h-[calc(100vh-6rem)] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent">
-                                {/* ── Library Filters (only on "/" route) ── */}
-                                {isLibrary && (
+                                {/* ── Library Filters (only on Library tab) ── */}
+                                {showFilters && (
                                     <div className="border-b border-border px-4 py-3.5 space-y-3.5">
                                         {/* Type filter — segmented */}
                                         <div>
@@ -441,6 +574,40 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                         )}
                     </div>
                 </div>
+
+                {/* Active filter tags */}
+                {filterTags.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5 px-0.5">
+                        {filterTags.map((tag) => (
+                            <span
+                                key={tag.key}
+                                className={cn(
+                                    "inline-flex items-center gap-1 py-[3px] rounded-full text-[10px] font-medium border backdrop-blur-md shadow-sm transition-colors",
+                                    tag.removable ? "pl-2 pr-1" : "px-2",
+                                    tag.color === "primary"
+                                        ? "bg-primary/20 text-primary border-primary/30"
+                                        : tag.color === "destructive"
+                                            ? "bg-destructive/20 text-destructive border-destructive/30"
+                                            : tag.color === "amber"
+                                                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                                                : tag.color === "emerald"
+                                                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                                                    : "bg-secondary text-foreground/70 border-border/60"
+                                )}
+                            >
+                                <span className="max-w-[8rem] truncate">{tag.label}</span>
+                                {tag.removable && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); tag.onRemove() }}
+                                        className="flex items-center justify-center h-3.5 w-3.5 rounded-full hover:bg-black/15 dark:hover:bg-white/15 transition-colors"
+                                    >
+                                        <X className="h-2.5 w-2.5" />
+                                    </button>
+                                )}
+                            </span>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     )

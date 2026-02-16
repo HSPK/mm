@@ -43,6 +43,7 @@ class Media:
     created_at: dt.datetime | None = None
     modified_at: dt.datetime | None = None
     scanned_at: dt.datetime | None = None
+    deleted_at: dt.datetime | None = None
 
 
 @dataclass

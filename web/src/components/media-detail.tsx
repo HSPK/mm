@@ -589,14 +589,16 @@ interface Props {
     items: Media[]
     startIndex: number
     onClose: () => void
+    onDelete?: (id: number) => void
 }
 
-export function MediaDetailPanel({ items, startIndex, onClose }: Props) {
+export function MediaDetailPanel({ items, startIndex, onClose, onDelete }: Props) {
     const [showInfo, setShowInfo] = useState(false)
     const [initialEditMode, setInitialEditMode] = useState(false)
     const [currentIndex, setCurrentIndex] = useState(startIndex)
     const [fadeKey, setFadeKey] = useState(currentIndex)
     const [fadeIn, setFadeIn] = useState(true)
+    const [deleting, setDeleting] = useState(false)
 
     const currentItem = items[currentIndex]
     const isVideo = currentItem?.media_type === "video"
@@ -652,6 +654,29 @@ export function MediaDetailPanel({ items, startIndex, onClose }: Props) {
         } catch { /* */ }
     }
 
+    const handleDelete = async () => {
+        if (!currentItem || deleting) return
+
+        setDeleting(true)
+        try {
+            await api.delete(`/media/${currentItem.id}`)
+            onDelete?.(currentItem.id)
+            // Navigate to next item or close if no items left
+            if (items.length <= 1) {
+                onClose()
+            } else if (currentIndex >= items.length - 1) {
+                // Was last item, go to previous
+                const newIdx = currentIndex - 1
+                setCurrentIndex(newIdx)
+                setFadeKey(newIdx)
+            }
+        } catch {
+            /* */
+        } finally {
+            setDeleting(false)
+        }
+    }
+
     const actionBtnClass = (active = false) =>
         `flex items-center justify-center w-10 h-10 rounded-full transition-all duration-100 active:scale-90 ${active
             ? "text-white bg-white/20"
@@ -687,7 +712,7 @@ export function MediaDetailPanel({ items, startIndex, onClose }: Props) {
                     <button type="button" onClick={handleDownload} className={actionBtnClass()} aria-label="Download">
                         <Download className="h-[1.2rem] w-[1.2rem]" strokeWidth={1.8} />
                     </button>
-                    <button type="button" onClick={() => { }} className={actionBtnClass()} aria-label="Delete">
+                    <button type="button" onClick={handleDelete} className={actionBtnClass()} aria-label="Delete" disabled={deleting}>
                         <Trash2 className="h-[1.2rem] w-[1.2rem]" strokeWidth={1.8} />
                     </button>
                 </div>
