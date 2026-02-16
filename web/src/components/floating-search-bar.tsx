@@ -49,9 +49,11 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         dateGroupMode, setDateGroupMode,
         thumbSize, setThumbSize,
         activeLabel, resetFilters,
-        trashMode, trashItems, exitTrashMode,
+        total,
         albumFilterKeys,
     } = useMediaStore()
+
+    const isDeletedView = filters.deleted
 
     const [searchInput, setSearchInput] = useState(filters.search ?? "")
     const [menuOpen, setMenuOpen] = useState(false)
@@ -63,7 +65,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const isOnLibrary = location.pathname === "/"
     const isOnAlbums = location.pathname === "/albums"
     const isInAlbumView = isOnLibrary && !!activeLabel  // viewing album content on Library tab
-    const showFilters = isOnLibrary  // show media filters when on Library (including album view)
+    const showFilters = isOnLibrary && !isDeletedView  // hide media filters when viewing trash
 
     // Sync searchInput when store filter changes externally (during render)
     const [prevFilterSearch, setPrevFilterSearch] = useState(filters.search)
@@ -87,12 +89,11 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
             .catch(() => { })
     }, [])
 
-    // Clear album/trash state when navigating to Albums page (fixes badge residue on browser back)
+    // Clear album state when navigating to Albums page (fixes badge residue on browser back)
     useEffect(() => {
         if (isOnAlbums) {
             const state = useMediaStore.getState()
             if (state.activeLabel) state.resetFilters()
-            if (state.trashMode) state.exitTrashMode()
         }
     }, [isOnAlbums])
 
@@ -103,13 +104,13 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         // Only filters whose keys are in albumFilterKeys are locked (non-removable)
         const locked = albumFilterKeys
 
-        if (trashMode) {
+        if (isDeletedView) {
             tags.push({
                 key: "trash",
-                label: `Recently Deleted · ${trashItems.length}`,
+                label: `Recently Deleted · ${total}`,
                 color: "destructive",
                 removable: true,
-                onRemove: exitTrashMode,
+                onRemove: resetFilters,
             })
         }
         if (filters.type) {
@@ -172,12 +173,12 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
 
         return tags
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOnLibrary, filters, albumFilterKeys, trashMode, trashItems.length])
+    }, [isOnLibrary, filters, albumFilterKeys, total])
 
     // Auto-hide on scroll down, show on scroll up
     // Always visible when in album view or trash mode (need back button)
     useEffect(() => {
-        if (activeLabel || trashMode) {
+        if (activeLabel || isDeletedView) {
             setVisible(true)
             return
         }
@@ -196,7 +197,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         }
         el.addEventListener("scroll", handle, { passive: true })
         return () => el.removeEventListener("scroll", handle)
-    }, [scrollContainer, activeLabel, trashMode])
+    }, [scrollContainer, activeLabel, isDeletedView])
 
     // Close menu on outside click
     useEffect(() => {
@@ -260,19 +261,17 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                         {/* Back button — animates in/out */}
                         <button
                             onClick={() => {
-                                if (trashMode) {
-                                    exitTrashMode()
-                                } else if (activeLabel) {
+                                if (isDeletedView || activeLabel) {
                                     resetFilters()
                                     navigate("/albums")
                                 }
                             }}
                             className={cn(
                                 "absolute left-2.5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground/50 hover:text-foreground hover:bg-secondary/60 transition-all duration-200 shrink-0",
-                                (activeLabel || trashMode) ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
+                                (activeLabel || isDeletedView) ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
                             )}
                             aria-label="Back"
-                            tabIndex={(activeLabel || trashMode) ? 0 : -1}
+                            tabIndex={(activeLabel || isDeletedView) ? 0 : -1}
                         >
                             <ChevronLeft className="h-4 w-4" />
                         </button>
@@ -280,7 +279,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                         {/* Search icon — fades when back button is visible */}
                         <Search className={cn(
                             "absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground/40 transition-opacity duration-200",
-                            (activeLabel || trashMode) ? "opacity-0" : "opacity-100"
+                            (activeLabel || isDeletedView) ? "opacity-0" : "opacity-100"
                         )} />
 
                         <Input
@@ -288,14 +287,14 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
                             placeholder={
-                                trashMode ? "Search deleted…"
+                                isDeletedView ? "Search deleted…"
                                     : isInAlbumView ? `Search in ${activeLabel}…`
                                         : isOnAlbums ? "Search albums…"
                                             : "Search photos…"
                             }
                             className={cn(
                                 "w-full h-11 pr-4 text-sm bg-background/80 backdrop-blur-xl border border-border/60 rounded-full placeholder:text-muted-foreground/40 focus-visible:ring-1 focus-visible:ring-ring/30 shadow-lg shadow-black/10 transition-[padding] duration-200",
-                                (activeLabel || trashMode) ? "pl-10" : "pl-11",
+                                (activeLabel || isDeletedView) ? "pl-10" : "pl-11",
                             )}
                         />
                     </div>

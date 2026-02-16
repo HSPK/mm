@@ -46,7 +46,8 @@ export default function AppLayout() {
     const [outletScrollEl, setOutletScrollEl] = useState<HTMLDivElement | null>(null)
 
     // Scroll Library to top when entering album view
-    const { activeLabel: currentLabel, filters, trashMode: trashActive } = useMediaStore()
+    const { activeLabel: currentLabel, filters } = useMediaStore()
+    const isDeletedView = filters.deleted
     const [prevLabel, setPrevLabel] = useState(currentLabel)
     if (currentLabel !== prevLabel) {
         setPrevLabel(currentLabel)
@@ -112,8 +113,8 @@ export default function AppLayout() {
 
     // ─── Swipe gesture for tab switching ─────────────────
     const navigate = useNavigate()
-    const { activeLabel: inAlbumView, trashMode: inTrashView } = useMediaStore()
-    const swipeDisabled = !!inAlbumView || inTrashView
+    const { activeLabel: inAlbumView } = useMediaStore()
+    const swipeDisabled = !!inAlbumView
     const touchRef = useRef<{ startX: number; startY: number; startTime: number } | null>(null)
     const [swipeOffset, setSwipeOffset] = useState(0)
     const [swiping, setSwiping] = useState(false)
@@ -187,7 +188,7 @@ export default function AppLayout() {
     }, [swipeOffset, swiping, activeTabIndex, navigate])
 
     // Check if filter tags will be shown on Library page (for dynamic padding)
-    const hasFilterTags = !!(currentLabel || trashActive ||
+    const hasFilterTags = !!(currentLabel || isDeletedView ||
         filters.type || filters.camera ||
         filters.date_from || filters.date_to ||
         filters.min_rating ||
@@ -263,11 +264,13 @@ function BottomBar({
     indicator: { left: number; width: number }
 }) {
     const {
-        selectionMode, selectedIds,
+        selectionMode, selectedIds, items, total,
         exitSelectionMode, selectAll, removeItems,
-        trashMode, trashItems, exitTrashMode, removeTrashItems, clearTrash,
+        filters, resetFilters,
         activeLabel: viewingAlbum,
     } = useMediaStore()
+
+    const isDeletedView = filters.deleted
 
     const [albumMode, setAlbumMode] = useState<false | "pick" | "create">(false)
     const [albums, setAlbums] = useState<{ id: number; name: string }[]>([])
@@ -312,13 +315,13 @@ function BottomBar({
     const handleDelete = async () => {
         const ids = [...selectedIds]
         if (ids.length === 0) return
-        if (trashMode) {
+        if (isDeletedView) {
             // In trash: permanent delete
             if (!window.confirm(`Permanently delete ${ids.length} item(s)?`)) return
             await Promise.allSettled(ids.map((id) => api.delete(`/media/${id}`, { params: { permanent: true } })))
-            removeTrashItems(ids)
+            removeItems(ids)
             exitSelectionMode()
-            if (trashItems.length - ids.length <= 0) exitTrashMode()
+            if (items.length - ids.length <= 0) resetFilters()
         } else {
             // Normal: soft delete
             try {
@@ -332,34 +335,22 @@ function BottomBar({
     }
 
     const handleRestore = async () => {
-        const ids = selectionMode ? [...selectedIds] : trashItems.map((i) => i.id)
+        const ids = selectionMode ? [...selectedIds] : items.map((i) => i.id)
         if (ids.length === 0) return
         if (!window.confirm(`Restore ${ids.length} item(s)?`)) return
         await Promise.allSettled(ids.map((id) => api.post(`/media/${id}/restore`)))
-        removeTrashItems(ids)
+        removeItems(ids)
         exitSelectionMode()
-        if (trashItems.length - ids.length <= 0) exitTrashMode()
+        if (items.length - ids.length <= 0) resetFilters()
     }
 
     const handleEmptyTrash = async () => {
-        if (!window.confirm(`Permanently delete all ${trashItems.length} items? This cannot be undone.`)) return
+        if (!window.confirm(`Permanently delete all ${total} items? This cannot be undone.`)) return
         await api.delete("/media/trash")
-        clearTrash()
-        exitTrashMode()
+        resetFilters()
     }
 
-    const selectAllForContext = () => {
-        if (trashMode) {
-            useMediaStore.setState({
-                selectionMode: true,
-                selectedIds: new Set(trashItems.map((i) => i.id)),
-            })
-        } else {
-            selectAll()
-        }
-    }
-
-    const show = selectionMode || trashMode || (isTabRoute && navVisible && !viewingAlbum)
+    const show = selectionMode || isDeletedView || (isTabRoute && navVisible && !viewingAlbum)
 
     return (
         <div
@@ -431,7 +422,7 @@ function BottomBar({
                     /* ── Selection action bar (works for both library and trash) ── */
                     <div className="relative flex items-center gap-1 px-2 py-1.5 bg-background border border-border shadow-2xl shadow-black/10 rounded-full">
                         <button
-                            onClick={() => { exitSelectionMode(); if (trashMode && trashItems.length === 0) exitTrashMode() }}
+                            onClick={() => { exitSelectionMode() }}
                             className="relative z-10 flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
                         >
                             <X className="h-[1.15rem] w-[1.15rem]" />
@@ -443,7 +434,7 @@ function BottomBar({
                         </span>
 
                         <button
-                            onClick={selectAllForContext}
+                            onClick={selectAll}
                             className="relative z-10 flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-full text-[10px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
                             title="Select all"
                         >
@@ -451,7 +442,7 @@ function BottomBar({
                             <span>All</span>
                         </button>
 
-                        {trashMode ? (
+                        {isDeletedView ? (
                             <>
                                 <button
                                     onClick={handleRestore}
@@ -494,11 +485,11 @@ function BottomBar({
                             </>
                         )}
                     </div>
-                ) : trashMode ? (
+                ) : isDeletedView ? (
                     /* ── Trash default bar (no selection yet) ── */
                     <div className="relative flex items-center gap-1 px-2 py-1.5 bg-background border border-border shadow-2xl shadow-black/10 rounded-full">
                         <button
-                            onClick={exitTrashMode}
+                            onClick={resetFilters}
                             className="relative z-10 flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
                         >
                             <X className="h-[1.15rem] w-[1.15rem]" />
@@ -506,11 +497,11 @@ function BottomBar({
                         </button>
 
                         <span className="text-[10px] font-semibold text-foreground/80 px-2 tabular-nums">
-                            {trashItems.length}
+                            {total}
                         </span>
 
                         <button
-                            onClick={selectAllForContext}
+                            onClick={selectAll}
                             className="relative z-10 flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-full text-[10px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
                             title="Select all"
                         >

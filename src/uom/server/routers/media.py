@@ -41,6 +41,7 @@ async def list_media(
     lon: float | None = None,
     radius: float | None = None,
     has_location: bool = False,
+    deleted: bool = False,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
     repo = get_repo(request)
@@ -62,6 +63,7 @@ async def list_media(
         lon=lon,
         radius=radius,
         has_location=has_location,
+        deleted=deleted,
     )
     # Batch-fetch metadata for all items
     meta_map: dict[int, Any] = {}

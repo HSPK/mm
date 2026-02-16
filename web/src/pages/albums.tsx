@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, memo } from "react"
 import { api } from "@/api/client"
-import type { Media, PaginatedMedia } from "@/api/types"
+import type { PaginatedMedia } from "@/api/types"
 import { useMediaStore, type Filters } from "@/stores/media"
 import { useNavigate } from "react-router-dom"
 import { AuthImage } from "@/components/auth-image"
@@ -219,7 +219,7 @@ async function fetchCoverId(
 
 export default function AlbumsPage() {
     const navigate = useNavigate()
-    const { setFilter, setFilters, total, setActiveLabel, enterTrashMode, trashMode } = useMediaStore()
+    const { setFilter, setFilters, total, setActiveLabel } = useMediaStore()
 
     const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState<Stats | null>(null)
@@ -227,7 +227,8 @@ export default function AlbumsPage() {
     const [geoData, setGeoData] = useState<GeoItem[]>([])
     // Cover IDs keyed by album identifier
     const [covers, setCovers] = useState<Record<string, number | null>>({})
-    const [trashItems, setTrashItems] = useState<Media[]>([])
+    const [trashCount, setTrashCount] = useState(0)
+    const [trashCoverId, setTrashCoverId] = useState<number | null>(null)
 
     useEffect(() => {
         let mounted = true
@@ -293,9 +294,13 @@ export default function AlbumsPage() {
                 setCovers(coverMap)
                 setLoading(false)
 
-                // Fetch trash items
-                api.get<Media[]>("/media/trash")
-                    .then(res => { if (mounted) setTrashItems(res.data) })
+                // Fetch trash count and cover
+                api.get<PaginatedMedia>("/media", { params: { deleted: true, per_page: 1, sort: "date_taken", order: "desc" } })
+                    .then(res => {
+                        if (!mounted) return
+                        setTrashCount(res.data.total)
+                        if (res.data.items.length > 0) setTrashCoverId(res.data.items[0].id)
+                    })
                     .catch(() => { })
             })
             .catch(() => {
@@ -333,6 +338,7 @@ export default function AlbumsPage() {
                 lat: null,
                 lon: null,
                 radius: null,
+                deleted: false,
                 ...updates,
             } as Partial<Filters>)
             // Determine which filter keys are album-locked (non-null values from updates)
@@ -355,289 +361,228 @@ export default function AlbumsPage() {
 
     return (
         <div className="pb-24">
-            {trashMode ? (
-                <TrashGrid />
-            ) : (
-                <div className="px-4 space-y-8">
-                    {/* ── Library ── */}
-                    <section>
-                        <SectionHeader icon={Images} title="Library" />
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div className="px-4 space-y-8">
+                {/* ── Library ── */}
+                <section>
+                    <SectionHeader icon={Images} title="Library" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        <AlbumCard
+                            icon={Images}
+                            title="All Media"
+                            subtitle={`${(stats?.total_files ?? total).toLocaleString()} items`}
+                            count={stats?.total_files ?? total}
+                            coverId={covers["all"]}
+                            onClick={() =>
+                                goLibraryWith({
+                                    type: null,
+                                    camera: null,
+                                    date_from: null,
+                                    date_to: null,
+                                    min_rating: null,
+                                    sort: "date_taken",
+                                    order: "desc",
+                                    search: null,
+                                    lat: null,
+                                    lon: null,
+                                    radius: null,
+                                }, "All Media")
+                            }
+                        />
+                        {(typeDist.photo ?? 0) > 0 && (
                             <AlbumCard
-                                icon={Images}
-                                title="All Media"
-                                subtitle={`${(stats?.total_files ?? total).toLocaleString()} items`}
-                                count={stats?.total_files ?? total}
-                                coverId={covers["all"]}
+                                icon={Image}
+                                title="Photos"
+                                count={typeDist.photo}
+                                coverId={covers["photo"]}
+                                onClick={() => goLibraryWith({ type: "photo" }, "Photos")}
+                            />
+                        )}
+                        {(typeDist.video ?? 0) > 0 && (
+                            <AlbumCard
+                                icon={Film}
+                                title="Videos"
+                                count={typeDist.video}
+                                coverId={covers["video"]}
+                                onClick={() => goLibraryWith({ type: "video" }, "Videos")}
+                            />
+                        )}
+                        <AlbumCard
+                            icon={Star}
+                            title="Favorites"
+                            subtitle="★4 and above"
+                            coverId={covers["fav"]}
+                            onClick={() =>
+                                goLibraryWith({
+                                    min_rating: 4,
+                                    sort: "rating",
+                                    order: "desc",
+                                }, "Favorites")
+                            }
+                            color="bg-amber-500/5"
+                        />
+                        {trashCount > 0 && (
+                            <AlbumCard
+                                icon={Trash2}
+                                title="Recently Deleted"
+                                count={trashCount}
+                                coverId={trashCoverId}
                                 onClick={() =>
                                     goLibraryWith({
-                                        type: null,
-                                        camera: null,
-                                        date_from: null,
-                                        date_to: null,
-                                        min_rating: null,
+                                        deleted: true,
                                         sort: "date_taken",
                                         order: "desc",
-                                        search: null,
-                                        lat: null,
-                                        lon: null,
-                                        radius: null,
-                                    }, "All Media")
+                                    }, "Recently Deleted")
                                 }
+                                color="bg-destructive/5"
                             />
-                            {(typeDist.photo ?? 0) > 0 && (
-                                <AlbumCard
-                                    icon={Image}
-                                    title="Photos"
-                                    count={typeDist.photo}
-                                    coverId={covers["photo"]}
-                                    onClick={() => goLibraryWith({ type: "photo" }, "Photos")}
-                                />
-                            )}
-                            {(typeDist.video ?? 0) > 0 && (
-                                <AlbumCard
-                                    icon={Film}
-                                    title="Videos"
-                                    count={typeDist.video}
-                                    coverId={covers["video"]}
-                                    onClick={() => goLibraryWith({ type: "video" }, "Videos")}
-                                />
-                            )}
-                            <AlbumCard
-                                icon={Star}
-                                title="Favorites"
-                                subtitle="★4 and above"
-                                coverId={covers["fav"]}
-                                onClick={() =>
-                                    goLibraryWith({
-                                        min_rating: 4,
-                                        sort: "rating",
-                                        order: "desc",
-                                    }, "Favorites")
-                                }
-                                color="bg-amber-500/5"
-                            />
-                            {trashItems.length > 0 && (
-                                <AlbumCard
-                                    icon={Trash2}
-                                    title="Recently Deleted"
-                                    count={trashItems.length}
-                                    coverId={trashItems[0]?.id}
-                                    onClick={() => enterTrashMode(trashItems)}
-                                    color="bg-destructive/5"
-                                />
-                            )}
+                        )}
+                    </div>
+                </section>
+
+                {/* ── By Camera ── */}
+                {cameras.length > 0 && (
+                    <section>
+                        <SectionHeader
+                            icon={Camera}
+                            title="Cameras"
+                            count={cameras.length}
+                        />
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            {cameras.slice(0, 9).map((cam) => {
+                                const label = cam.model || cam.make || "Unknown"
+                                return (
+                                    <AlbumCard
+                                        key={`${cam.make}-${cam.model}`}
+                                        icon={Camera}
+                                        title={label}
+                                        subtitle={
+                                            cam.make && cam.model ? cam.make : undefined
+                                        }
+                                        count={cam.count}
+                                        coverId={covers[`cam-${label}`]}
+                                        onClick={() => {
+                                            setFilter("camera", label)
+                                            setActiveLabel(label, ["camera"])
+                                            navigate("/")
+                                        }}
+                                    />
+                                )
+                            })}
                         </div>
                     </section>
+                )}
 
-                    {/* ── By Camera ── */}
-                    {cameras.length > 0 && (
-                        <section>
-                            <SectionHeader
-                                icon={Camera}
-                                title="Cameras"
-                                count={cameras.length}
-                            />
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                                {cameras.slice(0, 9).map((cam) => {
-                                    const label = cam.model || cam.make || "Unknown"
-                                    return (
-                                        <AlbumCard
-                                            key={`${cam.make}-${cam.model}`}
-                                            icon={Camera}
-                                            title={label}
-                                            subtitle={
-                                                cam.make && cam.model ? cam.make : undefined
-                                            }
-                                            count={cam.count}
-                                            coverId={covers[`cam-${label}`]}
-                                            onClick={() => {
-                                                setFilter("camera", label)
-                                                setActiveLabel(label, ["camera"])
-                                                navigate("/")
-                                            }}
-                                        />
-                                    )
-                                })}
-                            </div>
-                        </section>
-                    )}
-
-                    {/* ── By Year ── */}
-                    {years.length > 0 && (
-                        <section>
-                            <SectionHeader
-                                icon={Calendar}
-                                title="Years"
-                                count={years.length}
-                            />
-                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
-                                {years.map((yr) => (
-                                    <button
-                                        key={yr.year}
-                                        onClick={() =>
-                                            goLibraryWith({
-                                                date_from: `${yr.year}-01-01`,
-                                                date_to: `${yr.year}-12-31`,
-                                                sort: "date_taken",
-                                                order: "desc",
-                                            }, yr.year)
-                                        }
-                                        className="group relative rounded-2xl overflow-hidden bg-secondary/30 border border-border/60 hover:border-border transition-all duration-200 text-left"
-                                    >
-                                        {covers[`yr-${yr.year}`] ? (
-                                            <div className="aspect-[4/3] relative">
-                                                <AuthImage
-                                                    apiSrc={`/media/${covers[`yr-${yr.year}`]}/thumbnail?size=md`}
-                                                    alt=""
-                                                    loading="lazy"
-                                                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                                />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                                                <div className="absolute bottom-0 left-0 right-0 p-2.5">
-                                                    <p className="text-base font-bold text-white tracking-tight">
-                                                        {yr.year}
-                                                    </p>
-                                                    <p className="text-[10px] text-white/50">
-                                                        {yr.count.toLocaleString()} items
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="p-3">
-                                                <p className="text-lg font-bold text-foreground tracking-tight">
+                {/* ── By Year ── */}
+                {years.length > 0 && (
+                    <section>
+                        <SectionHeader
+                            icon={Calendar}
+                            title="Years"
+                            count={years.length}
+                        />
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
+                            {years.map((yr) => (
+                                <button
+                                    key={yr.year}
+                                    onClick={() =>
+                                        goLibraryWith({
+                                            date_from: `${yr.year}-01-01`,
+                                            date_to: `${yr.year}-12-31`,
+                                            sort: "date_taken",
+                                            order: "desc",
+                                        }, yr.year)
+                                    }
+                                    className="group relative rounded-2xl overflow-hidden bg-secondary/30 border border-border/60 hover:border-border transition-all duration-200 text-left"
+                                >
+                                    {covers[`yr-${yr.year}`] ? (
+                                        <div className="aspect-[4/3] relative">
+                                            <AuthImage
+                                                apiSrc={`/media/${covers[`yr-${yr.year}`]}/thumbnail?size=md`}
+                                                alt=""
+                                                loading="lazy"
+                                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                                            <div className="absolute bottom-0 left-0 right-0 p-2.5">
+                                                <p className="text-base font-bold text-white tracking-tight">
                                                     {yr.year}
                                                 </p>
-                                                <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                                                <p className="text-[10px] text-white/50">
                                                     {yr.count.toLocaleString()} items
                                                 </p>
                                             </div>
-                                        )}
-                                    </button>
-                                ))}
-                                {unknownDateCount > 0 && (
-                                    <button
-                                        onClick={() =>
-                                            goLibraryWith({
-                                                sort: "filename",
-                                                order: "asc",
-                                                date_from: null,
-                                                date_to: null,
-                                            }, "No Date")
-                                        }
-                                        className="group relative rounded-2xl bg-secondary/30 border border-border/60 hover:border-border p-3 text-left transition-all duration-200"
-                                    >
-                                        <div className="flex items-center gap-1.5">
-                                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
-                                            <p className="text-sm font-semibold text-muted-foreground/60">
-                                                No Date
+                                        </div>
+                                    ) : (
+                                        <div className="p-3">
+                                            <p className="text-lg font-bold text-foreground tracking-tight">
+                                                {yr.year}
+                                            </p>
+                                            <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                                                {yr.count.toLocaleString()} items
                                             </p>
                                         </div>
-                                        <p className="text-[10px] text-muted-foreground/40 mt-1">
-                                            {unknownDateCount.toLocaleString()} items
-                                        </p>
-                                    </button>
-                                )}
-                            </div>
-                        </section>
-                    )}
-
-                    {/* ── By Location ── */}
-                    {locations.length > 0 && (
-                        <section>
-                            <SectionHeader
-                                icon={MapPin}
-                                title="Places"
-                                count={locations.length}
-                            />
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                                {locations.slice(0, 6).map((loc) => (
-                                    <AlbumCard
-                                        key={`${loc.lat}-${loc.lon}`}
-                                        icon={MapPin}
-                                        title={loc.name}
-                                        count={loc.count}
-                                        coverId={loc.sampleId}
-                                        onClick={() => {
-                                            setFilters({
-                                                lat: loc.lat,
-                                                lon: loc.lon,
-                                                radius: 5, // Default search radius 5km
-                                            })
-                                            setActiveLabel(loc.name, ["lat", "lon", "radius"])
-                                            navigate("/")
-                                        }}
-                                        color="bg-emerald-500/5"
-                                    />
-                                ))}
-                            </div>
-                        </section>
-                    )}
-
-                </div>
-            )}
-        </div>
-    )
-}
-
-// ─── Trash Grid ───────────────────────────────────────────
-// Renders inside the albums page when trashMode is on.
-// The BottomBar in app-layout handles actions (restore, delete, etc.)
-// The FloatingSearchBar shows the trash header.
-
-function TrashGrid() {
-    const { trashItems, selectionMode, selectedIds, toggleSelected, enterSelectionMode } = useMediaStore()
-
-    if (trashItems.length === 0) return null
-
-    return (
-        <div className="px-2 pt-2 pb-24">
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1">
-                {trashItems.map((item) => {
-                    const isSelected = selectedIds.has(item.id)
-                    return (
-                        <div
-                            key={item.id}
-                            className="relative aspect-square overflow-hidden rounded-md bg-muted cursor-pointer"
-                            onClick={() => {
-                                if (selectionMode) toggleSelected(item.id)
-                                else enterSelectionMode(item.id)
-                            }}
-                            onContextMenu={(e) => { e.preventDefault(); enterSelectionMode(item.id) }}
-                        >
-                            <AuthImage
-                                apiSrc={`/media/${item.id}/thumbnail?size=md`}
-                                alt={item.filename}
-                                className={cn(
-                                    "h-full w-full object-cover transition-all duration-200",
-                                    selectionMode && isSelected && "scale-[0.90] rounded-lg opacity-80",
-                                    !selectionMode && "opacity-70",
-                                )}
-                            />
-                            {/* Days remaining */}
-                            {!selectionMode && item.deleted_at && (
-                                <span className="absolute bottom-1 right-1 text-[9px] text-white/60 bg-black/40 rounded px-1 py-0.5">
-                                    {Math.max(0, 30 - Math.floor((Date.now() - new Date(item.deleted_at).getTime()) / 86400000))}d
-                                </span>
-                            )}
-                            {/* Selection indicator */}
-                            {selectionMode && (
-                                <div className={cn(
-                                    "absolute top-[6%] left-[6%] z-10 h-5 w-5 rounded-full flex items-center justify-center transition-all duration-150",
-                                    isSelected
-                                        ? "bg-primary text-primary-foreground shadow-sm"
-                                        : "border-2 border-white/60 bg-black/20"
-                                )}>
-                                    {isSelected && (
-                                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                                            <polyline points="20 6 9 17 4 12" />
-                                        </svg>
                                     )}
-                                </div>
+                                </button>
+                            ))}
+                            {unknownDateCount > 0 && (
+                                <button
+                                    onClick={() =>
+                                        goLibraryWith({
+                                            sort: "filename",
+                                            order: "asc",
+                                            date_from: null,
+                                            date_to: null,
+                                        }, "No Date")
+                                    }
+                                    className="group relative rounded-2xl bg-secondary/30 border border-border/60 hover:border-border p-3 text-left transition-all duration-200"
+                                >
+                                    <div className="flex items-center gap-1.5">
+                                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/30" />
+                                        <p className="text-sm font-semibold text-muted-foreground/60">
+                                            No Date
+                                        </p>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground/40 mt-1">
+                                        {unknownDateCount.toLocaleString()} items
+                                    </p>
+                                </button>
                             )}
                         </div>
-                    )
-                })}
+                    </section>
+                )}
+
+                {/* ── By Location ── */}
+                {locations.length > 0 && (
+                    <section>
+                        <SectionHeader
+                            icon={MapPin}
+                            title="Places"
+                            count={locations.length}
+                        />
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            {locations.slice(0, 6).map((loc) => (
+                                <AlbumCard
+                                    key={`${loc.lat}-${loc.lon}`}
+                                    icon={MapPin}
+                                    title={loc.name}
+                                    count={loc.count}
+                                    coverId={loc.sampleId}
+                                    onClick={() => {
+                                        setFilters({
+                                            lat: loc.lat,
+                                            lon: loc.lon,
+                                            radius: 5, // Default search radius 5km
+                                        })
+                                        setActiveLabel(loc.name, ["lat", "lon", "radius"])
+                                        navigate("/")
+                                    }}
+                                    color="bg-emerald-500/5"
+                                />
+                            ))}
+                        </div>
+                    </section>
+                )}
+
             </div>
         </div>
     )

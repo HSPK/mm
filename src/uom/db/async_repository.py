@@ -367,12 +367,16 @@ class AsyncRepository:
         lon: float | None = None,
         radius: float | None = None,
         has_location: bool = False,
+        deleted: bool = False,
     ) -> tuple[list[Media], int]:
         need_metadata_join = bool(
             camera or date_from or date_to or lat or lon or sort == "date_taken" or has_location
         )
 
-        query = MediaModel.select().where(MediaModel.deleted_at.is_null())
+        if deleted:
+            query = MediaModel.select().where(MediaModel.deleted_at.is_null(False))
+        else:
+            query = MediaModel.select().where(MediaModel.deleted_at.is_null())
 
         if need_metadata_join:
             query = query.join(
