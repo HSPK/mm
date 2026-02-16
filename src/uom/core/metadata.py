@@ -38,18 +38,30 @@ def _parse_exif_date(value: str | None) -> datetime | None:
     # Try ISO format first (handles Z, T, etc.)
     try:
         # standard ISO parsing (Python 3.7+)
+        # Handles 2010-01-01T12:00:00.000000Z
         dt_obj = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        # Naive datetime is usually preferred in this app context, so remove tzinfo if needed
-        # But let's just return what we get for now, or strip if consistent with existing logic
+        # Naive datetime is usually preferred in this app context, so remove tzinfo
+        # to avoid mismatch with DB native datetimes (which are naive).
         return dt_obj.replace(tzinfo=None)
     except ValueError:
         pass
 
-    for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+    # Common formats
+    formats = (
+        "%Y:%m:%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",  # 2024-01-01 12:00:00.000
+    )
+    for fmt in formats:
         try:
+            # Handle potential trailing timezone or fractional seconds crudely if needed
+            # But strip() helps
+            # Also handle potentially localized strings if simple
             return datetime.strptime(value.strip(), fmt)
         except ValueError:
             continue
+
     return None
 
 
@@ -147,15 +159,37 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
     """Extract metadata for a video file via ffprobe (+ exiftool for EXIF)."""
     ff = _extract_ffprobe(path)
     exif = _extract_exiftool(path)
-    tags = ff.get("tags", {})
+    ff_tags = ff.get("tags", {})
 
-    date_str = (
-        tags.get("creation_time")
-        or exif.get("EXIF:DateTimeOriginal")
-        or exif.get("QuickTime:CreationDate")
-        or exif.get("QuickTime:CreateDate")
-        or exif.get("Keys:CreationDate")
-    )
+    # ffprobe 'tags' is often from format. Also check first video/audio stream tags.
+    # _extract_ffprobe already merges stream tags into 'tags', so we are good there.
+    # But let's check explicit keys in prioritized order.
+
+    date_candidates = [
+        ff_tags.get("creation_time"),  # Standard QuickTime/MP4 creation time
+        ff_tags.get("date"),  # Sometimes just 'date'
+        exif.get("QuickTime:CreateDate"),
+        exif.get("QuickTime:CreationDate"),
+        exif.get("QuickTime:MediaCreateDate"),
+        exif.get("QuickTime:TrackCreateDate"),
+        exif.get("H264:DateTimeOriginal"),
+        exif.get("Keys:CreationDate"),
+        exif.get("EXIF:DateTimeOriginal"),
+        exif.get("XMP:DateCreated"),
+        exif.get("UserData:DateTimeOriginal"),  # Some cameras put it here
+    ]
+
+    date_taken = None
+    for cand in date_candidates:
+        if not cand:
+            continue
+        # Sometimes creation_time is 1904-01-01 (epoch for MP4) which is invalid/default
+        # Filter out obvious bad dates if needed, but _parse_exif_date just parses.
+        # We'll parse first.
+        dt = _parse_exif_date(cand)
+        if dt and dt.year > 1904:  # 1904 is mp4 epoch start, often default value
+            date_taken = dt
+            break
 
     # Try to extract GPS from QuickTime/Keys tags
     gps_lat: float | None = None
@@ -208,16 +242,16 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
 
     return Metadata(
         media_id=media_id,
-        date_taken=_parse_exif_date(date_str),
+        date_taken=date_taken,
         camera_make=str(
             exif.get("EXIF:Make", "")
-            or tags.get("com.apple.quicktime.make", "")
+            or ff_tags.get("com.apple.quicktime.make", "")
             or exif.get("QuickTime:Make", "")
             or ""
         ),
         camera_model=str(
             exif.get("EXIF:Model", "")
-            or tags.get("com.apple.quicktime.model", "")
+            or ff_tags.get("com.apple.quicktime.model", "")
             or exif.get("QuickTime:Model", "")
             or ""
         ),

@@ -7,9 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from uom.db.repository import User
 from uom.server.dependencies import get_current_user, get_repo
-from uom.server.schemas import RatingBody, TagsBody, serialize_media, serialize_media_brief
+from uom.server.schemas import (
+    RatingBody,
+    TagsBody,
+    UpdateMetadataBody,
+    serialize_media,
+    serialize_media_brief,
+)
 from uom.server.thumbnail import get_thumbnail
 from uom.server.utils import stream_file
 
@@ -216,3 +221,25 @@ async def remove_media_tag(
         raise HTTPException(404, "Tag not found")
     await repo.remove_media_tag(media_id, tag.id)
     return {"status": "ok"}
+
+
+@router.patch("/{media_id}/metadata")
+async def update_media_metadata(
+    request: Request,
+    media_id: int,
+    body: UpdateMetadataBody,
+    _u: User | None = Depends(get_current_user),
+) -> dict[str, Any]:
+    repo = get_repo(request)
+    m = await repo.get_media_by_id(media_id)
+    if not m:
+        raise HTTPException(404, "Media not found")
+
+    # Filter out None values from body
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+
+    md = await repo.update_metadata(media_id, **updates)
+    if not md:
+        raise HTTPException(500, "Failed to update metadata")
+
+    return await serialize_media(m, repo)

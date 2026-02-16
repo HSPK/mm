@@ -494,6 +494,43 @@ class AsyncRepository:
         # Using .media_id to access the FK value without triggering a query
         return {r.media_id: self._to_metadata(r) for r in rows}
 
+    async def update_metadata(self, media_id: int, **kwargs: Any) -> Metadata | None:
+        """Update metadata fields for a given media ID."""
+        valid_fields = {
+            "date_taken",
+            "gps_lat",
+            "gps_lon",
+            "location_label",
+            "location_city",
+            "location_country",
+            "camera_make",
+            "camera_model",
+            "lens_model",
+            "focal_length",
+            "aperture",
+            "shutter_speed",
+            "iso",
+            "orientation",
+        }
+        updates = {k: v for k, v in kwargs.items() if k in valid_fields}
+
+        if not updates:
+            return await self.get_metadata(media_id)
+
+        try:
+            # Check if metadata row exists
+            md = await self.objects.get(MetadataModel, media=media_id)
+            query = MetadataModel.update(**updates).where(MetadataModel.id == md.id)
+            await self.objects.execute(query)
+
+            # Fetch updated
+            return await self.get_metadata(media_id)
+
+        except MetadataModel.DoesNotExist:
+            # Create new metadata row
+            md = await self.objects.create(MetadataModel, media=media_id, **updates)
+            return self._to_metadata(md)
+
     async def tags_for_media(self, media_id: int) -> list[tuple[Tag, float]]:
         query = (
             MediaTagModel.select(MediaTagModel, TagModel)
@@ -519,10 +556,23 @@ class AsyncRepository:
 
     @staticmethod
     def _to_metadata(row: MetadataModel) -> Metadata:
+        # Helper to ensure datetime fields are actually datetime objects
+        # Peewee usually handles this, but sometimes raw values slip through?
+        dt_val = row.date_taken
+        if dt_val and isinstance(dt_val, str):
+            try:
+                dt_val = dt.datetime.fromisoformat(dt_val)
+            except ValueError:
+                # Try parsing space-separated
+                try:
+                    dt_val = dt.datetime.strptime(dt_val, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    pass
+
         return Metadata(
             id=row.id,
             media_id=row.media_id,
-            date_taken=row.date_taken,
+            date_taken=dt_val,
             camera_make=row.camera_make,
             camera_model=row.camera_model,
             lens_model=row.lens_model,

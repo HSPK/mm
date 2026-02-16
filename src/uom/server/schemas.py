@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel as PydanticBase
@@ -53,6 +54,22 @@ class BatchTagRemoveBody(PydanticBase):
 class BatchRatingBody(PydanticBase):
     media_ids: list[int]
     rating: int
+
+
+class UpdateMetadataBody(PydanticBase):
+    date_taken: datetime | None = None
+    gps_lat: float | None = None
+    gps_lon: float | None = None
+    location_label: str | None = None
+    location_city: str | None = None
+    location_country: str | None = None
+    camera_make: str | None = None
+    camera_model: str | None = None
+    lens_model: str | None = None
+    aperture: float | None = None
+    shutter_speed: str | None = None
+    iso: int | None = None
+    focal_length: float | None = None
 
 
 def serialize_media_brief(m: Any, md: Any = None) -> dict[str, Any]:

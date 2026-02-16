@@ -76,17 +76,22 @@ def file_hash(path: Path, chunk_size: int = HASH_CHUNK_SIZE) -> str:
     return h.hexdigest()
 
 
-def discover_media(directory: Path) -> Generator[Path, None, None]:
+def discover_media(
+    directory: Path, allowed_extensions: frozenset[str] | set[str] | None = None
+) -> Generator[Path, None, None]:
     """Yield all supported media file paths under *directory*, skipping hidden files/dirs."""
+    if allowed_extensions is None:
+        allowed_extensions = ALL_MEDIA_EXTENSIONS
+
     for root, dirs, files in os.walk(directory):
         # Skip hidden directories in-place so os.walk won't descend
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         for name in files:
             if name.startswith("."):
                 continue
-            p = Path(root) / name
-            if p.suffix.lower() in ALL_MEDIA_EXTENSIONS:
-                yield p
+            ext = os.path.splitext(name)[1].lower()
+            if ext in allowed_extensions:
+                yield Path(root) / name
 
 
 def scan_file(path: Path, compute_hash: bool = True) -> Media:

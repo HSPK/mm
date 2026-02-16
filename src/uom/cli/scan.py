@@ -22,12 +22,6 @@ _scan_one = process_pool_worker
 
 
 # ---------------------------------------------------------------------------
-
-# CLI command
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # CLI command
 # ---------------------------------------------------------------------------
 
@@ -37,6 +31,13 @@ _scan_one = process_pool_worker
 @click.option("--no-hash", is_flag=True, help="Skip SHA-256 hash computation (faster).")
 @click.option("--embed", is_flag=True, help="Generate CLIP embeddings during scan.")
 @click.option(
+    "--type",
+    "media_type",
+    type=click.Choice(["photo", "video", "audio"]),
+    help="Filter by media type (e.g. video only).",
+)
+@click.option("--force", is_flag=True, help="Force re-scan of all files even if unchanged.")
+@click.option(
     "-j",
     "--jobs",
     type=int,
@@ -45,15 +46,36 @@ _scan_one = process_pool_worker
     help="Worker processes (0 = auto, based on CPU count).",
 )
 @pass_ctx
-def scan(ctx: Context, directory: Path, no_hash: bool, embed: bool, jobs: int) -> None:
+def scan(
+    ctx: Context,
+    directory: Path,
+    no_hash: bool,
+    embed: bool,
+    media_type: str | None,
+    force: bool,
+    jobs: int,
+) -> None:
     """Scan a directory and ingest media files into the database."""
+    from uom.config import AUDIO_EXTENSIONS, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS
     from uom.core.scanner import discover_media
 
     repo = ctx.repo
 
+    # Determineallowed extensions based on type filter
+    allowed = None
+    if media_type == "photo":
+        allowed = PHOTO_EXTENSIONS
+    elif media_type == "video":
+        allowed = VIDEO_EXTENSIONS
+    elif media_type == "audio":
+        allowed = AUDIO_EXTENSIONS
+
     # Phase 1: discover files
     click.echo(f"Scanning: {directory.resolve()}")
-    files = list(discover_media(directory))
+    if media_type:
+        click.echo(f"Filter: {media_type} only")
+
+    files = list(discover_media(directory, allowed_extensions=allowed))
     click.echo(f"Found {len(files)} media file(s).")
 
     if not files:
@@ -61,19 +83,36 @@ def scan(ctx: Context, directory: Path, no_hash: bool, embed: bool, jobs: int) -
 
     # Filter out files that haven't changed
     to_scan: list[Path] = []
-    for path in files:
-        existing = repo.get_media_by_path(str(path.resolve()))
-        if existing and existing.file_size == path.stat().st_size:
-            # If metadata (specifically date_taken) is missing, we re-scan
-            if existing.id:
-                md = repo.get_metadata(existing.id)
-                if md and md.date_taken:
-                    continue  # Skip only if we have metadata + valid date
-        to_scan.append(path)
 
-    click.echo(
-        f"{len(to_scan)} file(s) to process ({len(files) - len(to_scan)} unchanged, skipped).\n"
-    )
+    # Pre-fetch existing media to memory map for faster check? Or just query.
+    # For now query, will optimize later if needed.
+    click.echo("Checking for changes...")
+
+    skipped = 0
+    with click.progressbar(files) as bar:
+        for path in bar:
+            if not force:
+                existing = repo.get_media_by_path(str(path.resolve()))
+                if existing:
+                    # Check if file changed on disk (size, mtime)
+                    stat = path.stat()
+                    if existing.file_size == stat.st_size:
+                        # Already in DB and size matches.
+                        # What if we want to update metadata?
+                        # Only if metadata is completely missing or force
+                        if existing.id:
+                            md = repo.get_metadata(existing.id)
+                            # If we have basic metadata (date_taken), assume it's good
+                            if md and md.date_taken:
+                                skipped += 1
+                                continue
+
+            to_scan.append(path)
+
+    if skipped > 0:
+        click.echo(f"Skipped {skipped} unchanged file(s).")
+
+    click.echo(f"{len(to_scan)} file(s) to process.\n")
 
     if not to_scan:
         click.echo("Nothing to do.")
