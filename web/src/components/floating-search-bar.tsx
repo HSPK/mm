@@ -5,7 +5,7 @@ import { useMediaStore } from "@/stores/media"
 import { api } from "@/api/client"
 import { Input } from "@/components/ui/input"
 import { StarRating } from "@/components/ui/star-rating"
-import { useReverseGeocode } from "@/hooks/use-reverse-geocode"
+
 import {
     Search,
     Menu,
@@ -56,7 +56,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const lastScrollY = useRef(0)
 
     const isLibrary = location.pathname === "/"
-    const locationName = useReverseGeocode(filters.lat, filters.lon)
+
 
     // Fetch camera list for filter
     const [cameras, setCameras] = useState<{ make: string; model: string; count: number }[]>([])
@@ -349,7 +349,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                                     <div className="flex items-center gap-2 min-w-0">
                                                         <MapPin className="h-3.5 w-3.5 text-emerald-500/70 shrink-0" />
                                                         <span className="text-xs font-medium truncate text-emerald-600 dark:text-emerald-400">
-                                                            {locationName || `${filters.lat?.toFixed(2)}, ${filters.lon?.toFixed(2)}`}
+                                                            {`${filters.lat?.toFixed(2)}, ${filters.lon?.toFixed(2)}`}
                                                         </span>
                                                         <span className="text-[10px] text-muted-foreground/50 shrink-0">
                                                             (~{Math.round(filters.radius ?? 0)}km)

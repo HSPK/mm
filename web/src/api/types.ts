@@ -13,6 +13,8 @@ export interface Media {
     gps_lat?: number | null
     gps_lon?: number | null
     location_label?: string | null
+    location_city?: string | null
+    location_country?: string | null
 }
 
 export interface MediaMetadata {

@@ -21,26 +21,6 @@ from uom.server.utils import stream_file
 router = APIRouter(prefix="/api/media", tags=["media"])
 
 
-@router.get("/geocode")
-async def get_city(
-    lat: float,
-    lon: float,
-) -> dict[str, str | None]:
-    """Reverse geocode lat/lon to city name."""
-    try:
-        from uom.server.geocoding import reverse_geocode
-
-        label, country, gl_city = await reverse_geocode(lat, lon)
-        city = label
-        if not city:
-            # Fallback if geocoding fails or returns nothing
-            city = f"{lat:.2f}, {lon:.2f}"
-        return {"city": city, "label": label, "country": country, "location_city": gl_city}
-    except Exception:
-        # Graceful fallback logic
-        return {"city": f"{lat:.2f}, {lon:.2f}"}
-
-
 @router.get("")
 async def list_media(
     request: Request,

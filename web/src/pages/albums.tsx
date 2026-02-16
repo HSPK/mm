@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, memo } from "react"
 import { api } from "@/api/client"
+import type { PaginatedMedia } from "@/api/types"
 import { useMediaStore } from "@/stores/media"
 import { useNavigate } from "react-router-dom"
 import { AuthImage } from "@/components/auth-image"
@@ -30,13 +31,11 @@ interface TimelineEntry {
     count: number
 }
 
-interface GeoEntry {
+interface GeoItem {
     id: number
-    filename: string
-    media_type: string
     lat: number
     lon: number
-    date: string | null
+    city: string | null
 }
 
 interface Stats {
@@ -163,24 +162,26 @@ interface LocationCluster {
     sampleId: number
 }
 
-function clusterLocations(geoData: GeoEntry[]): LocationCluster[] {
+function clusterLocations(items: GeoItem[]): LocationCluster[] {
     const GRID = 0.5
     const clusters = new Map<
         string,
-        { lat: number; lon: number; count: number; sampleId: number }
+        { lat: number; lon: number; count: number; sampleId: number; city: string | null }
     >()
 
-    for (const entry of geoData) {
+    for (const entry of items) {
         const key = `${Math.round(entry.lat / GRID) * GRID},${Math.round(entry.lon / GRID) * GRID}`
         const c = clusters.get(key)
         if (c) {
             c.count++
+            if (!c.city && entry.city) c.city = entry.city
         } else {
             clusters.set(key, {
                 lat: entry.lat,
                 lon: entry.lon,
                 count: 1,
                 sampleId: entry.id,
+                city: entry.city,
             })
         }
     }
@@ -190,7 +191,7 @@ function clusterLocations(geoData: GeoEntry[]): LocationCluster[] {
         .sort((a, b) => b.count - a.count)
         .slice(0, 20)
         .map((c) => ({
-            name: `${c.lat.toFixed(1)}°, ${c.lon.toFixed(1)}°`,
+            name: c.city || `${c.lat.toFixed(1)}°, ${c.lon.toFixed(1)}°`,
             lat: c.lat,
             lon: c.lon,
             count: c.count,
@@ -223,7 +224,7 @@ export default function AlbumsPage() {
     const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState<Stats | null>(null)
     const [timeline, setTimeline] = useState<TimelineEntry[]>([])
-    const [geoData, setGeoData] = useState<GeoEntry[]>([])
+    const [geoData, setGeoData] = useState<GeoItem[]>([])
     // Cover IDs keyed by album identifier
     const [covers, setCovers] = useState<Record<string, number | null>>({})
 
@@ -234,16 +235,23 @@ export default function AlbumsPage() {
         Promise.all([
             api.get<Stats>("/stats"),
             api.get<TimelineEntry[]>("/timeline"),
-            api.get<GeoEntry[]>("/geo", { params: { limit: 5000 } }),
+            api.get<PaginatedMedia>("/media", { params: { has_location: true, per_page: 5000, sort: "date_taken", order: "desc" } }),
         ])
             .then(async ([statsRes, timelineRes, geoRes]) => {
                 if (!mounted) return
                 const s = statsRes.data
                 const tl = timelineRes.data
-                const geo = geoRes.data
+                const geoItems: GeoItem[] = (geoRes.data.items || [])
+                    .filter((m) => m.gps_lat != null && m.gps_lon != null)
+                    .map((m) => ({
+                        id: m.id,
+                        lat: m.gps_lat!,
+                        lon: m.gps_lon!,
+                        city: m.location_city || null,
+                    }))
                 setStats(s)
                 setTimeline(tl)
-                setGeoData(geo)
+                setGeoData(geoItems)
 
                 // Fetch representative covers in parallel
                 const coverTasks: [string, Record<string, unknown>][] = [
@@ -296,38 +304,6 @@ export default function AlbumsPage() {
 
     const years = useMemo(() => extractYears(timeline), [timeline])
     const locations = useMemo(() => clusterLocations(geoData), [geoData])
-    const [locationNames, setLocationNames] = useState<Record<string, string>>({})
-
-    // Batch reverse-geocode location clusters → city names via Backend
-    useEffect(() => {
-        if (locations.length === 0) return
-        let cancelled = false
-        const toResolve = locations.slice(0, 20)
-
-        const promises = toResolve.map((loc, i) =>
-            new Promise<[string, string]>((resolve) =>
-                setTimeout(() => {
-                    const key = `${loc.lat},${loc.lon}`
-                    // Call new backend geocode API
-                    api.get("/media/geocode", { params: { lat: loc.lat, lon: loc.lon } })
-                        .then((res) => {
-                            const city = res.data.city || loc.name
-                            resolve([key, city])
-                        })
-                        .catch(() => resolve([key, loc.name]))
-                }, i * 300)
-            )
-        )
-
-        Promise.all(promises).then((results) => {
-            if (cancelled) return
-            const map: Record<string, string> = {}
-            for (const [key, name] of results) map[key] = name
-            setLocationNames(map)
-        })
-
-        return () => { cancelled = true }
-    }, [locations])
 
     const cameras = stats?.cameras ?? []
     const typeDist = stats?.type_distribution ?? {}
@@ -554,7 +530,7 @@ export default function AlbumsPage() {
                             <AlbumCard
                                 key={`${loc.lat}-${loc.lon}`}
                                 icon={MapPin}
-                                title={locationNames[`${loc.lat},${loc.lon}`] ?? loc.name}
+                                title={loc.name}
                                 count={loc.count}
                                 coverId={loc.sampleId}
                                 onClick={() => {

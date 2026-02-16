@@ -22,7 +22,6 @@ import {
     Check,
 } from "lucide-react"
 import { StarRating } from "@/components/ui/star-rating"
-import { useReverseGeocode } from "@/hooks/use-reverse-geocode"
 import { useMediaStore } from "@/stores/media"
 
 // ─── Constants ─────────────────────────────────────────────
@@ -88,9 +87,7 @@ function InfoDialog({
     useEffect(() => { setIsEditing(initialEditMode) }, [initialEditMode, open])
 
     const md = detail?.metadata ?? null
-    // Use stored location label if available, otherwise reverse geocode on the fly
-    const dynamicPlace = useReverseGeocode(!md?.location_label ? md?.gps_lat : null, !md?.location_label ? md?.gps_lon : null)
-    const placeName = md?.location_label || dynamicPlace
+    const placeName = md?.location_label || md?.location_city || null
 
     useEffect(() => {
         if (!open || !mediaId) return
@@ -112,12 +109,12 @@ function InfoDialog({
         if (!detail) return
         setSaving(true)
         try {
-            // Check diffs or just send it? API merges updates.
-            // Convert date_taken to ISO string if needed
+            // Convert date_taken from datetime-local format to ISO string
             const payload = { ...editForm }
-
-            // Should validate date format if changed manually
-            // But HTML input type="datetime-local" sets standard format usually
+            if (payload.date_taken && !String(payload.date_taken).includes("T00:00:00") && !String(payload.date_taken).endsWith("Z")) {
+                // datetime-local gives "YYYY-MM-DDTHH:MM", normalize to ISO
+                payload.date_taken = new Date(payload.date_taken).toISOString()
+            }
 
             const res = await api.patch<MediaDetailType>(`/media/${mediaId}/metadata`, payload)
             setDetail(res.data)
@@ -262,135 +259,169 @@ function InfoDialog({
 
                         {/* Content Area: View vs Edit */}
                         {isEditing ? (
-                            <div className="py-4 space-y-4">
-                                {/* Date Taken */}
-                                <div className="space-y-1">
-                                    <label className="text-[10px] uppercase tracking-wider text-white/30 font-semibold block">Date Taken</label>
+                            <div className="py-4 space-y-5">
+                                {/* ── Date ── */}
+                                <fieldset className="space-y-1.5">
+                                    <legend className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">Date Taken</legend>
                                     <input
                                         type="datetime-local"
-                                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                        value={editForm.date_taken ? new Date(editForm.date_taken).toISOString().slice(0, 16) : ""}
-                                        onChange={(e) => edit("date_taken", e.target.value ? new Date(e.target.value).toISOString() : null)}
+                                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                        value={editForm.date_taken ? String(editForm.date_taken).replace(/Z$/, "").slice(0, 16) : ""}
+                                        onChange={(e) => edit("date_taken", e.target.value || null)}
                                     />
-                                </div>
+                                </fieldset>
 
-                                {/* Location Group */}
-                                <div className="space-y-3 pt-1">
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 space-y-1">
-                                            <label className="text-[10px] uppercase tracking-wider text-white/30 font-semibold block">Latitude</label>
+                                <div className="h-px bg-white/[0.05]" />
+
+                                {/* ── Location ── */}
+                                <fieldset className="space-y-2.5">
+                                    <legend className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">Location</legend>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Latitude</label>
                                             <input
                                                 type="number"
                                                 step="any"
-                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
                                                 value={editForm.gps_lat ?? ""}
                                                 onChange={(e) => edit("gps_lat", e.target.value ? parseFloat(e.target.value) : null)}
-                                                placeholder="0.0000"
+                                                placeholder="30.0000"
                                             />
                                         </div>
-                                        <div className="flex-1 space-y-1">
-                                            <label className="text-[10px] uppercase tracking-wider text-white/30 font-semibold block">Longitude</label>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Longitude</label>
                                             <input
                                                 type="number"
                                                 step="any"
-                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
                                                 value={editForm.gps_lon ?? ""}
                                                 onChange={(e) => edit("gps_lon", e.target.value ? parseFloat(e.target.value) : null)}
-                                                placeholder="0.0000"
+                                                placeholder="120.0000"
                                             />
                                         </div>
                                     </div>
-
                                     <div className="space-y-1">
-                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-semibold block">Location Label</label>
+                                        <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Place Name</label>
                                         <input
                                             type="text"
-                                            className="w-full bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
+                                            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
                                             value={editForm.location_label || ""}
                                             onChange={(e) => edit("location_label", e.target.value)}
-                                            placeholder="Place name (e.g. Times Square)"
+                                            placeholder="e.g. Times Square"
                                         />
                                     </div>
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 space-y-1">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">City</label>
                                             <input
                                                 type="text"
-                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
                                                 value={editForm.location_city || ""}
                                                 onChange={(e) => edit("location_city", e.target.value)}
                                                 placeholder="City"
                                             />
                                         </div>
-                                        <div className="flex-1 space-y-1">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Country</label>
                                             <input
                                                 type="text"
-                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
                                                 value={editForm.location_country || ""}
                                                 onChange={(e) => edit("location_country", e.target.value)}
                                                 placeholder="Country"
                                             />
                                         </div>
                                     </div>
-                                </div>
+                                </fieldset>
 
-                                {/* Camera Group */}
-                                <div className="space-y-3 pt-1">
-                                    <label className="text-[10px] uppercase tracking-wider text-white/30 font-semibold block -mb-2">Device Info</label>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            className="flex-1 min-w-0 bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                            value={editForm.camera_make || ""}
-                                            onChange={(e) => edit("camera_make", e.target.value)}
-                                            placeholder="Make"
-                                        />
-                                        <input
-                                            type="text"
-                                            className="flex-[2] min-w-0 bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                            value={editForm.camera_model || ""}
-                                            onChange={(e) => edit("camera_model", e.target.value)}
-                                            placeholder="Model"
-                                        />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                        value={editForm.lens_model || ""}
-                                        onChange={(e) => edit("lens_model", e.target.value)}
-                                        placeholder="Lens Model"
-                                    />
+                                <div className="h-px bg-white/[0.05]" />
+
+                                {/* ── Device ── */}
+                                <fieldset className="space-y-2.5">
+                                    <legend className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">Device</legend>
                                     <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="number"
-                                            className="bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                            value={editForm.focal_length || ""}
-                                            onChange={(e) => edit("focal_length", parseFloat(e.target.value))}
-                                            placeholder="Focal Length (mm)"
-                                        />
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            className="bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                            value={editForm.aperture || ""}
-                                            onChange={(e) => edit("aperture", parseFloat(e.target.value))}
-                                            placeholder="Aperture (f/)"
-                                        />
-                                        <input
-                                            type="number"
-                                            className="bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                            value={editForm.iso || ""}
-                                            onChange={(e) => edit("iso", parseInt(e.target.value))}
-                                            placeholder="ISO"
-                                        />
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Make</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                                value={editForm.camera_make || ""}
+                                                onChange={(e) => edit("camera_make", e.target.value)}
+                                                placeholder="e.g. Sony"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Model</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                                value={editForm.camera_model || ""}
+                                                onChange={(e) => edit("camera_model", e.target.value)}
+                                                placeholder="e.g. A7R V"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Lens</label>
                                         <input
                                             type="text"
-                                            className="bg-white/[0.04] border border-white/[0.08] rounded text-white text-xs px-2 py-1.5 focus:outline-none focus:border-white/20"
-                                            value={editForm.shutter_speed || ""}
-                                            onChange={(e) => edit("shutter_speed", e.target.value)}
-                                            placeholder="Shutter (1/100)"
+                                            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                            value={editForm.lens_model || ""}
+                                            onChange={(e) => edit("lens_model", e.target.value)}
+                                            placeholder="e.g. FE 24-70mm F2.8 GM II"
                                         />
                                     </div>
-                                </div>
+                                </fieldset>
+
+                                <div className="h-px bg-white/[0.05]" />
+
+                                {/* ── Exposure ── */}
+                                <fieldset className="space-y-2.5">
+                                    <legend className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">Exposure</legend>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Focal Length</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                                value={editForm.focal_length ?? ""}
+                                                onChange={(e) => edit("focal_length", e.target.value ? parseFloat(e.target.value) : null)}
+                                                placeholder="mm"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Aperture</label>
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                                value={editForm.aperture ?? ""}
+                                                onChange={(e) => edit("aperture", e.target.value ? parseFloat(e.target.value) : null)}
+                                                placeholder="f/"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">ISO</label>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                                value={editForm.iso ?? ""}
+                                                onChange={(e) => edit("iso", e.target.value ? parseInt(e.target.value) : null)}
+                                                placeholder="e.g. 100"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5">Shutter Speed</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
+                                                value={editForm.shutter_speed || ""}
+                                                onChange={(e) => edit("shutter_speed", e.target.value)}
+                                                placeholder="e.g. 1/250"
+                                            />
+                                        </div>
+                                    </div>
+                                </fieldset>
                             </div>
                         ) : (
                             <div className="py-4 space-y-4">
@@ -500,43 +531,49 @@ function InfoDialog({
                         <div className="h-px bg-white/[0.06] mb-4" />
 
                         {/* Tags (always visible) */}
-                        <div className="flex gap-3 pb-4">
-                            <Tag className="h-[15px] w-[15px] text-white/25 mt-[3px] shrink-0" />
-                            <div className="flex-1 min-w-0">
-                                <div className="flex flex-wrap gap-1.5">
-                                    {detail.tags.map((t) => (
-                                        <span
-                                            key={t.name}
-                                            className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-[5px] bg-white/[0.07] text-white/65 rounded-full text-xs font-medium"
+                        <div className="pb-4">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <Tag className="h-[13px] w-[13px] text-white/20 shrink-0 mr-0.5" />
+                                {detail.tags.map((t) => (
+                                    <span
+                                        key={t.name}
+                                        className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-[5px] bg-white/[0.07] text-white/65 rounded-full text-xs font-medium group"
+                                    >
+                                        <button
+                                            onClick={() => {
+                                                setFilters({ tag: t.name });
+                                                navigate("/");
+                                                onClose();
+                                                onNavigate();
+                                            }}
+                                            className="hover:text-white transition-colors cursor-pointer"
+                                            title={`Filter by tag: ${t.name}`}
                                         >
                                             {t.name}
-                                            <button
-                                                onClick={() => handleRemoveTag(t.name)}
-                                                className="p-0.5 rounded-full hover:bg-white/15 text-white/25 hover:text-white/60 transition-colors"
-                                            >
-                                                <X className="h-2.5 w-2.5" />
-                                            </button>
-                                        </span>
-                                    ))}
-                                    <form
-                                        onSubmit={(e) => { e.preventDefault(); handleAddTag() }}
-                                        className="inline-flex"
-                                    >
-                                        <div className="flex items-center border border-dashed border-white/[0.1] rounded-full overflow-hidden hover:border-white/20 focus-within:border-white/25 transition-colors">
-                                            <Plus className="h-3 w-3 text-white/20 ml-2 shrink-0" />
-                                            <input
-                                                type="text"
-                                                value={tagInput}
-                                                onChange={(e) => setTagInput(e.target.value)}
-                                                placeholder="Add…"
-                                                className="bg-transparent text-white text-xs pl-1 pr-2.5 py-[5px] w-14 focus:w-24 focus:outline-none transition-all placeholder:text-white/15"
-                                            />
-                                        </div>
-                                    </form>
-                                </div>
-                                {detail.tags.length === 0 && !tagInput && (
-                                    <div className="text-white/15 text-[11px] mt-1 italic">No tags</div>
-                                )}
+                                        </button>
+                                        <button
+                                            onClick={() => handleRemoveTag(t.name)}
+                                            className="p-0.5 rounded-full hover:bg-white/15 text-white/25 hover:text-white/60 transition-colors"
+                                        >
+                                            <X className="h-2.5 w-2.5" />
+                                        </button>
+                                    </span>
+                                ))}
+                                <form
+                                    onSubmit={(e) => { e.preventDefault(); handleAddTag() }}
+                                    className="inline-flex"
+                                >
+                                    <div className="flex items-center border border-dashed border-white/[0.08] rounded-full overflow-hidden hover:border-white/20 focus-within:border-white/25 transition-colors">
+                                        <Plus className="h-3 w-3 text-white/15 ml-2 shrink-0" />
+                                        <input
+                                            type="text"
+                                            value={tagInput}
+                                            onChange={(e) => setTagInput(e.target.value)}
+                                            placeholder={detail.tags.length === 0 ? "Add tag…" : "Add…"}
+                                            className="bg-transparent text-white text-xs pl-1 pr-2.5 py-[5px] w-16 focus:w-24 focus:outline-none transition-all placeholder:text-white/15"
+                                        />
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>

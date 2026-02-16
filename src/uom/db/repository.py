@@ -249,7 +249,15 @@ class Repository:
             query = query.where(MediaModel.media_type == media_type)
 
         if search:
-            query = query.where(MediaModel.filename.contains(search))
+            # Also search in tag names
+            tag_match_sub = (
+                MediaTagModel.select(MediaTagModel.media)
+                .join(TagModel, on=(MediaTagModel.tag == TagModel.id))
+                .where(TagModel.name.contains(search))
+            )
+            query = query.where(
+                (MediaModel.filename.contains(search)) | (MediaModel.id.in_(tag_match_sub))
+            )
 
         if min_rating is not None and min_rating > 0:
             query = query.where(MediaModel.rating >= min_rating)

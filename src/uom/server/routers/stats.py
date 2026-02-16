@@ -60,13 +60,3 @@ async def get_random_media(
     repo = get_repo(request)
     items = await repo.get_random(count, type)
     return [serialize_media_brief(m) for m in items]
-
-
-@router.get("/geo")
-async def get_geo_media(
-    request: Request,
-    limit: int = Query(2000, ge=1, le=10000),
-    _u: User | None = Depends(get_current_user),
-) -> list[dict[str, Any]]:
-    repo = get_repo(request)
-    return await repo.geo_media(limit)

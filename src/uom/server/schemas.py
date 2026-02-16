@@ -91,6 +91,8 @@ def serialize_media_brief(m: Any, md: Any = None) -> dict[str, Any]:
         result["gps_lat"] = md.gps_lat
         result["gps_lon"] = md.gps_lon
         result["location_label"] = md.location_label
+        result["location_city"] = md.location_city
+        result["location_country"] = md.location_country
     return result
 
 

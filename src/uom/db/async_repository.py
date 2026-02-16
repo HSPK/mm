@@ -21,6 +21,7 @@ from uom.db.models import (
     MediaType,
     MetadataModel,
     TagModel,
+    TagSource,
     UserModel,
     database,
 )
@@ -217,6 +218,7 @@ class AsyncRepository:
                 MetadataModel.gps_lat,
                 MetadataModel.gps_lon,
                 MetadataModel.date_taken,
+                MetadataModel.location_city,
             )
             .join(MetadataModel, on=(MediaModel.id == MetadataModel.media))
             .where((MetadataModel.gps_lat.is_null(False)) & (MetadataModel.gps_lon.is_null(False)))
@@ -243,6 +245,7 @@ class AsyncRepository:
                     "lat": row["gps_lat"],
                     "lon": row["gps_lon"],
                     "date": date_str,
+                    "city": row.get("location_city") or None,
                 }
             )
         return final
@@ -308,8 +311,16 @@ class AsyncRepository:
         if media_type:
             query = query.where(MediaModel.media_type == media_type)
         if search:
+            # Also search in tag names
+            tag_match_sub = (
+                MediaTagModel.select(MediaTagModel.media)
+                .join(TagModel)
+                .where(TagModel.name.contains(search))
+            )
             query = query.where(
-                (MediaModel.filename.contains(search)) | (MediaModel.path.contains(search))
+                (MediaModel.filename.contains(search))
+                | (MediaModel.path.contains(search))
+                | (MediaModel.id.in_(tag_match_sub))
             )
 
         if min_rating is not None and min_rating > 0:
