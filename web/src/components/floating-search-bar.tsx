@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useAuthStore } from "@/stores/auth"
 import { useMediaStore } from "@/stores/media"
+import { api } from "@/api/client"
 import { Input } from "@/components/ui/input"
 import { StarRating } from "@/components/ui/star-rating"
+import { useReverseGeocode } from "@/hooks/use-reverse-geocode"
 import {
     Search,
     Menu,
@@ -23,6 +25,9 @@ import {
     CalendarDays,
     Minus,
     Plus,
+    Camera,
+    MapPin,
+    ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -37,7 +42,6 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const navigate = useNavigate()
     const location = useLocation()
     const logout = useAuthStore((s) => s.logout)
-    const user = useAuthStore((s) => s.user)
     const {
         total, filters, setFilter, setFilters,
         viewMode, setViewMode,
@@ -52,6 +56,15 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const lastScrollY = useRef(0)
 
     const isLibrary = location.pathname === "/"
+    const locationName = useReverseGeocode(filters.lat, filters.lon)
+
+    // Fetch camera list for filter
+    const [cameras, setCameras] = useState<{ make: string; model: string; count: number }[]>([])
+    useEffect(() => {
+        api.get<{ make: string; model: string; count: number }[]>("/cameras")
+            .then(res => setCameras(res.data))
+            .catch(() => { })
+    }, [])
 
     // Sync searchInput when store filter changes externally
     useEffect(() => {
@@ -99,8 +112,6 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         navigate("/login", { replace: true })
     }
 
-    const initial = (user?.display_name ?? user?.username ?? "U")[0].toUpperCase()
-
     // ─── Filter definitions (only used on Library page) ──
     const currentSortKey = `${filters.sort}:${filters.order}`
     const isDateSort = filters.sort === "date_taken"
@@ -137,7 +148,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
             style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
             <div className="px-4 pt-2.5 pb-1 mx-auto max-w-2xl">
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                     {/* Search input — capsule shape */}
                     <div className="relative flex-1">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground/40" />
@@ -145,20 +156,20 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && submitSearch()}
-                            placeholder={`Search ${total.toLocaleString()} items…`}
-                            className="w-full h-11 pl-11 pr-4 text-sm bg-background/80 backdrop-blur-xl border border-white/[0.08] rounded-full placeholder:text-muted-foreground/40 focus-visible:ring-1 focus-visible:ring-white/20 shadow-lg shadow-black/20"
+                            placeholder="Search…"
+                            className="w-full h-11 pl-11 pr-4 text-sm bg-background/80 backdrop-blur-xl border border-border/60 rounded-full placeholder:text-muted-foreground/40 focus-visible:ring-1 focus-visible:ring-ring/30 shadow-lg shadow-black/10"
                         />
                     </div>
 
-                    {/* Menu button — capsule to match */}
+                    {/* Menu button */}
                     <div className="relative" ref={menuRef}>
                         <button
                             onClick={() => setMenuOpen(!menuOpen)}
                             className={cn(
-                                "flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-xl border shadow-lg shadow-black/20 transition-all duration-200",
+                                "flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-xl border shadow-lg shadow-black/10 transition-all duration-200",
                                 menuOpen
-                                    ? "bg-white/[0.12] border-white/[0.15] text-foreground"
-                                    : "bg-background/80 border-white/[0.08] text-muted-foreground hover:bg-white/[0.08]"
+                                    ? "bg-secondary border-border text-foreground"
+                                    : "bg-background/80 border-border/60 text-muted-foreground hover:bg-secondary/80"
                             )}
                         >
                             {menuOpen ? (
@@ -170,27 +181,14 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
 
                         {/* Dropdown menu */}
                         {menuOpen && (
-                            <div className="absolute right-0 top-full mt-2 w-72 rounded-3xl border border-white/[0.08] bg-background/95 backdrop-blur-2xl shadow-2xl shadow-black/30 py-2 z-50 overflow-hidden max-h-[calc(100vh-6rem)] overflow-y-auto">
-                                {/* User info */}
-                                <div className="px-4 py-3 border-b border-white/[0.06] flex items-center gap-3">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary flex-shrink-0">
-                                        {initial}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold truncate">{user?.display_name || user?.username}</p>
-                                        {user?.display_name && user?.username && (
-                                            <p className="text-[11px] text-muted-foreground/50 truncate">@{user.username}</p>
-                                        )}
-                                    </div>
-                                </div>
-
+                            <div className="absolute right-0 top-full mt-2 w-72 rounded-3xl border border-border bg-popover/95 backdrop-blur-2xl shadow-2xl shadow-black/20 py-2 z-50 overflow-hidden max-h-[calc(100vh-6rem)] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent">
                                 {/* ── Library Filters (only on "/" route) ── */}
                                 {isLibrary && (
-                                    <div className="border-b border-white/[0.06] px-4 py-3.5 space-y-3.5">
+                                    <div className="border-b border-border px-4 py-3.5 space-y-3.5">
                                         {/* Type filter — segmented */}
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">Type</p>
-                                            <div className="flex rounded-2xl bg-white/[0.05] p-1 gap-0.5">
+                                            <div className="flex rounded-2xl bg-secondary/50 p-1 gap-0.5">
                                                 {typeTabs.map((tab) => {
                                                     const Icon = tab.icon
                                                     const isActive = (filters.type ?? "") === tab.key
@@ -201,7 +199,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                                             className={cn(
                                                                 "flex-1 flex items-center justify-center gap-1 h-8 rounded-xl text-xs font-medium transition-all duration-200 overflow-hidden",
                                                                 isActive
-                                                                    ? "bg-white/[0.12] text-foreground shadow-sm shadow-black/10"
+                                                                    ? "bg-background text-foreground shadow-sm"
                                                                     : "text-muted-foreground/60 hover:text-foreground/70"
                                                             )}
                                                         >
@@ -231,7 +229,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                                                 "flex items-center justify-center gap-1 h-8 rounded-xl text-xs font-medium transition-all duration-200 overflow-hidden",
                                                                 isActive
                                                                     ? "bg-primary/15 text-primary ring-1 ring-primary/20"
-                                                                    : "bg-white/[0.05] text-muted-foreground/60 hover:text-muted-foreground hover:bg-white/[0.08]"
+                                                                    : "bg-secondary/50 text-muted-foreground/60 hover:text-muted-foreground hover:bg-secondary"
                                                             )}
                                                         >
                                                             <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -246,7 +244,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                         {isDateSort && (
                                             <div>
                                                 <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">Group</p>
-                                                <div className="flex rounded-2xl bg-white/[0.05] p-1 gap-0.5">
+                                                <div className="flex rounded-2xl bg-secondary/50 p-1 gap-0.5">
                                                     {groupTabs.map((tab) => {
                                                         const Icon = tab.icon
                                                         const isActive = dateGroupMode === tab.key
@@ -257,7 +255,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                                                 className={cn(
                                                                     "flex-1 flex items-center justify-center gap-1 h-8 rounded-xl text-xs font-medium transition-all duration-200 overflow-hidden",
                                                                     isActive
-                                                                        ? "bg-white/[0.12] text-foreground shadow-sm shadow-black/10"
+                                                                        ? "bg-background text-foreground shadow-sm"
                                                                         : "text-muted-foreground/60 hover:text-foreground/70"
                                                                 )}
                                                             >
@@ -273,7 +271,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                         {/* View mode */}
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">View</p>
-                                            <div className="flex rounded-2xl bg-white/[0.05] p-1 gap-0.5">
+                                            <div className="flex rounded-2xl bg-secondary/50 p-1 gap-0.5">
                                                 {viewTabs.map((tab) => {
                                                     const Icon = tab.icon
                                                     const isActive = viewMode === tab.key
@@ -284,7 +282,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                                             className={cn(
                                                                 "flex-1 flex items-center justify-center gap-1 h-8 rounded-xl text-xs font-medium transition-all duration-200 overflow-hidden",
                                                                 isActive
-                                                                    ? "bg-white/[0.12] text-foreground shadow-sm shadow-black/10"
+                                                                    ? "bg-background text-foreground shadow-sm"
                                                                     : "text-muted-foreground/60 hover:text-foreground/70"
                                                             )}
                                                         >
@@ -299,7 +297,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                         {/* Thumbnail size +/- */}
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">Size</p>
-                                            <div className="flex items-center gap-1.5 h-8 rounded-2xl bg-white/[0.05] px-1.5">
+                                            <div className="flex items-center gap-1.5 h-8 rounded-2xl bg-secondary/50 px-1.5">
                                                 <button
                                                     onClick={() => setThumbSize(Math.max(80, thumbSize - 40))}
                                                     disabled={thumbSize <= 80}
@@ -307,7 +305,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                                 >
                                                     <Minus className="h-3 w-3" />
                                                 </button>
-                                                <div className="flex-1 h-1 rounded-full bg-white/[0.06] relative overflow-hidden">
+                                                <div className="flex-1 h-1 rounded-full bg-border relative overflow-hidden">
                                                     <div
                                                         className="absolute inset-y-0 left-0 rounded-full bg-primary/50 transition-all duration-200"
                                                         style={{ width: `${((thumbSize - 80) / (400 - 80)) * 100}%` }}
@@ -323,10 +321,54 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                             </div>
                                         </div>
 
+                                        {/* Date Range Filter */}
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">Date Range</p>
+                                            <div className="flex items-center h-8 rounded-xl bg-secondary/50 px-2 overflow-hidden">
+                                                <input
+                                                    type="date"
+                                                    value={filters.date_from ?? ""}
+                                                    onChange={(e) => setFilter("date_from", e.target.value || null)}
+                                                    className="flex-1 min-w-0 bg-transparent text-xs font-medium appearance-none border-0 outline-none focus:ring-0 text-foreground/80 cursor-pointer placeholder-muted-foreground/40 [&::-webkit-calendar-picker-indicator]:opacity-40 [&::-webkit-calendar-picker-indicator]:hover:opacity-80"
+                                                />
+                                                <span className="text-muted-foreground/30 px-2 text-xs">→</span>
+                                                <input
+                                                    type="date"
+                                                    value={filters.date_to ?? ""}
+                                                    onChange={(e) => setFilter("date_to", e.target.value || null)}
+                                                    className="flex-1 min-w-0 bg-transparent text-xs font-medium appearance-none border-0 outline-none focus:ring-0 text-foreground/80 cursor-pointer placeholder-muted-foreground/40 [&::-webkit-calendar-picker-indicator]:opacity-40 [&::-webkit-calendar-picker-indicator]:hover:opacity-80 text-right"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Location Filter */}
+                                        {filters.lat != null && filters.lon != null && (
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">Location</p>
+                                                <div className="flex items-center justify-between gap-2 h-8 rounded-xl bg-secondary/50 px-3 border border-emerald-500/20">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <MapPin className="h-3.5 w-3.5 text-emerald-500/70 shrink-0" />
+                                                        <span className="text-xs font-medium truncate text-emerald-600 dark:text-emerald-400">
+                                                            {locationName || `${filters.lat?.toFixed(2)}, ${filters.lon?.toFixed(2)}`}
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground/50 shrink-0">
+                                                            (~{Math.round(filters.radius ?? 0)}km)
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setFilters({ lat: null, lon: null, radius: null })}
+                                                        className="p-1 -mr-1 text-muted-foreground/50 hover:text-foreground/80 transition-colors"
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Star rating filter */}
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">Min Rating</p>
-                                            <div className="flex items-center h-8 px-3 rounded-2xl bg-white/[0.05]">
+                                            <div className="flex items-center h-8 px-3 rounded-2xl bg-secondary/50">
                                                 <StarRating
                                                     value={filters.min_rating ?? 0}
                                                     interactive
@@ -335,6 +377,29 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                                 />
                                             </div>
                                         </div>
+
+                                        {/* Camera filter */}
+                                        {cameras.length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/40 uppercase tracking-widest mb-2">Camera</p>
+                                                <div className="relative">
+                                                    <Camera className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40 pointer-events-none" />
+                                                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/30 pointer-events-none" />
+                                                    <select
+                                                        value={filters.camera ?? ""}
+                                                        onChange={(e) => setFilter("camera", e.target.value || null)}
+                                                        className="w-full h-8 rounded-xl bg-secondary/50 text-xs font-medium pl-8 pr-7 appearance-none border-0 outline-none focus:ring-1 focus:ring-ring/30 text-foreground/80 cursor-pointer"
+                                                    >
+                                                        <option value="" className="bg-popover">All Cameras</option>
+                                                        {cameras.map((c) => (
+                                                            <option key={`${c.make}-${c.model}`} value={c.model || c.make} className="bg-popover">
+                                                                {[c.make, c.model].filter(Boolean).join(" ")} ({c.count})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -342,14 +407,14 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                 <div className="py-1 px-1.5">
                                     <button
                                         onClick={() => { navigate("/dashboard"); setMenuOpen(false) }}
-                                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground/80 hover:bg-white/[0.06] rounded-xl transition-colors"
+                                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground/80 hover:bg-secondary/60 rounded-xl transition-colors"
                                     >
                                         <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                                         Stats
                                     </button>
                                     <button
                                         onClick={() => { navigate("/settings"); setMenuOpen(false) }}
-                                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground/80 hover:bg-white/[0.06] rounded-xl transition-colors"
+                                        className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground/80 hover:bg-secondary/60 rounded-xl transition-colors"
                                     >
                                         <Settings className="h-4 w-4 text-muted-foreground" />
                                         Settings
@@ -357,7 +422,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                                 </div>
 
                                 {/* Logout */}
-                                <div className="border-t border-white/[0.06] pt-1 px-1.5">
+                                <div className="border-t border-border pt-1 px-1.5">
                                     <button
                                         onClick={handleLogout}
                                         className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-destructive hover:bg-destructive/10 rounded-xl transition-colors"

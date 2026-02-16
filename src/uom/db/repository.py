@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import math
 import secrets
 
 # ---------------------------------------------------------------------------
@@ -211,9 +212,12 @@ class Repository:
         search: str | None = None,
         min_rating: int | None = None,
         favorites_only: bool = False,
+        lat: float | None = None,
+        lon: float | None = None,
+        radius: float | None = None,
     ) -> tuple[list[Media], int]:
         """Paginated media query with filters. Returns (items, total_count)."""
-        need_metadata_join = any([camera, date_from, date_to, sort == "date_taken"])
+        need_metadata_join = any([camera, date_from, date_to, lat, lon, sort == "date_taken"])
 
         # Build base query — always select MediaModel columns only
         query = MediaModel.select(MediaModel)
@@ -260,6 +264,19 @@ class Repository:
             query = query.where(MetadataModel.date_taken >= date_from)
         if date_to:
             query = query.where(MetadataModel.date_taken <= date_to + " 23:59:59")
+
+        if lat is not None and lon is not None and radius is not None:
+            # Roughly 111km per degree
+            d_lat = radius / 111.32
+            # Handle lon near poles (cos -> 0); clip to safe range
+            clat = max(-89.9, min(89.9, lat))
+            d_lon = radius / (111.32 * math.cos(math.radians(clat)))
+            query = query.where(
+                (MetadataModel.gps_lat >= lat - d_lat)
+                & (MetadataModel.gps_lat <= lat + d_lat)
+                & (MetadataModel.gps_lon >= lon - d_lon)
+                & (MetadataModel.gps_lon <= lon + d_lon)
+            )
 
         if tag_names:
             names = [self._normalise_tag(n) for n in tag_names]

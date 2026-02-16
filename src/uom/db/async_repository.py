@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import math
 import secrets
 from pathlib import Path
 from typing import Any
@@ -141,7 +142,7 @@ class AsyncRepository:
         return await self.objects.count(UserModel.select())
 
     async def list_users(self) -> list[User]:
-        users = await self.objects.execute(UserModel.select())
+        users = await self.objects.fetchall(UserModel.select())
         return [self._to_user(u) for u in users]
 
     async def delete_user(self, user_id: int) -> None:
@@ -155,8 +156,8 @@ class AsyncRepository:
         query = MediaModel.select(
             MediaModel.media_type, fn.COUNT(MediaModel.id).alias("cnt")
         ).group_by(MediaModel.media_type)
-        rows = await self.objects.execute(query)
-        return {r.media_type: r.cnt for r in rows}
+        rows = await self.objects.fetchall(query.dicts())
+        return {r["media_type"]: r["cnt"] for r in rows}
 
     async def cameras(self) -> list[dict[str, Any]]:
         # cameras implementation:
@@ -171,8 +172,7 @@ class AsyncRepository:
             .group_by(MetadataModel.camera_make, MetadataModel.camera_model)
             .order_by(fn.COUNT(MetadataModel.id).desc())
         )
-        # Use .dicts() so execute returns dicts
-        results = await self.objects.execute(query.dicts())
+        results = await self.objects.fetchall(query.dicts())
         return [
             {"make": r["camera_make"], "model": r["camera_model"], "count": r["cnt"]}
             for r in results
@@ -192,7 +192,7 @@ class AsyncRepository:
             .order_by(SQL("dt DESC"))
         )
 
-        results = await self.objects.execute(query.dicts())
+        results = await self.objects.fetchall(query.dicts())
         final = []
         for row in results:
             if row["dt"]:
@@ -205,7 +205,7 @@ class AsyncRepository:
             query = query.where(MediaModel.media_type == media_type)
         query = query.order_by(fn.Random()).limit(count)
 
-        models = await self.objects.execute(query)
+        models = await self.objects.fetchall(query)
         return [self._to_media(m) for m in models]
 
     async def geo_media(self, limit: int = 2000) -> list[dict[str, Any]]:
@@ -224,7 +224,7 @@ class AsyncRepository:
             .limit(limit)
         )
 
-        results = await self.objects.execute(query.dicts())
+        results = await self.objects.fetchall(query.dicts())
         final = []
         for row in results:
             dt = row["date_taken"]
@@ -286,8 +286,13 @@ class AsyncRepository:
         search: str | None = None,
         min_rating: int | None = None,
         favorites_only: bool = False,
+        lat: float | None = None,
+        lon: float | None = None,
+        radius: float | None = None,
     ) -> tuple[list[Media], int]:
-        need_metadata_join = bool(camera or date_from or date_to or sort == "date_taken")
+        need_metadata_join = bool(
+            camera or date_from or date_to or lat or lon or sort == "date_taken"
+        )
 
         query = MediaModel.select()
 
@@ -326,9 +331,21 @@ class AsyncRepository:
         if date_from:
             query = query.where(MetadataModel.date_taken >= date_from)
         if date_to:
+            query = query.where(MetadataModel.date_taken <= f"{date_to} 23:59:59")
+
+        if lat is not None and lon is not None and radius is not None:
+            # Roughly 111km per degree
+            d_lat = radius / 111.32
+            # Handle lon near poles (cos -> 0); clip to safe range
+            clat = max(-89.9, min(89.9, lat))
+            d_lon = radius / (111.32 * math.cos(math.radians(clat)))
+
             query = query.where(
-                MetadataModel.date_taken <= date_to
-            )  # + " 23:59:59" handled by caller? Sync repo does string append.
+                (MetadataModel.gps_lat >= lat - d_lat)
+                & (MetadataModel.gps_lat <= lat + d_lat)
+                & (MetadataModel.gps_lon >= lon - d_lon)
+                & (MetadataModel.gps_lon <= lon + d_lon)
+            )
 
         # Tag Filters
         if tag_names:
@@ -435,7 +452,7 @@ class AsyncRepository:
             .order_by(fn.COUNT(MediaTagModel.media).desc())
         )
 
-        rows = await self.objects.execute(query)
+        rows = await self.objects.fetchall(query)
         return [(r.name, r.cnt) for r in rows]
 
     async def rename_tag(self, tag_id: int, new_name: str) -> None:

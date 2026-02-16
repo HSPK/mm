@@ -13,6 +13,9 @@ interface Filters {
     search: string | null
     min_rating: number | null
     favorites_only: boolean
+    lat: number | null
+    lon: number | null
+    radius: number | null
 }
 
 export type ViewMode = "justified" | "grid"
@@ -50,6 +53,9 @@ const defaultFilters: Filters = {
     search: null,
     min_rating: null,
     favorites_only: false,
+    lat: null,
+    lon: null,
+    radius: null,
 }
 
 export const useMediaStore = create<MediaState>((set, get) => ({

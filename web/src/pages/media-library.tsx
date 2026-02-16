@@ -50,8 +50,6 @@ function fmtDuration(seconds: number | null | undefined) {
     return `${m}:${s.toString().padStart(2, "0")}`
 }
 
-type DateGroupMode = "day" | "month"
-
 /** Group items by month for date-sorted views */
 function groupByMonth(items: Media[]): { key: string; label: string; items: Media[] }[] {
     const map = new Map<string, { label: string; items: Media[] }>()
@@ -102,22 +100,64 @@ function groupByDay(items: Media[]): { key: string; label: string; items: Media[
     return Array.from(map.entries()).map(([key, { label, items }]) => ({ key, label, items }))
 }
 
-// ─── Thumbnail size presets ───────────────────────────────
-const SIZE_DEFAULT = 220
-
 // ─── component ────────────────────────────────────────────
 export default function MediaLibraryPage() {
     const {
         items, loading, hasMore, error,
         filters, fetchMedia, resetFilters,
+        viewMode, dateGroupMode,
+        thumbSize, setThumbSize,
     } = useMediaStore()
 
     const sentinelRef = useRef<HTMLDivElement>(null)
+    const galleryRef = useRef<HTMLDivElement>(null)
 
-    // Hardcoded view defaults (controls removed — search is in FloatingSearchBar)
-    const viewMode = "justified" as const
-    const dateGroupMode: DateGroupMode = "month"
-    const thumbSize = SIZE_DEFAULT
+    // ─── Pinch-to-zoom (trackpad ctrl+wheel & touch pinch) ──
+    const thumbSizeRef = useRef(thumbSize)
+    thumbSizeRef.current = thumbSize
+
+    useEffect(() => {
+        const el = galleryRef.current
+        if (!el) return
+
+        const onWheel = (e: WheelEvent) => {
+            if (!e.ctrlKey) return
+            e.preventDefault()
+            const delta = -e.deltaY
+            const next = Math.round(thumbSizeRef.current + delta * 0.5)
+            setThumbSize(Math.min(400, Math.max(80, next)))
+        }
+
+        let initDist = 0
+        let initSize = 0
+        const dist = (t: TouchList) => {
+            const dx = t[0].clientX - t[1].clientX
+            const dy = t[0].clientY - t[1].clientY
+            return Math.hypot(dx, dy)
+        }
+        const onTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 2) {
+                initDist = dist(e.touches)
+                initSize = thumbSizeRef.current
+            }
+        }
+        const onTouchMove = (e: TouchEvent) => {
+            if (e.touches.length === 2) {
+                e.preventDefault()
+                const scale = dist(e.touches) / initDist
+                setThumbSize(Math.min(400, Math.max(80, Math.round(initSize * scale))))
+            }
+        }
+
+        el.addEventListener("wheel", onWheel, { passive: false })
+        el.addEventListener("touchstart", onTouchStart, { passive: true })
+        el.addEventListener("touchmove", onTouchMove, { passive: false })
+        return () => {
+            el.removeEventListener("wheel", onWheel)
+            el.removeEventListener("touchstart", onTouchStart)
+            el.removeEventListener("touchmove", onTouchMove)
+        }
+    }, [setThumbSize])
 
     // initial load
     useEffect(() => {
@@ -160,7 +200,7 @@ export default function MediaLibraryPage() {
     return (
         <div className="pb-20">
             {/* ── Gallery ── */}
-            <div className="px-2 sm:px-4 pt-2">
+            <div ref={galleryRef} className="px-2 sm:px-4 pt-2">
                 {error && (
                     <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
                         {error}
@@ -366,7 +406,7 @@ const JustifiedGallery = memo(function JustifiedGallery({
                                 apiSrc={`/media/${item.id}/thumbnail`}
                                 alt=""
                                 loading="lazy"
-                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                className="h-full w-full object-cover transition-transform duration-300 will-change-transform group-hover:scale-[1.03]"
                             />
                             <Overlay item={item} />
                         </div>
@@ -393,26 +433,33 @@ const SquareTile = memo(function SquareTile({
                 apiSrc={`/media/${item.id}/thumbnail`}
                 alt=""
                 loading="lazy"
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                className="h-full w-full object-cover transition-transform duration-300 will-change-transform group-hover:scale-[1.03]"
             />
             <Overlay item={item} />
         </div>
     )
 })
 
+const RAW_EXTS = new Set(["CR2", "CR3", "ARW", "NEF", "DNG", "RAF", "ORF", "RW2", "PEF", "SRW", "NRW", "3FR", "IIQ", "ERF", "MEF", "MOS"])
+
 const Overlay = memo(function Overlay({ item }: { item: Media }) {
+    const ext = item.extension?.replace(/^\./, "").toUpperCase() || ""
+    const isRaw = RAW_EXTS.has(ext)
     return (
         <>
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                <div className="absolute bottom-0 left-0 right-0 p-2 flex items-end justify-between">
-                    <div className="flex flex-col gap-0.5">
+            {/* Single hover overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none will-change-[opacity]">
+                <div className="absolute bottom-0 left-0 right-0 p-2 flex items-end justify-between gap-2">
+                    <div className="flex flex-col gap-0.5 min-w-0">
                         {item.date_taken && (
                             <span className="text-[11px] text-white/90 font-medium">
                                 {fmtDateShort(item.date_taken)}
                             </span>
                         )}
                         {item.camera_model && (
-                            <span className="text-[10px] text-white/60 line-clamp-1">{item.camera_model}</span>
+                            <span className="text-[10px] text-white/50 truncate">
+                                {item.camera_model}
+                            </span>
                         )}
                     </div>
                     {(item.rating ?? 0) > 0 && (
@@ -421,9 +468,17 @@ const Overlay = memo(function Overlay({ item }: { item: Media }) {
                 </div>
             </div>
 
+            {/* Always-visible badges */}
+            {isRaw && (
+                <div className="absolute top-1.5 right-1.5">
+                    <span className="inline-flex items-center rounded bg-black/50 px-1.5 py-0.5 text-[9px] text-white/70 font-bold tracking-wider">
+                        RAW
+                    </span>
+                </div>
+            )}
             {item.media_type === "video" && (
-                <div className="absolute top-1.5 left-1.5 shadow-sm">
-                    <span className="inline-flex items-center gap-0.5 rounded bg-black/60 backdrop-blur-sm px-1.5 py-0.5 text-[10px] text-white font-medium border border-white/10">
+                <div className="absolute top-1.5 left-1.5">
+                    <span className="inline-flex items-center gap-0.5 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white font-medium">
                         <Film className="h-2.5 w-2.5" />
                         {fmtDuration(item.duration) ?? "Video"}
                     </span>

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  /* Default colors — overridden at runtime by theme store via inline styles on :root */
   --color-background: #09090b;
   --color-foreground: #fafafa;
   --color-card: #0a0a0a;
@@ -66,3 +67,5 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+

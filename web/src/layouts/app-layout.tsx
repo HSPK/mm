@@ -113,8 +113,8 @@ export default function AppLayout() {
 
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-background">
-            {/* Floating search bar — auto-hides on scroll */}
-            <FloatingSearchBar scrollContainer={activeScrollEl} />
+            {/* Floating search bar — only on tab routes */}
+            {isTabRoute && <FloatingSearchBar scrollContainer={activeScrollEl} />}
 
             {/* Content area — tabs always mounted, Outlet for non-tab routes */}
             <div className="flex-1 relative overflow-hidden">
@@ -140,7 +140,7 @@ export default function AppLayout() {
                 <div
                     ref={setOutletScrollEl}
                     className={cn(
-                        "absolute inset-0 overflow-y-auto pt-16 bg-background z-10",
+                        "absolute inset-0 overflow-y-auto bg-background z-10",
                         isTabRoute && "invisible pointer-events-none",
                     )}
                 >
@@ -148,17 +148,17 @@ export default function AppLayout() {
                 </div>
             </div>
 
-            {/* Floating bottom navigation — auto-hides on scroll */}
+            {/* Floating bottom navigation — only on tab routes, auto-hides on scroll */}
             <div
                 className={cn(
                     "fixed bottom-4 left-0 right-0 z-30 flex justify-center transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-                    navVisible ? "translate-y-0" : "translate-y-[calc(100%+2rem)]",
+                    isTabRoute && navVisible ? "translate-y-0" : "translate-y-[calc(100%+2rem)]",
                 )}
                 style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
             >
                 <nav
                     ref={navRef}
-                    className="relative flex items-center gap-1 px-2 py-2 bg-background/80 backdrop-blur-xl border border-white/[0.08] shadow-2xl shadow-black/30 rounded-full"
+                    className="relative flex items-center gap-1 px-2 py-2 bg-background/80 backdrop-blur-xl border border-border/60 shadow-2xl shadow-black/10 rounded-full"
                 >
                     {/* Sliding active indicator */}
                     <div
