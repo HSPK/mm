@@ -162,23 +162,31 @@ interface LocationCluster {
     sampleId: number
 }
 
+// Grid size in degrees (~55 km); the backend bounding-box radius must cover
+// half this distance so that every item in the cell is included.
+// 0.25° × 111.32 km/° ≈ 27.8 km → use 30 km for a safe margin.
+const LOCATION_GRID = 0.5
+const LOCATION_RADIUS_KM = 30
+
 function clusterLocations(items: GeoItem[]): LocationCluster[] {
-    const GRID = 0.5
+    const GRID = LOCATION_GRID
     const clusters = new Map<
         string,
-        { lat: number; lon: number; count: number; sampleId: number; city: string | null }
+        { centerLat: number; centerLon: number; count: number; sampleId: number; city: string | null }
     >()
 
     for (const entry of items) {
-        const key = `${Math.round(entry.lat / GRID) * GRID},${Math.round(entry.lon / GRID) * GRID}`
+        const centerLat = Math.round(entry.lat / GRID) * GRID
+        const centerLon = Math.round(entry.lon / GRID) * GRID
+        const key = `${centerLat},${centerLon}`
         const c = clusters.get(key)
         if (c) {
             c.count++
             if (!c.city && entry.city) c.city = entry.city
         } else {
             clusters.set(key, {
-                lat: entry.lat,
-                lon: entry.lon,
+                centerLat,
+                centerLon,
                 count: 1,
                 sampleId: entry.id,
                 city: entry.city,
@@ -191,9 +199,9 @@ function clusterLocations(items: GeoItem[]): LocationCluster[] {
         .sort((a, b) => b.count - a.count)
         .slice(0, 20)
         .map((c) => ({
-            name: c.city || `${c.lat.toFixed(1)}°, ${c.lon.toFixed(1)}°`,
-            lat: c.lat,
-            lon: c.lon,
+            name: c.city || `${c.centerLat.toFixed(1)}°, ${c.centerLon.toFixed(1)}°`,
+            lat: c.centerLat,
+            lon: c.centerLon,
             count: c.count,
             sampleId: c.sampleId,
         }))
@@ -573,7 +581,7 @@ export default function AlbumsPage() {
                                         setFilters({
                                             lat: loc.lat,
                                             lon: loc.lon,
-                                            radius: 5, // Default search radius 5km
+                                            radius: LOCATION_RADIUS_KM,
                                         })
                                         setActiveLabel(loc.name, ["lat", "lon", "radius"])
                                         navigate("/")
