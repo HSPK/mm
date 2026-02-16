@@ -45,11 +45,17 @@ export default function AppLayout() {
     const [navVisible, setNavVisible] = useState(true)
     const lastScrollY = useRef(0)
 
+    // Reset visibility when active scroll container changes (during render)
+    const [prevActiveScrollEl, setPrevActiveScrollEl] = useState(activeScrollEl)
+    if (activeScrollEl !== prevActiveScrollEl) {
+        setPrevActiveScrollEl(activeScrollEl)
+        setNavVisible(true)
+    }
+
     useEffect(() => {
         const el = activeScrollEl
         if (!el) return
         lastScrollY.current = el.scrollTop
-        setNavVisible(true)
         const handle = () => {
             const y = el.scrollTop
             if (y > lastScrollY.current && y > 60) {

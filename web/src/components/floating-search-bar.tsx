@@ -43,7 +43,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const location = useLocation()
     const logout = useAuthStore((s) => s.logout)
     const {
-        total, filters, setFilter, setFilters,
+        filters, setFilter, setFilters,
         viewMode, setViewMode,
         dateGroupMode, setDateGroupMode,
         thumbSize, setThumbSize,
@@ -57,6 +57,19 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
 
     const isLibrary = location.pathname === "/"
 
+    // Sync searchInput when store filter changes externally (during render)
+    const [prevFilterSearch, setPrevFilterSearch] = useState(filters.search)
+    if (filters.search !== prevFilterSearch) {
+        setPrevFilterSearch(filters.search)
+        setSearchInput(filters.search ?? "")
+    }
+
+    // Reset visibility when scrollContainer changes (during render)
+    const [prevScrollContainer, setPrevScrollContainer] = useState(scrollContainer)
+    if (scrollContainer !== prevScrollContainer) {
+        setPrevScrollContainer(scrollContainer)
+        setVisible(true)
+    }
 
     // Fetch camera list for filter
     const [cameras, setCameras] = useState<{ make: string; model: string; count: number }[]>([])
@@ -66,18 +79,11 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
             .catch(() => { })
     }, [])
 
-    // Sync searchInput when store filter changes externally
-    useEffect(() => {
-        setSearchInput(filters.search ?? "")
-    }, [filters.search])
-
     // Auto-hide on scroll down, show on scroll up
     useEffect(() => {
         const el = scrollContainer
         if (!el) return
-        // Reset on container switch (tab change)
         lastScrollY.current = el.scrollTop
-        setVisible(true)
         const handle = () => {
             const y = el.scrollTop
             if (y > lastScrollY.current && y > 60) {

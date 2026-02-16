@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, memo } from "react"
 import { api } from "@/api/client"
 import type { PaginatedMedia } from "@/api/types"
-import { useMediaStore } from "@/stores/media"
+import { useMediaStore, type Filters } from "@/stores/media"
 import { useNavigate } from "react-router-dom"
 import { AuthImage } from "@/components/auth-image"
 import {
@@ -230,7 +230,6 @@ export default function AlbumsPage() {
 
     useEffect(() => {
         let mounted = true
-        setLoading(true)
 
         Promise.all([
             api.get<Stats>("/stats"),
@@ -329,7 +328,7 @@ export default function AlbumsPage() {
                 lon: null,
                 radius: null,
                 ...updates,
-            } as any)
+            } as Partial<Filters>)
             navigate("/")
         },
         [navigate, setFilters],

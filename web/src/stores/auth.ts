@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { api } from "@/api/client"
-import type { Token, User } from "@/api/types"
+import type { User } from "@/api/types"
 
 interface AuthState {
     token: string | null

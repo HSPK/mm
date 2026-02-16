@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useLayoutEffect, memo } from "react"
+import { useEffect, useRef, useState, useMemo, useLayoutEffect, useCallback, memo } from "react"
 import { useMediaStore } from "@/stores/media"
 import { Button } from "@/components/ui/button"
 import { StarRating } from "@/components/ui/star-rating"
@@ -114,7 +114,9 @@ export default function MediaLibraryPage() {
 
     // ─── Pinch-to-zoom (trackpad ctrl+wheel & touch pinch) ──
     const thumbSizeRef = useRef(thumbSize)
-    thumbSizeRef.current = thumbSize
+    useEffect(() => {
+        thumbSizeRef.current = thumbSize
+    }, [thumbSize])
 
     useEffect(() => {
         const el = galleryRef.current
@@ -166,7 +168,9 @@ export default function MediaLibraryPage() {
 
     // infinite scroll — stable ref avoids observer thrashing on state changes
     const scrollRef = useRef({ hasMore, loading, fetchMedia })
-    scrollRef.current = { hasMore, loading, fetchMedia }
+    useEffect(() => {
+        scrollRef.current = { hasMore, loading, fetchMedia }
+    }, [hasMore, loading, fetchMedia])
 
     useEffect(() => {
         const el = sentinelRef.current
@@ -182,8 +186,39 @@ export default function MediaLibraryPage() {
         return () => obs.disconnect()
     }, [])
 
-    // ─── Detail panel state ────────────────────────────────
-    const [detailId, setDetailId] = useState<number | null>(null)
+    // ─── Detail panel state (with history for mobile back) ──
+    const [detailId, setDetailIdRaw] = useState<number | null>(null)
+    const detailIdRef = useRef(detailId)
+
+    const openDetail = useCallback((id: number) => {
+        setDetailIdRaw(id)
+        detailIdRef.current = id
+        // Push a history entry so mobile back button closes the panel
+        window.history.pushState({ mediaDetail: true }, "")
+    }, [])
+
+    const closeDetail = useCallback(() => {
+        if (detailIdRef.current != null) {
+            setDetailIdRaw(null)
+            detailIdRef.current = null
+            // Pop the history entry we pushed (if we're closing programmatically, not via popstate)
+            if (window.history.state?.mediaDetail) {
+                window.history.back()
+            }
+        }
+    }, [])
+
+    // Listen for browser back / mobile back gesture
+    useEffect(() => {
+        const onPopState = () => {
+            if (detailIdRef.current != null) {
+                setDetailIdRaw(null)
+                detailIdRef.current = null
+            }
+        }
+        window.addEventListener("popstate", onPopState)
+        return () => window.removeEventListener("popstate", onPopState)
+    }, [])
 
     const currentIndex = useMemo(
         () => (detailId ? items.findIndex((i) => i.id === detailId) : -1),
@@ -233,7 +268,7 @@ export default function MediaLibraryPage() {
                                 items={group.items}
                                 thumbSize={thumbSize}
                                 viewMode={viewMode}
-                                onSelect={setDetailId}
+                                onSelect={openDetail}
                             />
                         </div>
                     ))
@@ -242,7 +277,7 @@ export default function MediaLibraryPage() {
                             items={items}
                             thumbSize={thumbSize}
                             viewMode={viewMode}
-                            onSelect={setDetailId}
+                            onSelect={openDetail}
                         />
                     )}
 
@@ -266,7 +301,7 @@ export default function MediaLibraryPage() {
                 <MediaDetailPanel
                     items={items}
                     startIndex={currentIndex}
-                    onClose={() => setDetailId(null)}
+                    onClose={closeDetail}
                 />
             )}
         </div>

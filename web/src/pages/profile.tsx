@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { useAuthStore } from "@/stores/auth"
-import { LogOut, User } from "lucide-react"
+import { LogOut } from "lucide-react"
 
 export default function ProfilePage() {
     const navigate = useNavigate()

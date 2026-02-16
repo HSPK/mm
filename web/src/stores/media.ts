@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { api } from "@/api/client"
 import type { Media, PaginatedMedia } from "@/api/types"
 
-interface Filters {
+export interface Filters {
     type: string | null
     tag: string | null
     camera: string | null
