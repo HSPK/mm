@@ -338,6 +338,7 @@ export default function AlbumsPage() {
                 lat: null,
                 lon: null,
                 radius: null,
+                no_date: false,
                 deleted: false,
                 ...updates,
             } as Partial<Filters>)
@@ -532,6 +533,7 @@ export default function AlbumsPage() {
                                             order: "asc",
                                             date_from: null,
                                             date_to: null,
+                                            no_date: true,
                                         }, "No Date")
                                     }
                                     className="group relative rounded-2xl bg-secondary/30 border border-border/60 hover:border-border p-3 text-left transition-all duration-200"

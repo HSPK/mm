@@ -34,12 +34,12 @@ class DedupPair:
 
 
 def find_name_duplicates(directory: Path) -> list[DedupPair]:
-    """Find files with same stem differing only in .jpg/.jpeg extension.
+    """Find media files with the same stem across any subdirectory.
 
-    Keeps the larger file.
+    When multiple files share the same stem (case-insensitive), the largest
+    file is kept and the rest are marked for removal.
     """
-    jpg_files: dict[tuple[Path, str], Path] = {}
-    jpeg_files: dict[tuple[Path, str], Path] = {}
+    stem_map: dict[str, list[Path]] = {}
 
     for root, dirs, files in os.walk(directory):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
@@ -48,23 +48,20 @@ def find_name_duplicates(directory: Path) -> list[DedupPair]:
             if name.startswith("."):
                 continue
             p = root_path / name
-            ext = p.suffix.lower()
+            if p.suffix.lower() not in ALL_MEDIA_EXTENSIONS:
+                continue
             stem = p.stem.lower()
-            key = (root_path, stem)
-            if ext == ".jpg":
-                jpg_files[key] = p
-            elif ext == ".jpeg":
-                jpeg_files[key] = p
+            stem_map.setdefault(stem, []).append(p)
 
     pairs: list[DedupPair] = []
-    common_keys = set(jpeg_files.keys()) & set(jpg_files.keys())
-    for key in common_keys:
-        jpeg_path = jpeg_files[key]
-        jpg_path = jpg_files[key]
-        if jpeg_path.stat().st_size >= jpg_path.stat().st_size:
-            pairs.append(DedupPair(keep=jpeg_path, remove=jpg_path, reason="same-name"))
-        else:
-            pairs.append(DedupPair(keep=jpg_path, remove=jpeg_path, reason="same-name"))
+    for stem, paths in stem_map.items():
+        if len(paths) < 2:
+            continue
+        # Keep the largest file; remove the rest
+        paths.sort(key=lambda p: p.stat().st_size, reverse=True)
+        keep = paths[0]
+        for dup in paths[1:]:
+            pairs.append(DedupPair(keep=keep, remove=dup, reason="same-name"))
     return pairs
 
 

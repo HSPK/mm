@@ -41,6 +41,7 @@ async def list_media(
     lon: float | None = None,
     radius: float | None = None,
     has_location: bool = False,
+    no_date: bool = False,
     deleted: bool = False,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -63,6 +64,7 @@ async def list_media(
         lon=lon,
         radius=radius,
         has_location=has_location,
+        no_date=no_date,
         deleted=deleted,
     )
     # Batch-fetch metadata for all items

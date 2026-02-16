@@ -481,6 +481,21 @@ class Repository:
         subq = MediaTagModel.select(MediaTagModel.tag).distinct()
         return TagModel.delete().where(TagModel.id.not_in(subq)).execute()
 
+    def delete_orphan_metadata(self) -> int:
+        """Remove metadata rows whose media no longer exists."""
+        valid_media = MediaModel.select(MediaModel.id)
+        return MetadataModel.delete().where(MetadataModel.media.not_in(valid_media)).execute()
+
+    def delete_orphan_media_tags(self) -> int:
+        """Remove media_tag rows whose media no longer exists."""
+        valid_media = MediaModel.select(MediaModel.id)
+        return MediaTagModel.delete().where(MediaTagModel.media.not_in(valid_media)).execute()
+
+    def delete_orphan_embeddings(self) -> int:
+        """Remove embedding rows whose media no longer exists."""
+        valid_media = MediaModel.select(MediaModel.id)
+        return EmbeddingModel.delete().where(EmbeddingModel.media.not_in(valid_media)).execute()
+
     # ------------------------------------------------------------------
     # Metadata CRUD
     # ------------------------------------------------------------------

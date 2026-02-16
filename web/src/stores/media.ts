@@ -16,6 +16,7 @@ export interface Filters {
     lat: number | null
     lon: number | null
     radius: number | null
+    no_date: boolean
     deleted: boolean
 }
 
@@ -69,6 +70,7 @@ const defaultFilters: Filters = {
     lat: null,
     lon: null,
     radius: null,
+    no_date: false,
     deleted: false,
 }
 

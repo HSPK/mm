@@ -367,6 +367,7 @@ class AsyncRepository:
         lon: float | None = None,
         radius: float | None = None,
         has_location: bool = False,
+        no_date: bool = False,
         deleted: bool = False,
     ) -> tuple[list[Media], int]:
         need_metadata_join = bool(
@@ -418,6 +419,12 @@ class AsyncRepository:
                 | (MetadataModel.camera_model.contains(camera))
             )
 
+        if no_date:
+            # Use NOT IN subquery: exclude media that has any non-null date_taken
+            has_date_sub = MetadataModel.select(MetadataModel.media).where(
+                MetadataModel.date_taken.is_null(False)
+            )
+            query = query.where(MediaModel.id.not_in(has_date_sub))
         if date_from:
             query = query.where(MetadataModel.date_taken >= date_from)
         if date_to:
