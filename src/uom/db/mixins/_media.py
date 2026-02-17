@@ -118,6 +118,7 @@ class MediaMixin:
             or lon
             or sort == "date_taken"
             or has_location
+            or search
         )
 
         q = MediaModel.select().where(
@@ -143,6 +144,9 @@ class MediaMixin:
                 MediaModel.filename.contains(search)
                 | MediaModel.path.contains(search)
                 | MediaModel.id.in_(tag_sub)
+                | MetadataModel.location_label.contains(search)
+                | MetadataModel.location_city.contains(search)
+                | MetadataModel.location_country.contains(search)
             )
         if min_rating and min_rating > 0:
             q = q.where(MediaModel.rating >= min_rating)
