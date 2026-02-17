@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-import click
-
-from uom.config import DEFAULT_ORGANIZE_TEMPLATE
+from uom.config import DEFAULT_IMPORT_TEMPLATE
 from uom.core.scanner import file_hash
 from uom.db.dto import Media, Metadata
 
 
 @dataclass
-class OrganizeAction:
+class ImportAction:
     """Represents a planned file move/copy."""
 
     source: Path
@@ -61,7 +60,7 @@ def build_dest_path(
         rel = template.format_map(_SafeDict(values))
     except (KeyError, IndexError):
         # Fallback: use default template
-        rel = DEFAULT_ORGANIZE_TEMPLATE.format_map(_SafeDict(values))
+        rel = DEFAULT_IMPORT_TEMPLATE.format_map(_SafeDict(values))
 
     return dest_root / rel
 
@@ -73,20 +72,20 @@ class _SafeDict(dict):  # type: ignore[type-arg]
         return f"{{{key}}}"
 
 
-def plan_organize(
+def plan_import(
     media_list: list[tuple[Media, Metadata | None, list[str]]],
     dest_root: Path,
-    template: str = DEFAULT_ORGANIZE_TEMPLATE,
-) -> list[OrganizeAction]:
+    template: str = DEFAULT_IMPORT_TEMPLATE,
+) -> list[ImportAction]:
     """Build a list of planned file operations without executing them."""
-    actions: list[OrganizeAction] = []
+    actions: list[ImportAction] = []
     used_paths: set[Path] = set()
 
     for media, metadata, tags in media_list:
         src = Path(media.path)
         if not src.exists():
             actions.append(
-                OrganizeAction(source=src, destination=src, skipped=True, reason="source missing")
+                ImportAction(source=src, destination=src, skipped=True, reason="source missing")
             )
             continue
 
@@ -99,7 +98,7 @@ def plan_organize(
                 try:
                     if file_hash(src) == file_hash(dest):
                         actions.append(
-                            OrganizeAction(
+                            ImportAction(
                                 source=src, destination=dest, skipped=True, reason="already exists"
                             )
                         )
@@ -116,45 +115,28 @@ def plan_organize(
                 counter += 1
 
         used_paths.add(dest)
-        actions.append(OrganizeAction(source=src, destination=dest))
+        actions.append(ImportAction(source=src, destination=dest))
 
     return actions
 
 
-def execute_organize(
-    actions: list[OrganizeAction],
+def execute_import(
+    actions: list[ImportAction],
     move: bool = False,
-    progress: bool = True,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> int:
     """Execute planned file operations.  Returns count of files moved/copied."""
     pending = [a for a in actions if not a.skipped]
     count = 0
 
-    items = (
-        click.progressbar(pending, label="Moving files" if move else "Copying files")
-        if progress
-        else pending
-    )
-    with items if hasattr(items, "__enter__") else _noop_ctx(items) as bar:  # type: ignore[attr-defined]
-        for action in bar:
-            action.destination.parent.mkdir(parents=True, exist_ok=True)
-            if move:
-                shutil.move(str(action.source), str(action.destination))
-            else:
-                shutil.copy2(str(action.source), str(action.destination))
-            count += 1
+    for i, action in enumerate(pending):
+        action.destination.parent.mkdir(parents=True, exist_ok=True)
+        if move:
+            shutil.move(str(action.source), str(action.destination))
+        else:
+            shutil.copy2(str(action.source), str(action.destination))
+        count += 1
+        if on_progress:
+            on_progress(i + 1, len(pending))
 
     return count
-
-
-class _noop_ctx:
-    """Minimal context manager wrapper for iterables."""
-
-    def __init__(self, it):  # type: ignore[no-untyped-def]
-        self._it = it
-
-    def __enter__(self):  # type: ignore[no-untyped-def]
-        return self._it
-
-    def __exit__(self, *a):  # type: ignore[no-untyped-def]
-        pass

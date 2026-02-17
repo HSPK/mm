@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from uom.db.async_repository import AsyncRepository
-from uom.server.routers import albums, auth, batch, media, stats, tags, users
+from uom.server.routers import albums, auth, batch, library, media, stats, tags, users
 from uom.server.routers import smart_albums as smart_albums_router
 
 
@@ -26,9 +26,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
+def _derive_library_root(db_path: str | Path) -> str:
+    """Derive the library root directory (parent of the DB file)."""
+    return str(Path(db_path).resolve().parent)
+
+
 def create_app(db_path: str | Path) -> FastAPI:
     app = FastAPI(title="UOM Media Library", version="3.0.0", lifespan=lifespan)
     app.state.db_path = db_path
+    app.state.library_root = _derive_library_root(db_path)
 
     app.add_middleware(GZipMiddleware, minimum_size=500)
     app.add_middleware(
@@ -40,7 +46,7 @@ def create_app(db_path: str | Path) -> FastAPI:
     )
 
     # Register routes
-    for r in (auth, users, media, tags, stats, batch, albums, smart_albums_router):
+    for r in (auth, users, media, tags, stats, batch, albums, smart_albums_router, library):
         app.include_router(r.router)
 
     # Serve frontend static files

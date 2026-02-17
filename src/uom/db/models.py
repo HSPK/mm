@@ -202,6 +202,17 @@ class SmartAlbumModel(BaseModel):
         table_name = "smart_albums"
 
 
+class LibraryConfigModel(BaseModel):
+    """Key-value store for library-level settings (e.g. import template)."""
+
+    key = CharField(max_length=128, primary_key=True)
+    value = TextField(default="")
+    updated_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "library_config"
+
+
 ALL_TABLES = [
     MediaModel,
     MetadataModel,
@@ -212,4 +223,5 @@ ALL_TABLES = [
     AlbumModel,
     AlbumMediaModel,
     SmartAlbumModel,
+    LibraryConfigModel,
 ]

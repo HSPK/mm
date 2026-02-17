@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from uom.db.repository import Repository
+from uom.db.sync_repo import SyncRepo
 
 
 @pytest.fixture
@@ -15,10 +15,7 @@ def tmp_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Repository:
+def repo(tmp_path: Path) -> SyncRepo:
     """In-memory repository for tests."""
     db_path = tmp_path / "test.db"
-    r = Repository(db_path)
-    r.connect()
-    r.init_db()
-    return r
+    return SyncRepo(db_path)

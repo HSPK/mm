@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -90,25 +89,24 @@ DEFAULT_CLIP_LABELS: list[str] = [
 # ---------------------------------------------------------------------------
 
 DEFAULT_DB_NAME = "uom.db"
-DEFAULT_ORGANIZE_TEMPLATE = "{year}/{year}-{month:02d}-{day:02d}/{original_name}{ext}"
+DEFAULT_IMPORT_TEMPLATE = "{year}/{year}-{month:02d}-{day:02d}/{original_name}{ext}"
 CLIP_MODEL_NAME = "ViT-B-32"
 CLIP_PRETRAINED = "openai"
 CLIP_CONFIDENCE_THRESHOLD = 0.25
 HASH_CHUNK_SIZE = 8192
 
 
-@dataclass
-class UOMConfig:
-    """Runtime configuration resolved from CLI flags, env vars, and defaults."""
+def resolve_media_path(stored_path: str, library_root: str | Path) -> str:
+    """Resolve a stored (possibly relative) media path to an absolute path.
 
-    db_path: Path = field(default_factory=lambda: Path(os.getenv("UOM_DB", DEFAULT_DB_NAME)))
-    organize_template: str = DEFAULT_ORGANIZE_TEMPLATE
-    clip_model: str = CLIP_MODEL_NAME
-    clip_pretrained: str = CLIP_PRETRAINED
-    clip_threshold: float = CLIP_CONFIDENCE_THRESHOLD
+    Backward-compatible: if *stored_path* is already absolute it is returned
+    as-is.
+    """
+    if os.path.isabs(stored_path):
+        return stored_path
+    return os.path.normpath(os.path.join(str(library_root), stored_path))
 
-    # Computed helpers -------------------------------------------------------
 
-    @property
-    def db_uri(self) -> str:
-        return str(self.db_path.resolve())
+def make_relative_path(abs_path: str, library_root: str | Path) -> str:
+    """Convert an absolute path to one relative to *library_root*."""
+    return os.path.relpath(abs_path, str(library_root))

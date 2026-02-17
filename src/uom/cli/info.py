@@ -8,6 +8,7 @@ from typing import Any
 import click
 
 from uom.cli import Context, pass_ctx
+from uom.cli._utils import fmt_size as _fmt_size
 
 
 @click.command()
@@ -80,31 +81,24 @@ def info(ctx: Context, file: Path, raw: bool) -> None:
         click.echo(f"Modified : {res.modified_at}")
         click.echo()
 
-        # Map ScanResult fields back to a structure compatible with _print_metadata
-        # or just pass ScanResult to a new printer.
-        # reusing _print_metadata is easier if we mock an object or dict.
-        # But _print_metadata expects an object with specific attributes.
-        # ScanResult attribute names have 'md_' prefix.
+        from types import SimpleNamespace
 
-        # Let's just create a simple adapter class or object
-        class MockMetadata:
-            pass
-
-        md = MockMetadata()
-        md.date_taken = res.md_date_taken
-        md.camera_make = res.md_camera_make
-        md.camera_model = res.md_camera_model
-        md.lens_model = res.md_lens_model
-        md.focal_length = res.md_focal_length
-        md.aperture = res.md_aperture
-        md.shutter_speed = res.md_shutter_speed
-        md.iso = res.md_iso
-        md.width = res.md_width
-        md.height = res.md_height
-        md.duration = res.md_duration
-        md.gps_lat = res.md_gps_lat
-        md.gps_lon = res.md_gps_lon
-        md.orientation = res.md_orientation
+        md = SimpleNamespace(
+            date_taken=res.md_date_taken,
+            camera_make=res.md_camera_make,
+            camera_model=res.md_camera_model,
+            lens_model=res.md_lens_model,
+            focal_length=res.md_focal_length,
+            aperture=res.md_aperture,
+            shutter_speed=res.md_shutter_speed,
+            iso=res.md_iso,
+            width=res.md_width,
+            height=res.md_height,
+            duration=res.md_duration,
+            gps_lat=res.md_gps_lat,
+            gps_lon=res.md_gps_lon,
+            orientation=res.md_orientation,
+        )
 
         _print_metadata(md)
 
@@ -129,12 +123,3 @@ def _print_metadata(md: Any) -> None:  # type: ignore[no-untyped-def]
     for label, value in fields:
         if value is not None:
             click.echo(f"  {label:<15} {value}")
-
-
-def _fmt_size(n: int) -> str:
-    """Format bytes into human-readable size."""
-    for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024:
-            return f"{n:.1f} {unit}" if unit != "B" else f"{n} {unit}"
-        n /= 1024  # type: ignore[assignment]
-    return f"{n:.1f} TB"

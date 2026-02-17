@@ -98,14 +98,20 @@ def encode_texts(
 # ---------------------------------------------------------------------------
 
 
-def generate_embeddings(repo: Any, progress_cb: Any = None) -> int:
+def generate_embeddings(
+    repo: Any,
+    progress_cb: Any = None,
+    library_root: str | Path | None = None,
+) -> int:
     """Generate CLIP embeddings for all un-embedded photos.
 
     *repo* can be ``SyncRepo`` or anything with the right methods.
     *progress_cb* is an optional callable(media_item) invoked per item
     (e.g. a click progressbar ``update``).
+    *library_root* is the base directory for resolving relative media paths.
     Returns the count of newly embedded images.
     """
+    from uom.config import resolve_media_path
     from uom.db.dto import Embedding
     from uom.db.vector_store import vector_to_bytes
 
@@ -117,7 +123,8 @@ def generate_embeddings(repo: Any, progress_cb: Any = None) -> int:
     model, preprocess, _, device = get_clip_model()
     done = 0
     for media in media_list:
-        vec = encode_image_from_path(Path(media.path), model, preprocess, device)
+        abs_path = resolve_media_path(media.path, library_root) if library_root else media.path
+        vec = encode_image_from_path(Path(abs_path), model, preprocess, device)
         if vec is not None:
             emb = Embedding(
                 media_id=media.id,

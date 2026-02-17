@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 
 import click
@@ -25,48 +24,40 @@ def geo() -> None:
 @pass_ctx
 def update(ctx: Context, reparse: bool) -> None:
     """Update location for media files with GPS data (offline, no network needed)."""
+    repo = ctx.repo
 
-    async def _process_geo_updates() -> None:
-        from uom.db.async_repository import AsyncRepository
+    items = repo.get_metadata_needing_geo_update(force_reparse=reparse)
+    if not items:
+        click.echo("No items found needing location update.")
+        return
 
-        repo = AsyncRepository(ctx.db_path)
-        await repo.connect()
-        await repo.init_db()
+    # Filter items with valid GPS coordinates
+    valid = [(md, md.gps_lat, md.gps_lon) for md in items if md.gps_lat and md.gps_lon]
+    if not valid:
+        click.echo("No items with valid GPS coordinates.")
+        return
 
-        items = await repo.get_metadata_needing_geo_update(force_reparse=reparse)
-        if not items:
-            click.echo("No items found needing location update.")
-            return
+    click.echo(f"Geocoding {len(valid)} items (offline)...")
+    t0 = time.perf_counter()
 
-        # Filter items with valid GPS coordinates
-        valid = [(md, md.gps_lat, md.gps_lon) for md in items if md.gps_lat and md.gps_lon]
-        if not valid:
-            click.echo("No items with valid GPS coordinates.")
-            return
+    # Batch geocode — single KD-tree query for all coordinates
+    coords = [(lat, lon) for _, lat, lon in valid]
+    results = reverse_geocode_batch(coords)
 
-        click.echo(f"Geocoding {len(valid)} items (offline)...")
-        t0 = time.perf_counter()
+    elapsed = time.perf_counter() - t0
+    click.echo(f"Geocoded {len(results)} coordinates in {elapsed:.2f}s")
 
-        # Batch geocode — single KD-tree query for all coordinates
-        coords = [(lat, lon) for _, lat, lon in valid]
-        results = reverse_geocode_batch(coords)
+    # Write results to DB
+    count = 0
+    for (md, lat, lon), (label, country, city) in zip(valid, results):
+        if not label:
+            click.echo(f"[{md.id}] No result for {lat:.4f},{lon:.4f}")
+            continue
+        try:
+            repo.update_location_label(md.id, label, country=country, city=city)
+            click.echo(f"[{md.id}] {lat:.4f},{lon:.4f} -> {label} ({country}, {city})")
+            count += 1
+        except Exception as e:
+            click.echo(f"Error updating {md.id}: {e}")
 
-        elapsed = time.perf_counter() - t0
-        click.echo(f"Geocoded {len(results)} coordinates in {elapsed:.2f}s")
-
-        # Write results to DB
-        count = 0
-        for (md, lat, lon), (label, country, city) in zip(valid, results):
-            if not label:
-                click.echo(f"[{md.id}] No result for {lat:.4f},{lon:.4f}")
-                continue
-            try:
-                await repo.update_location_label(md.id, label, country=country, city=city)
-                click.echo(f"[{md.id}] {lat:.4f},{lon:.4f} -> {label} ({country}, {city})")
-                count += 1
-            except Exception as e:
-                click.echo(f"Error updating {md.id}: {e}")
-
-        click.echo(f"Done. Updated {count} / {len(valid)} items.")
-
-    asyncio.run(_process_geo_updates())
+    click.echo(f"Done. Updated {count} / {len(valid)} items.")

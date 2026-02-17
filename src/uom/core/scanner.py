@@ -176,12 +176,19 @@ def scan_and_extract(path: Path, compute_hash: bool = True) -> ScanResult:
         )
 
 
-def save_scan_result(repo: Any, result: ScanResult) -> int:
-    """Save a ScanResult to the database using the provided repository."""
-    # We use 'Any' for repo to avoid circular imports, but it expects a Repository instance
+def save_scan_result(repo: Any, result: ScanResult, library_root: Path | str | None = None) -> int:
+    """Save a ScanResult to the database using the provided repository.
+
+    If *library_root* is given, the stored path will be relative to it so the
+    library directory is fully portable.
+    """
+
+    stored_path = result.path
+    if library_root is not None:
+        stored_path = os.path.relpath(result.path, str(library_root))
 
     media = Media(
-        path=result.path,
+        path=stored_path,
         filename=result.filename,
         extension=result.extension,
         media_type=MediaType(result.media_type),
@@ -217,25 +224,3 @@ def process_pool_worker(args: tuple[str, bool]) -> ScanResult:
     """Worker function for ProcessPoolExecutor that unpacks arguments."""
     path_str, compute_hash = args
     return scan_and_extract(Path(path_str), compute_hash=compute_hash)
-
-
-def scan_result_to_metadata(result: ScanResult) -> Metadata:
-    """Convert a ScanResult back to a Metadata object (e.g. for display)."""
-    return Metadata(
-        # We don't have media_id here, use 0 or None
-        media_id=0,
-        date_taken=datetime.fromisoformat(result.md_date_taken) if result.md_date_taken else None,
-        camera_make=result.md_camera_make,
-        camera_model=result.md_camera_model,
-        lens_model=result.md_lens_model,
-        focal_length=result.md_focal_length,
-        aperture=result.md_aperture,
-        shutter_speed=result.md_shutter_speed,
-        iso=result.md_iso,
-        width=result.md_width,
-        height=result.md_height,
-        duration=result.md_duration,
-        gps_lat=result.md_gps_lat,
-        gps_lon=result.md_gps_lon,
-        orientation=result.md_orientation,
-    )

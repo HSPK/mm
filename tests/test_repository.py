@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from uom.db.dto import Media
 from uom.db.models import MediaType, TagSource
-from uom.db.repository import Media, Repository
+from uom.db.sync_repo import SyncRepo
 
 
-def test_upsert_and_get_media(repo: Repository):
+def test_upsert_and_get_media(repo: SyncRepo):
     m = Media(
         path="/tmp/test.jpg",
         filename="test.jpg",
@@ -23,7 +24,7 @@ def test_upsert_and_get_media(repo: Repository):
     assert got.file_hash == "abc123"
 
 
-def test_tag_operations(repo: Repository):
+def test_tag_operations(repo: SyncRepo):
     # Create media first
     m = Media(
         path="/tmp/tag_test.jpg",
@@ -58,7 +59,7 @@ def test_tag_operations(repo: Repository):
     assert len(tags) == 0
 
 
-def test_count_and_stats(repo: Repository):
+def test_count_and_stats(repo: SyncRepo):
     assert repo.count_media() == 0
     m = Media(
         path="/tmp/stats.mp4",

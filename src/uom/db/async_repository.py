@@ -9,6 +9,7 @@ import peewee_aio
 from uom.db.mixins import (
     AlbumsMixin,
     CliMixin,
+    ConfigMixin,
     MediaMixin,
     MetadataMixin,
     SmartAlbumsMixin,
@@ -18,15 +19,6 @@ from uom.db.mixins import (
 )
 from uom.db.models import (
     ALL_TABLES,
-    AlbumMediaModel,
-    AlbumModel,
-    EmbeddingModel,
-    MediaModel,
-    MediaTagModel,
-    MetadataModel,
-    SmartAlbumModel,
-    TagModel,
-    UserModel,
     database,
 )
 
@@ -40,26 +32,22 @@ class AsyncRepository(
     AlbumsMixin,
     SmartAlbumsMixin,
     CliMixin,
+    ConfigMixin,
 ):
     """Async Peewee-aio repository — single entry point for all DB operations."""
 
     def __init__(self, db_path: str | Path) -> None:
-        self._db_path = str(db_path)
+        self._db_path = str(Path(db_path).resolve())
         if database.database is None:
             database.init(self._db_path)
             database.allow_sync = True
+        # The async backend (aiosqlite) strips one leading slash from the URL
+        # path, so "aiosqlite:///" + "/abs/path" (4 slashes total) yields the
+        # correct absolute path.  However peewee_aio's sync pw_database strips
+        # TWO slashes, so we re-init it with the real path afterwards.
         self.manager = peewee_aio.Manager(f"aiosqlite:///{self._db_path}")
-        for model in (
-            UserModel,
-            MediaModel,
-            MetadataModel,
-            TagModel,
-            MediaTagModel,
-            EmbeddingModel,
-            AlbumModel,
-            AlbumMediaModel,
-            SmartAlbumModel,
-        ):
+        self.manager.pw_database.init(self._db_path)
+        for model in ALL_TABLES:
             self.manager.register(model)
         self.objects = self.manager
 

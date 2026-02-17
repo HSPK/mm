@@ -21,6 +21,18 @@ from uom.db.models import MediaModel, MediaTagModel, MetadataModel, TagModel
 class MediaMixin:
     objects: peewee_aio.Manager
 
+    # ── Ratings ───────────────────────────────────────────
+
+    async def set_rating(self, media_id: int, rating: int) -> None:
+        await self.objects.execute(
+            MediaModel.update(rating=rating).where(MediaModel.id == media_id)
+        )
+
+    async def bulk_set_rating(self, media_ids: list[int], rating: int) -> int:
+        return await self.objects.execute(
+            MediaModel.update(rating=rating).where(MediaModel.id.in_(media_ids))
+        )
+
     # ── CRUD ──────────────────────────────────────────────
 
     async def get_total_media_count(self) -> int:

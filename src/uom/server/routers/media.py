@@ -9,9 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
+from uom.config import resolve_media_path
 from uom.core.thumbnail import get_thumbnail
 from uom.db.dto import User
-from uom.server.dependencies import get_current_user, get_media_path, get_repo
+from uom.server.dependencies import get_current_user, get_library_root, get_media_path, get_repo
 from uom.server.schemas import (
     RatingBody,
     TagsBody,
@@ -191,7 +192,8 @@ async def get_media_file(
     if not m:
         raise HTTPException(404, "Media not found")
 
-    fpath = Path(m.path)
+    library_root = get_library_root(request)
+    fpath = Path(resolve_media_path(m.path, library_root))
     if not fpath.exists():
         raise HTTPException(404, "File not found on disk")
 
@@ -284,7 +286,8 @@ async def delete_media(
 
     if permanent:
         if delete_file:
-            fpath = Path(m.path)
+            library_root = get_library_root(request)
+            fpath = Path(resolve_media_path(m.path, library_root))
             if fpath.exists():
                 fpath.unlink()
         await repo.delete_media(media_id)

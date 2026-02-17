@@ -5,6 +5,7 @@ import time
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from uom.config import resolve_media_path
 from uom.db.async_repository import AsyncRepository
 from uom.db.dto import User
 
@@ -51,6 +52,11 @@ def invalidate_media_path_cache(media_id: int | None = None) -> None:
 def get_repo(request: Request) -> AsyncRepository:
     """Dependency: gets the async repository instance attached to app state."""
     return request.app.state.repo  # type: ignore[no-any-return]
+
+
+def get_library_root(request: Request) -> str:
+    """Return the library root directory (parent of the DB file)."""
+    return request.app.state.library_root  # type: ignore[no-any-return]
 
 
 async def get_current_user(
@@ -107,7 +113,11 @@ def require_admin(user: User | None = Depends(get_current_user)) -> User | None:
 
 
 async def get_media_path(request: Request, media_id: int) -> str:
-    """Return the file path for a media_id, using in-memory cache."""
+    """Return the absolute file path for a media_id, using in-memory cache.
+
+    Stored paths may be relative to the library root; this function resolves
+    them so callers always receive an absolute path.
+    """
     now = time.monotonic()
     cached = _MEDIA_PATH_CACHE.get(media_id)
     if cached:
@@ -122,6 +132,9 @@ async def get_media_path(request: Request, media_id: int) -> str:
     if not m:
         raise HTTPException(404, "Media not found")
 
-    _MEDIA_PATH_CACHE[media_id] = (m.path, now + _MEDIA_PATH_TTL)
+    library_root = get_library_root(request)
+    abs_path = resolve_media_path(m.path, library_root)
+
+    _MEDIA_PATH_CACHE[media_id] = (abs_path, now + _MEDIA_PATH_TTL)
     _evict_cache(_MEDIA_PATH_CACHE, _MEDIA_PATH_MAX)
-    return m.path
+    return abs_path

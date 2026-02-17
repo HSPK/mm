@@ -10,6 +10,22 @@ from uom.cli import Context, pass_ctx
 from uom.core.dedup import DedupStrategy
 
 
+def _click_progress():
+    """Return an on_progress callback that drives a click progressbar."""
+    bar = None
+
+    def _cb(current: int, total: int) -> None:
+        nonlocal bar
+        if bar is None:
+            bar = click.progressbar(length=total, label="Hashing files")
+            bar.__enter__()
+        bar.update(1)
+        if current >= total:
+            bar.__exit__(None, None, None)
+
+    return _cb
+
+
 @click.command()
 @click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option(
@@ -30,7 +46,7 @@ def dedup(ctx: Context, directory: Path, strategy: str, delete: bool) -> None:
     click.echo(f"Strategy: {strat.value}")
     click.echo(f"Scanning: {directory.resolve()}\n")
 
-    pairs = find_duplicates(directory, strategy=strat)
+    pairs = find_duplicates(directory, strategy=strat, on_progress=_click_progress())
 
     if not pairs:
         click.echo("No duplicates found.")

@@ -2,24 +2,14 @@
 
 from __future__ import annotations
 
-import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 import click
 
 from uom.cli import Context, pass_ctx
-from uom.core.scanner import ScanResult, process_pool_worker, save_scan_result
-
-# ---------------------------------------------------------------------------
-# Worker payload — must be picklable (top-level dataclass + function)
-# ---------------------------------------------------------------------------
-
-
-# Alias required for pickling safety if using ProcessPoolExecutor
-_scan_one = process_pool_worker
-
+from uom.cli._utils import find_media_by_path, parallel_scan
+from uom.core.scanner import save_scan_result
 
 # ---------------------------------------------------------------------------
 # CLI command
@@ -60,6 +50,7 @@ def scan(
     from uom.core.scanner import discover_media
 
     repo = ctx.repo
+    library_root = ctx.db_path.resolve().parent
 
     # Determineallowed extensions based on type filter
     allowed = None
@@ -83,30 +74,21 @@ def scan(
 
     # Filter out files that haven't changed
     to_scan: list[Path] = []
-
-    # Pre-fetch existing media to memory map for faster check? Or just query.
-    # For now query, will optimize later if needed.
     click.echo("Checking for changes...")
 
     skipped = 0
     with click.progressbar(files) as bar:
         for path in bar:
             if not force:
-                existing = repo.get_media_by_path(str(path.resolve()))
+                existing = find_media_by_path(repo, path, str(library_root))
                 if existing:
-                    # Check if file changed on disk (size, mtime)
                     stat = path.stat()
                     if existing.file_size == stat.st_size:
-                        # Already in DB and size matches.
-                        # What if we want to update metadata?
-                        # Only if metadata is completely missing or force
                         if existing.id:
                             md = repo.get_metadata(existing.id)
-                            # If we have basic metadata (date_taken), assume it's good
                             if md and md.date_taken:
                                 skipped += 1
                                 continue
-
             to_scan.append(path)
 
     if skipped > 0:
@@ -122,33 +104,18 @@ def scan(
         return
 
     # Phase 2: parallel scan + metadata extraction
-    num_workers = jobs if jobs > 0 else min(mp.cpu_count(), 8)
-    click.echo(f"Using {num_workers} worker process(es).")
-
-    work_items = [(str(p.resolve()), not no_hash) for p in to_scan]
-    results: list[ScanResult] = []
-    errors = 0
-
-    with ProcessPoolExecutor(max_workers=num_workers) as pool:
-        futures = {pool.submit(_scan_one, item): item for item in work_items}
-        with click.progressbar(length=len(futures), label="Scanning & extracting metadata") as bar:
-            for future in as_completed(futures):
-                result = future.result()
-                if result.error:
-                    errors += 1
-                    click.echo(f"\n  [WARN] {result.path}: {result.error}", err=True)
-                else:
-                    results.append(result)
-                bar.update(1)
+    results, errors = parallel_scan(
+        to_scan, compute_hash=not no_hash, jobs=jobs, label="Scanning & extracting metadata"
+    )
 
     # Phase 3: bulk write to DB (single-threaded, fast)
     new_count = 0
     updated_count = 0
     with click.progressbar(results, label="Writing to database") as bar:
         for r in bar:
-            existing = repo.get_media_by_path(r.path)
+            existing = find_media_by_path(repo, Path(r.path), str(library_root))
 
-            save_scan_result(repo, r)
+            save_scan_result(repo, r, library_root=library_root)
 
             if existing:
                 updated_count += 1
@@ -162,10 +129,10 @@ def scan(
     # Phase 4 (optional): embeddings
     if embed:
         click.echo("\nGenerating CLIP embeddings...")
-        _generate_embeddings(repo)
+        _generate_embeddings(repo, library_root=library_root)
 
 
-def _generate_embeddings(repo: Any) -> None:
+def _generate_embeddings(repo: Any, library_root: Path | str | None = None) -> None:
     """Generate embeddings for media without one."""
     from uom.core.embeddings import generate_embeddings
 
@@ -177,5 +144,7 @@ def _generate_embeddings(repo: Any) -> None:
 
     click.echo(f"Embedding {len(pending)} image(s)...")
     with click.progressbar(length=len(pending), label="Embedding") as bar:
-        done = generate_embeddings(repo, progress_cb=lambda _: bar.update(1))
+        done = generate_embeddings(
+            repo, progress_cb=lambda _: bar.update(1), library_root=library_root
+        )
     click.echo(f"Embedded {done} image(s).")

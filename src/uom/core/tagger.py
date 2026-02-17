@@ -7,20 +7,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from uom.db.dto import Media, Metadata
+from uom.db.helpers import normalise_tag
 from uom.db.models import TagSource
 
 if TYPE_CHECKING:
     from uom.db.async_repository import AsyncRepository
-
-# ---------------------------------------------------------------------------
-# Tag normalisation
-# ---------------------------------------------------------------------------
-
-
-def normalise_tag(name: str) -> str:
-    """Lowercase, strip, replace spaces with hyphens."""
-    return name.strip().lower().replace(" ", "-")
-
 
 # ---------------------------------------------------------------------------
 # Manual tagging

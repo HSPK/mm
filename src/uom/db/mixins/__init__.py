@@ -2,6 +2,7 @@
 
 from uom.db.mixins._albums import AlbumsMixin  # noqa: F401
 from uom.db.mixins._cli import CliMixin  # noqa: F401
+from uom.db.mixins._config import ConfigMixin  # noqa: F401
 from uom.db.mixins._media import MediaMixin  # noqa: F401
 from uom.db.mixins._metadata import MetadataMixin  # noqa: F401
 from uom.db.mixins._smart_albums import SmartAlbumsMixin  # noqa: F401

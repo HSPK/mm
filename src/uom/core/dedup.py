@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-
-import click
 
 from uom.config import ALL_MEDIA_EXTENSIONS
 from uom.core.scanner import file_hash
@@ -70,7 +69,11 @@ def find_name_duplicates(directory: Path) -> list[DedupPair]:
 # ---------------------------------------------------------------------------
 
 
-def find_hash_duplicates(directory: Path, progress: bool = True) -> list[DedupPair]:
+def find_hash_duplicates(
+    directory: Path,
+    progress: bool = True,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> list[DedupPair]:
     """Find files with identical SHA-256.  Keeps the largest copy."""
     # Phase 1: group by size (files with unique size can't be duplicates)
     size_map: dict[int, list[Path]] = {}
@@ -97,18 +100,14 @@ def find_hash_duplicates(directory: Path, progress: bool = True) -> list[DedupPa
     to_hash: list[Path] = [p for group in candidates for p in group]
 
     hash_map: dict[str, list[Path]] = {}
-    items = click.progressbar(to_hash, label="Hashing files") if progress else to_hash
-    iter_items = items.__enter__() if hasattr(items, "__enter__") else items  # type: ignore[union-attr]
-    try:
-        for p in iter_items:
-            try:
-                h = file_hash(p)
-            except OSError:
-                continue
-            hash_map.setdefault(h, []).append(p)
-    finally:
-        if hasattr(items, "__exit__"):
-            items.__exit__(None, None, None)  # type: ignore[union-attr]
+    for i, p in enumerate(to_hash):
+        try:
+            h = file_hash(p)
+        except OSError:
+            continue
+        hash_map.setdefault(h, []).append(p)
+        if on_progress:
+            on_progress(i + 1, len(to_hash))
 
     pairs: list[DedupPair] = []
     for h, paths in hash_map.items():
@@ -131,9 +130,10 @@ def find_duplicates(
     directory: Path,
     strategy: DedupStrategy = DedupStrategy.NAME,
     progress: bool = True,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> list[DedupPair]:
     if strategy == DedupStrategy.NAME:
         return find_name_duplicates(directory)
     if strategy == DedupStrategy.HASH:
-        return find_hash_duplicates(directory, progress=progress)
+        return find_hash_duplicates(directory, progress=progress, on_progress=on_progress)
     raise ValueError(f"Unknown strategy: {strategy}")

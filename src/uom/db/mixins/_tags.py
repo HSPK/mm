@@ -13,21 +13,11 @@ from peewee import fn
 
 from uom.db.dto import Tag
 from uom.db.helpers import normalise_tag, to_tag
-from uom.db.models import MediaModel, MediaTagModel, TagModel, TagSource
+from uom.db.models import MediaTagModel, TagModel, TagSource
 
 
 class TagsMixin:
     objects: peewee_aio.Manager
-
-    async def set_rating(self, media_id: int, rating: int) -> None:
-        await self.objects.execute(
-            MediaModel.update(rating=rating).where(MediaModel.id == media_id)
-        )
-
-    async def bulk_set_rating(self, media_ids: list[int], rating: int) -> int:
-        return await self.objects.execute(
-            MediaModel.update(rating=rating).where(MediaModel.id.in_(media_ids))
-        )
 
     async def get_or_create_tag(self, name: str, source: TagSource = TagSource.MANUAL) -> Tag:
         name = normalise_tag(name)

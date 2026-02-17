@@ -101,6 +101,12 @@ class SmartAlbumUpdateBody(PydanticBase):
     enabled: bool | None = None
 
 
+class SwitchLibraryBody(PydanticBase):
+    """Request body for switching the active library database."""
+
+    db_path: str
+
+
 class UpdateMetadataBody(PydanticBase):
     date_taken: datetime | None = None
     gps_lat: float | None = None
