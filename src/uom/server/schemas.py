@@ -69,6 +69,38 @@ class AlbumMediaBody(PydanticBase):
     media_ids: list[int]
 
 
+class SmartAlbumBody(PydanticBase):
+    """Create or update a smart album definition."""
+
+    key: str
+    section: str = "custom"
+    title: str
+    subtitle: str = ""
+    icon: str = "images"
+    color: str = ""
+    filters: dict = {}
+    generator: str | None = None
+    generator_config: dict = {}
+    position: int = 0
+    enabled: bool = True
+
+
+class SmartAlbumUpdateBody(PydanticBase):
+    """Partial update for an existing smart album definition."""
+
+    key: str | None = None
+    section: str | None = None
+    title: str | None = None
+    subtitle: str | None = None
+    icon: str | None = None
+    color: str | None = None
+    filters: dict | None = None
+    generator: str | None = None
+    generator_config: dict | None = None
+    position: int | None = None
+    enabled: bool | None = None
+
+
 class UpdateMetadataBody(PydanticBase):
     date_taken: datetime | None = None
     gps_lat: float | None = None

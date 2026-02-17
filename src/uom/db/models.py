@@ -49,9 +49,6 @@ class BaseModel(Model):
     class Meta:
         database = database
 
-    class Meta:
-        database = database
-
 
 # ---------------------------------------------------------------------------
 # ORM Models
@@ -174,6 +171,37 @@ class AlbumMediaModel(BaseModel):
         primary_key = CompositeKey("album", "media")
 
 
+class SmartAlbumModel(BaseModel):
+    """A smart album is a named set of query_media filters stored as config.
+
+    Static albums have fixed filters. Generator albums (generator != None)
+    auto-expand into multiple albums at query time based on live data.
+    """
+
+    id = AutoField()
+    key = CharField(max_length=256, unique=True)
+    section = CharField(
+        max_length=64, default="custom"
+    )  # library / tags / cameras / festivals / years / places / custom
+    title = CharField(max_length=256)
+    subtitle = CharField(max_length=512, default="")
+    icon = CharField(max_length=64, default="images")
+    color = CharField(max_length=64, default="")
+    filters = TextField(default="{}")  # JSON-encoded query_media filter dict
+    generator = CharField(
+        max_length=64, null=True, default=None
+    )  # per_tag / per_camera / per_year / per_festival / per_place
+    generator_config = TextField(default="{}")  # JSON extra config for generator
+    position = IntegerField(default=0)  # sort order within section
+    is_system = SmallIntegerField(default=1)  # 1=system-managed, 0=user-created
+    enabled = SmallIntegerField(default=1)
+    created_at = DateTimeField(default=dt.datetime.now)
+    updated_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "smart_albums"
+
+
 ALL_TABLES = [
     MediaModel,
     MetadataModel,
@@ -183,4 +211,5 @@ ALL_TABLES = [
     UserModel,
     AlbumModel,
     AlbumMediaModel,
+    SmartAlbumModel,
 ]

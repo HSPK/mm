@@ -68,7 +68,7 @@ async def _reverse_geocode_bigdatacloud(
     params = {
         "latitude": lat,
         "longitude": lon,
-        "localityLanguage": "en",
+        "localityLanguage": "zh",
     }
     # Mimic a browser to avoid "server-side operations" 402 error sometimes
     headers = {

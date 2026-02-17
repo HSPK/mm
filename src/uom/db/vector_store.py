@@ -7,10 +7,12 @@ can swap in sqlite-vec or hnswlib for larger collections.
 from __future__ import annotations
 
 import struct
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from uom.db.repository import Repository
+if TYPE_CHECKING:
+    from uom.db.async_repository import AsyncRepository
 
 
 def _bytes_to_vector(data: bytes) -> np.ndarray:
@@ -27,7 +29,7 @@ def vector_to_bytes(vec: np.ndarray) -> bytes:
 class VectorStore:
     """In-memory cosine similarity search over embeddings stored in SQLite."""
 
-    def __init__(self, repo: Repository) -> None:
+    def __init__(self, repo: AsyncRepository | Any) -> None:
         self._repo = repo
         self._media_ids: list[int] = []
         self._matrix: np.ndarray | None = None  # (N, D) normalised

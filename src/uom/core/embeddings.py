@@ -91,3 +91,41 @@ def encode_texts(
         feats = model.encode_text(tokens)
         feats = feats / feats.norm(dim=-1, keepdim=True)
     return feats.cpu().numpy().astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Batch embedding for scanned media (reusable from CLI / services)
+# ---------------------------------------------------------------------------
+
+
+def generate_embeddings(repo: Any, progress_cb: Any = None) -> int:
+    """Generate CLIP embeddings for all un-embedded photos.
+
+    *repo* can be ``SyncRepo`` or anything with the right methods.
+    *progress_cb* is an optional callable(media_item) invoked per item
+    (e.g. a click progressbar ``update``).
+    Returns the count of newly embedded images.
+    """
+    from uom.db.dto import Embedding
+    from uom.db.vector_store import vector_to_bytes
+
+    media_list = repo.media_without_embedding()
+    media_list = [m for m in media_list if m.media_type.value == "photo"]
+    if not media_list:
+        return 0
+
+    model, preprocess, _, device = get_clip_model()
+    done = 0
+    for media in media_list:
+        vec = encode_image_from_path(Path(media.path), model, preprocess, device)
+        if vec is not None:
+            emb = Embedding(
+                media_id=media.id,
+                vector=vector_to_bytes(vec.flatten()),
+                model=f"{model.__class__.__name__}",
+            )
+            repo.upsert_embedding(emb)
+            done += 1
+        if progress_cb:
+            progress_cb(media)
+    return done

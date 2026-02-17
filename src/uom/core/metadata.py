@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from uom.config import AUDIO_EXTENSIONS, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS
-from uom.db.repository import Metadata
+from uom.db.dto import Metadata
 
 # ---------------------------------------------------------------------------
 # Helpers

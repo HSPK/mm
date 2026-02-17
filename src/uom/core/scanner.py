@@ -17,8 +17,8 @@ from uom.config import (
     PHOTO_EXTENSIONS,
     VIDEO_EXTENSIONS,
 )
+from uom.db.dto import Media, Metadata
 from uom.db.models import MediaType
-from uom.db.repository import Media, Metadata
 
 
 @dataclass

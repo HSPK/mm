@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from uom.db.repository import User
-from uom.server.dependencies import get_current_user, get_repo
+from uom.core.thumbnail import get_thumbnail
+from uom.db.dto import User
+from uom.server.dependencies import get_current_user, get_media_path, get_repo
 from uom.server.schemas import (
     RatingBody,
     TagsBody,
@@ -16,10 +19,43 @@ from uom.server.schemas import (
     serialize_media,
     serialize_media_brief,
 )
-from uom.server.thumbnail import get_thumbnail
 from uom.server.utils import stream_file
 
 router = APIRouter(prefix="/api/media", tags=["media"])
+
+# ── Cache headers ──
+_THUMB_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+def _make_etag(thumb_path: Path) -> str:
+    st = thumb_path.stat()
+    return f'W/"{hashlib.md5(f"{st.st_mtime_ns}-{st.st_size}".encode()).hexdigest()[:16]}"'
+
+
+def _check_not_modified(request: Request, etag: str) -> Response | None:
+    inm = request.headers.get("if-none-match")
+    if inm and etag in inm:
+        return Response(
+            status_code=304, headers={"ETag": etag, "Cache-Control": _THUMB_CACHE_CONTROL}
+        )
+    return None
+
+
+async def _serve_thumb(request: Request, media_id: int, size: str) -> Response:
+    """Generate and serve a thumbnail/preview with ETag + 304 support."""
+    media_path = await get_media_path(request, media_id)
+    thumb = await run_in_threadpool(get_thumbnail, media_path, media_id, size)
+    if not thumb:
+        raise HTTPException(404, "Thumbnail generation failed")
+    etag = _make_etag(thumb)
+    not_modified = _check_not_modified(request, etag)
+    if not_modified:
+        return not_modified
+    return FileResponse(
+        thumb,
+        media_type="image/webp",
+        headers={"Cache-Control": _THUMB_CACHE_CONTROL, "ETag": etag},
+    )
 
 
 @router.get("")
@@ -32,6 +68,7 @@ async def list_media(
     camera: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    date_ranges: str | None = None,
     sort: str = "date_taken",
     order: str = "desc",
     search: str | None = None,
@@ -47,6 +84,15 @@ async def list_media(
 ) -> dict[str, Any]:
     repo = get_repo(request)
     tag_list = [t.strip() for t in tag.split(",") if t.strip()] if tag else None
+
+    # Parse date_ranges from JSON string
+    parsed_date_ranges: list[list[str]] | None = None
+    if date_ranges:
+        try:
+            parsed_date_ranges = json.loads(date_ranges)
+        except (json.JSONDecodeError, TypeError):
+            parsed_date_ranges = None
+
     items, total = await repo.query_media(
         page=page,
         per_page=per_page,
@@ -55,6 +101,7 @@ async def list_media(
         camera=camera,
         date_from=date_from,
         date_to=date_to,
+        date_ranges=parsed_date_ranges,
         sort=sort,
         order=order,
         search=search,
@@ -120,22 +167,8 @@ async def get_thumbnail_file(
     media_id: int,
     size: str = Query("md", pattern="^(sm|md|lg|xl)$"),
     _u: User | None = Depends(get_current_user),
-) -> FileResponse:
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
-    if not m:
-        raise HTTPException(404, "Media not found")
-
-    # Offload potentially blocking I/O (disk check + image processing) to threadpool
-    thumb = await run_in_threadpool(get_thumbnail, m.path, media_id, size)
-    if not thumb:
-        raise HTTPException(404, "Thumbnail generation failed")
-
-    return FileResponse(
-        thumb,
-        media_type="image/webp",
-        headers={"Cache-Control": "public, max-age=86400, immutable"},
-    )
+):
+    return await _serve_thumb(request, media_id, size)
 
 
 @router.get("/{media_id}/preview")
@@ -143,22 +176,8 @@ async def get_preview_image(
     request: Request,
     media_id: int,
     _u: User | None = Depends(get_current_user),
-) -> FileResponse:
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
-    if not m:
-        raise HTTPException(404, "Media not found")
-
-    # Offload preview generation
-    thumb = await run_in_threadpool(get_thumbnail, m.path, media_id, "xl")
-    if not thumb:
-        raise HTTPException(404, "Preview generation failed")
-
-    return FileResponse(
-        thumb,
-        media_type="image/webp",
-        headers={"Cache-Control": "public, max-age=86400, immutable"},
-    )
+):
+    return await _serve_thumb(request, media_id, "xl")
 
 
 @router.get("/{media_id}/file")

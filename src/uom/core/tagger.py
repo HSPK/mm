@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+from uom.db.dto import Media, Metadata
 from uom.db.models import TagSource
-from uom.db.repository import Media, Metadata, Repository
+
+if TYPE_CHECKING:
+    from uom.db.async_repository import AsyncRepository
 
 # ---------------------------------------------------------------------------
 # Tag normalisation
@@ -23,7 +27,7 @@ def normalise_tag(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def add_tags(repo: Repository, media_id: int, tag_names: list[str]) -> None:
+def add_tags(repo: AsyncRepository | Any, media_id: int, tag_names: list[str]) -> None:
     """Manually attach tags to a media entry."""
     for name in tag_names:
         tag = repo.get_or_create_tag(name, source=TagSource.MANUAL)
@@ -31,7 +35,7 @@ def add_tags(repo: Repository, media_id: int, tag_names: list[str]) -> None:
         repo.add_media_tag(media_id, tag.id, confidence=1.0)
 
 
-def remove_tags(repo: Repository, media_id: int, tag_names: list[str]) -> None:
+def remove_tags(repo: AsyncRepository | Any, media_id: int, tag_names: list[str]) -> None:
     """Remove tags from a media entry."""
     for name in tag_names:
         tag = repo.get_tag_by_name(name)
@@ -61,7 +65,7 @@ _MONTH_NAMES = [
 
 
 def apply_rule_tags(
-    repo: Repository,
+    repo: AsyncRepository | Any,
     media: Media,
     metadata: Metadata | None,
 ) -> list[str]:
@@ -107,7 +111,7 @@ def apply_rule_tags(
 
 
 def apply_clip_tags(
-    repo: Repository,
+    repo: AsyncRepository | Any,
     media: Media,
     labels: list[str] | None = None,
     threshold: float = 0.25,

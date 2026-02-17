@@ -167,31 +167,15 @@ def scan(
 
 def _generate_embeddings(repo: Any) -> None:
     """Generate embeddings for media without one."""
-    from uom.core.embeddings import encode_image_from_path, get_clip_model
-    from uom.db.repository import Embedding
-    from uom.db.vector_store import vector_to_bytes
+    from uom.core.embeddings import generate_embeddings
 
-    media_list = repo.media_without_embedding()
-    media_list = [m for m in media_list if m.media_type.value == "photo"]
-
-    if not media_list:
+    pending = repo.media_without_embedding()
+    pending = [m for m in pending if m.media_type.value == "photo"]
+    if not pending:
         click.echo("No new images to embed.")
         return
 
-    click.echo(f"Embedding {len(media_list)} image(s)...")
-    model, preprocess, _, device = get_clip_model()
-
-    done = 0
-    with click.progressbar(media_list, label="Embedding") as bar:
-        for media in bar:
-            vec = encode_image_from_path(Path(media.path), model, preprocess, device)
-            if vec is not None:
-                emb = Embedding(
-                    media_id=media.id,
-                    vector=vector_to_bytes(vec.flatten()),
-                    model=f"{model.__class__.__name__}",
-                )
-                repo.upsert_embedding(emb)
-                done += 1
-
+    click.echo(f"Embedding {len(pending)} image(s)...")
+    with click.progressbar(length=len(pending), label="Embedding") as bar:
+        done = generate_embeddings(repo, progress_cb=lambda _: bar.update(1))
     click.echo(f"Embedded {done} image(s).")

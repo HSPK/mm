@@ -1,27 +1,29 @@
-"""Repository — CRUD operations using Peewee ORM for all UOM tables."""
+"""Repository — sync CRUD operations using Peewee ORM (for CLI tools)."""
 
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
 import math
-import secrets
-
-# ---------------------------------------------------------------------------
-# Lightweight dataclasses used as DTOs across the codebase
-# (kept thin so callers don't need to import Peewee model classes directly)
-# ---------------------------------------------------------------------------
-from dataclasses import dataclass
 from pathlib import Path
 
 from peewee import JOIN, fn
 
+from uom.db.dto import Embedding, Media, Metadata, Tag, User
+from uom.db.helpers import (
+    hash_password,
+    normalise_tag,
+    to_embedding,
+    to_media,
+    to_metadata,
+    to_tag,
+    to_user,
+    verify_password,
+)
 from uom.db.models import (
     ALL_TABLES,
     EmbeddingModel,
     MediaModel,
     MediaTagModel,
-    MediaType,
     MetadataModel,
     TagModel,
     TagSource,
@@ -29,75 +31,8 @@ from uom.db.models import (
     database,
 )
 
-
-@dataclass
-class Media:
-    id: int | None = None
-    path: str = ""
-    filename: str = ""
-    extension: str = ""
-    media_type: MediaType = MediaType.PHOTO
-    file_size: int = 0
-    file_hash: str = ""
-    rating: int = 0
-    created_at: dt.datetime | None = None
-    modified_at: dt.datetime | None = None
-    scanned_at: dt.datetime | None = None
-    deleted_at: dt.datetime | None = None
-
-
-@dataclass
-class Metadata:
-    id: int | None = None
-    media_id: int = 0
-    date_taken: dt.datetime | None = None
-    camera_make: str = ""
-    camera_model: str = ""
-    lens_model: str = ""
-    focal_length: float | None = None
-    aperture: float | None = None
-    shutter_speed: str = ""
-    iso: int | None = None
-    width: int | None = None
-    height: int | None = None
-    duration: float | None = None
-    gps_lat: float | None = None
-    gps_lon: float | None = None
-    orientation: int | None = None
-    location_label: str | None = None
-    location_country: str | None = None
-    location_city: str | None = None
-
-
-@dataclass
-class Tag:
-    id: int | None = None
-    name: str = ""
-    source: TagSource = TagSource.MANUAL
-    created_at: dt.datetime | None = None
-
-
-@dataclass
-class Embedding:
-    id: int | None = None
-    media_id: int = 0
-    vector: bytes = b""
-    model: str = ""
-    created_at: dt.datetime | None = None
-
-
-@dataclass
-class User:
-    id: int | None = None
-    username: str = ""
-    display_name: str = ""
-    is_admin: bool = False
-    created_at: dt.datetime | None = None
-
-
-# ---------------------------------------------------------------------------
-# Repository
-# ---------------------------------------------------------------------------
+# Re-export DTOs for backwards compatibility
+__all__ = ["Media", "Metadata", "Tag", "Embedding", "User", "Repository"]
 
 
 class Repository:
@@ -171,31 +106,25 @@ class Repository:
             },
         )
         if not created:
-            row.file_size = m.file_size
-            row.file_hash = m.file_hash
-            row.modified_at = m.modified_at
-            row.scanned_at = dt.datetime.now()
+            row.file_size, row.file_hash = m.file_size, m.file_hash
+            row.modified_at, row.scanned_at = m.modified_at, dt.datetime.now()
             row.save()
         return row.id
 
     def get_media_by_path(self, path: str) -> Media | None:
         try:
-            row = MediaModel.get(MediaModel.path == path)
+            return to_media(MediaModel.get(MediaModel.path == path))
         except MediaModel.DoesNotExist:
             return None
-        return self._to_media(row)
 
     def get_media_by_hash(self, file_hash: str) -> list[Media]:
-        return [
-            self._to_media(r) for r in MediaModel.select().where(MediaModel.file_hash == file_hash)
-        ]
+        return [to_media(r) for r in MediaModel.select().where(MediaModel.file_hash == file_hash)]
 
     def get_media_by_id(self, media_id: int) -> Media | None:
         try:
-            row = MediaModel.get_by_id(media_id)
+            return to_media(MediaModel.get_by_id(media_id))
         except MediaModel.DoesNotExist:
             return None
-        return self._to_media(row)
 
     def count_media(self) -> int:
         return MediaModel.select().count()
@@ -211,7 +140,7 @@ class Repository:
         return {row.media_type: row.cnt for row in query}
 
     def all_media(self) -> list[Media]:
-        return [self._to_media(r) for r in MediaModel.select().order_by(MediaModel.path)]
+        return [to_media(r) for r in MediaModel.select().order_by(MediaModel.path)]
 
     def query_media(
         self,
@@ -303,7 +232,7 @@ class Repository:
             )
 
         if tag_names:
-            names = [self._normalise_tag(n) for n in tag_names]
+            names = [normalise_tag(n) for n in tag_names]
             media_ids_sub = (
                 MediaTagModel.select(MediaTagModel.media)
                 .join(TagModel, on=(MediaTagModel.tag == TagModel.id))
@@ -337,7 +266,7 @@ class Repository:
         # --- paginate ---
         query = query.paginate(page, per_page)
 
-        return [self._to_media(r) for r in query], total
+        return [to_media(r) for r in query], total
 
     # ------------------------------------------------------------------
     # Rating
@@ -400,13 +329,12 @@ class Repository:
     # ------------------------------------------------------------------
 
     def random_media(self, count: int = 20, media_type: str | None = None) -> list[Media]:
-        """Return random media items."""
         from peewee import SQL
 
         query = MediaModel.select().order_by(SQL("RANDOM()")).limit(count)
         if media_type:
             query = query.where(MediaModel.media_type == media_type)
-        return [self._to_media(r) for r in query]
+        return [to_media(r) for r in query]
 
     def geo_media(self, limit: int = 2000) -> list[dict]:
         """Return media with GPS coordinates for map view."""
@@ -453,7 +381,7 @@ class Repository:
     def media_without_embedding(self) -> list[Media]:
         subq = EmbeddingModel.select(EmbeddingModel.media)
         return [
-            self._to_media(r)
+            to_media(r)
             for r in MediaModel.select().where(MediaModel.id.not_in(subq)).order_by(MediaModel.path)
         ]
 
@@ -501,49 +429,34 @@ class Repository:
     # ------------------------------------------------------------------
 
     def upsert_metadata(self, md: Metadata) -> int:
-        row, created = MetadataModel.get_or_create(
-            media=md.media_id,
-            defaults={
-                "date_taken": md.date_taken,
-                "camera_make": md.camera_make,
-                "camera_model": md.camera_model,
-                "lens_model": md.lens_model,
-                "focal_length": md.focal_length,
-                "aperture": md.aperture,
-                "shutter_speed": md.shutter_speed,
-                "iso": md.iso,
-                "width": md.width,
-                "height": md.height,
-                "duration": md.duration,
-                "gps_lat": md.gps_lat,
-                "gps_lon": md.gps_lon,
-                "orientation": md.orientation,
-            },
-        )
+        _fields = {
+            "date_taken": md.date_taken,
+            "camera_make": md.camera_make,
+            "camera_model": md.camera_model,
+            "lens_model": md.lens_model,
+            "focal_length": md.focal_length,
+            "aperture": md.aperture,
+            "shutter_speed": md.shutter_speed,
+            "iso": md.iso,
+            "width": md.width,
+            "height": md.height,
+            "duration": md.duration,
+            "gps_lat": md.gps_lat,
+            "gps_lon": md.gps_lon,
+            "orientation": md.orientation,
+        }
+        row, created = MetadataModel.get_or_create(media=md.media_id, defaults=_fields)
         if not created:
-            row.date_taken = md.date_taken
-            row.camera_make = md.camera_make
-            row.camera_model = md.camera_model
-            row.lens_model = md.lens_model
-            row.focal_length = md.focal_length
-            row.aperture = md.aperture
-            row.shutter_speed = md.shutter_speed
-            row.iso = md.iso
-            row.width = md.width
-            row.height = md.height
-            row.duration = md.duration
-            row.gps_lat = md.gps_lat
-            row.gps_lon = md.gps_lon
-            row.orientation = md.orientation
+            for k, v in _fields.items():
+                setattr(row, k, v)
             row.save()
         return row.id
 
     def get_metadata(self, media_id: int) -> Metadata | None:
         try:
-            row = MetadataModel.get(MetadataModel.media == media_id)
+            return to_metadata(MetadataModel.get(MetadataModel.media == media_id))
         except MetadataModel.DoesNotExist:
             return None
-        return self._to_metadata(row)
 
     def get_metadata_needing_geo_update(
         self, limit: int = 1000, force_reparse: bool = False
@@ -568,7 +481,7 @@ class Repository:
 
         query = query.limit(limit)
 
-        return [self._to_metadata(m) for m in query]
+        return [to_metadata(m) for m in query]
 
     def update_location_label(
         self, metadata_id: int, label: str, country: str | None = None, city: str | None = None
@@ -582,25 +495,20 @@ class Repository:
     # Tag CRUD
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _normalise_tag(name: str) -> str:
-        return name.strip().lower().replace(" ", "-")
-
     def get_or_create_tag(self, name: str, source: TagSource = TagSource.MANUAL) -> Tag:
-        name = self._normalise_tag(name)
+        name = normalise_tag(name)
         row, _ = TagModel.get_or_create(name=name, defaults={"source": source.value})
-        return self._to_tag(row)
+        return to_tag(row)
 
     def get_tag_by_name(self, name: str) -> Tag | None:
-        name = self._normalise_tag(name)
+        name = normalise_tag(name)
         try:
-            row = TagModel.get(TagModel.name == name)
+            return to_tag(TagModel.get(TagModel.name == name))
         except TagModel.DoesNotExist:
             return None
-        return self._to_tag(row)
 
     def all_tags(self) -> list[Tag]:
-        return [self._to_tag(r) for r in TagModel.select().order_by(TagModel.name)]
+        return [to_tag(r) for r in TagModel.select().order_by(TagModel.name)]
 
     def tag_stats(self) -> list[tuple[str, int]]:
         query = (
@@ -632,7 +540,7 @@ class Repository:
             .where(MediaTagModel.media == media_id)
             .order_by(TagModel.name)
         )
-        return [(self._to_tag(row), row.mediatagmodel.confidence) for row in query]
+        return [(to_tag(row), row.mediatagmodel.confidence) for row in query]
 
     def media_ids_by_tags(self, tag_names: list[str], match_all: bool = True) -> list[int]:
         if not tag_names:
@@ -661,69 +569,47 @@ class Repository:
             defaults={"vector": emb.vector, "model": emb.model},
         )
         if not created:
-            row.vector = emb.vector
-            row.model = emb.model
+            row.vector, row.model = emb.vector, emb.model
             row.created_at = dt.datetime.now()
             row.save()
         return row.id
 
     def get_embedding(self, media_id: int) -> Embedding | None:
         try:
-            row = EmbeddingModel.get(EmbeddingModel.media == media_id)
+            return to_embedding(EmbeddingModel.get(EmbeddingModel.media == media_id))
         except EmbeddingModel.DoesNotExist:
             return None
-        return self._to_embedding(row)
 
     def all_embeddings(self) -> list[Embedding]:
-        return [
-            self._to_embedding(r) for r in EmbeddingModel.select().order_by(EmbeddingModel.media)
-        ]
+        return [to_embedding(r) for r in EmbeddingModel.select().order_by(EmbeddingModel.media)]
 
     # ------------------------------------------------------------------
     # User CRUD
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _hash_password(password: str) -> str:
-        salt = secrets.token_hex(16)
-        h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000)
-        return f"{salt}:{h.hex()}"
-
-    @staticmethod
-    def _verify_password(password: str, stored: str) -> bool:
-        try:
-            salt, h = stored.split(":")
-        except ValueError:
-            return False
-        computed = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000)
-        return computed.hex() == h
+    _hash_password = staticmethod(hash_password)
+    _verify_password = staticmethod(verify_password)
 
     def user_count(self) -> int:
         return UserModel.select().count()
 
     def create_user(
-        self,
-        username: str,
-        password: str,
-        display_name: str = "",
-        is_admin: bool = False,
+        self, username: str, password: str, display_name: str = "", is_admin: bool = False
     ) -> User:
         row = UserModel.create(
             username=username.strip().lower(),
-            password_hash=self._hash_password(password),
+            password_hash=hash_password(password),
             display_name=display_name or username,
             is_admin=1 if is_admin else 0,
         )
-        return self._to_user(row)
+        return to_user(row)
 
     def verify_user(self, username: str, password: str) -> User | None:
         try:
             row = UserModel.get(UserModel.username == username.strip().lower())
         except UserModel.DoesNotExist:
             return None
-        if not self._verify_password(password, row.password_hash):
-            return None
-        return self._to_user(row)
+        return to_user(row) if verify_password(password, row.password_hash) else None
 
     def generate_token(self, user_id: int) -> str:
         token = secrets.token_hex(32)
@@ -732,22 +618,21 @@ class Repository:
 
     def get_user_by_token(self, token: str) -> User | None:
         try:
-            row = UserModel.get(UserModel.token == token)
+            return to_user(UserModel.get(UserModel.token == token))
         except UserModel.DoesNotExist:
             return None
-        return self._to_user(row)
 
     def invalidate_token(self, token: str) -> None:
         UserModel.update(token=None).where(UserModel.token == token).execute()
 
     def list_users(self) -> list[User]:
-        return [self._to_user(r) for r in UserModel.select().order_by(UserModel.username)]
+        return [to_user(r) for r in UserModel.select().order_by(UserModel.username)]
 
     def delete_user(self, user_id: int) -> None:
         UserModel.delete_by_id(user_id)
 
     def change_password(self, user_id: int, new_password: str) -> None:
-        UserModel.update(password_hash=self._hash_password(new_password)).where(
+        UserModel.update(password_hash=hash_password(new_password)).where(
             UserModel.id == user_id
         ).execute()
 
@@ -756,79 +641,8 @@ class Repository:
     # ------------------------------------------------------------------
 
     def rename_tag(self, tag_id: int, new_name: str) -> None:
-        new_name = self._normalise_tag(new_name)
-        TagModel.update(name=new_name).where(TagModel.id == tag_id).execute()
+        TagModel.update(name=normalise_tag(new_name)).where(TagModel.id == tag_id).execute()
 
     def delete_tag(self, tag_id: int) -> None:
         MediaTagModel.delete().where(MediaTagModel.tag == tag_id).execute()
         TagModel.delete_by_id(tag_id)
-
-    # ------------------------------------------------------------------
-    # ORM row → DTO helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _to_media(row: MediaModel) -> Media:
-        return Media(
-            id=row.id,
-            path=row.path,
-            filename=row.filename,
-            extension=row.extension,
-            media_type=MediaType(row.media_type),
-            file_size=row.file_size,
-            file_hash=row.file_hash,
-            rating=row.rating if hasattr(row, "rating") else 0,
-            created_at=row.created_at,
-            modified_at=row.modified_at,
-            scanned_at=row.scanned_at,
-        )
-
-    @staticmethod
-    def _to_metadata(row: MetadataModel) -> Metadata:
-        return Metadata(
-            id=row.id,
-            media_id=row.media_id,
-            date_taken=row.date_taken,
-            camera_make=row.camera_make or "",
-            camera_model=row.camera_model or "",
-            lens_model=row.lens_model or "",
-            focal_length=row.focal_length,
-            aperture=row.aperture,
-            shutter_speed=row.shutter_speed or "",
-            iso=row.iso,
-            width=row.width,
-            height=row.height,
-            duration=row.duration,
-            gps_lat=row.gps_lat,
-            gps_lon=row.gps_lon,
-            orientation=row.orientation,
-        )
-
-    @staticmethod
-    def _to_tag(row: TagModel) -> Tag:
-        return Tag(
-            id=row.id,
-            name=row.name,
-            source=TagSource(row.source),
-            created_at=row.created_at,
-        )
-
-    @staticmethod
-    def _to_embedding(row: EmbeddingModel) -> Embedding:
-        return Embedding(
-            id=row.id,
-            media_id=row.media_id,
-            vector=row.vector,
-            model=row.model,
-            created_at=row.created_at,
-        )
-
-    @staticmethod
-    def _to_user(row: UserModel) -> User:
-        return User(
-            id=row.id,
-            username=row.username,
-            display_name=row.display_name,
-            is_admin=bool(row.is_admin),
-            created_at=row.created_at,
-        )

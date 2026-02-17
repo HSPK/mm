@@ -26,8 +26,7 @@ def server(ctx: Context, port: int, host: str, do_reload: bool) -> None:
     os.environ["UOM_DB"] = str(ctx.db_path)
 
     uvicorn.run(
-        "uom.server.app:_asgi_app",
-        factory=True,
+        "uom.server.app:app",
         host=host,
         port=port,
         reload=do_reload,

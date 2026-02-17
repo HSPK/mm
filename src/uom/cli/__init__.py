@@ -24,11 +24,9 @@ class Context:
     @property
     def repo(self):  # type: ignore[no-untyped-def]
         if self._repo is None:
-            from uom.db.repository import Repository
+            from uom.db.sync_repo import SyncRepo
 
-            self._repo = Repository(self.db_path)
-            self._repo.connect()
-            self._repo.init_db()
+            self._repo = SyncRepo(self.db_path)
         return self._repo
 
 

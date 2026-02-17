@@ -10,7 +10,7 @@ import click
 
 from uom.config import DEFAULT_ORGANIZE_TEMPLATE
 from uom.core.scanner import file_hash
-from uom.db.repository import Media, Metadata
+from uom.db.dto import Media, Metadata
 
 
 @dataclass

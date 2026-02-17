@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from uom.db.repository import User
+from uom.db.dto import User
 from uom.server.dependencies import get_current_user, get_repo
 from uom.server.schemas import serialize_media_brief
 
@@ -17,13 +18,13 @@ async def get_stats(
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
     repo = get_repo(request)
-
-    total_files = await repo.get_total_media_count()
-    total_size = await repo.total_size()
-    type_dist = await repo.type_distribution()
-    tag_stats = await repo.tag_stats()
-    cameras = await repo.cameras()
-
+    total_files, total_size, type_dist, tag_stats, cameras = await asyncio.gather(
+        repo.get_total_media_count(),
+        repo.total_size(),
+        repo.type_distribution(),
+        repo.tag_stats(),
+        repo.cameras(),
+    )
     return {
         "total_files": total_files,
         "total_size": total_size,

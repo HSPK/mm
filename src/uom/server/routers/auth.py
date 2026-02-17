@@ -5,8 +5,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from uom.db.repository import User
-from uom.server.dependencies import get_current_user, get_repo
+from uom.db.dto import User
+from uom.server.dependencies import get_current_user, get_repo, invalidate_token_cache
 from uom.server.schemas import ChangePasswordBody, LoginBody, SetupBody
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -15,19 +15,19 @@ _bearer = HTTPBearer(auto_error=False)
 
 @router.get("/status")
 async def auth_status(request: Request) -> dict[str, Any]:
-    """Check if setup is needed or user is authenticated."""
-    repo = get_repo(request)
-    return {"setup_required": await repo.user_count() == 0}
+    return {"setup_required": await get_repo(request).user_count() == 0}
 
 
 @router.post("/setup")
 async def auth_setup(request: Request, body: SetupBody) -> dict[str, Any]:
-    """Create the first admin user. Only works when no users exist."""
     repo = get_repo(request)
     if await repo.user_count() > 0:
         raise HTTPException(400, "Setup already completed")
     user = await repo.create_user(
-        body.username, password=body.password, display_name=body.display_name, is_admin=True
+        body.username,
+        password=body.password,
+        display_name=body.display_name,
+        is_admin=True,
     )
     token = await repo.generate_token(user.id)  # type: ignore[arg-type]
     return {
@@ -45,7 +45,6 @@ async def auth_setup(request: Request, body: SetupBody) -> dict[str, Any]:
 async def auth_login(request: Request, body: LoginBody) -> dict[str, Any]:
     repo = get_repo(request)
     user = await repo.verify_user(body.username, body.password)
-    # user = repo.verify_user(body.username, body.password)
     if not user:
         raise HTTPException(401, "Invalid username or password")
     token = await repo.generate_token(user.id)  # type: ignore[arg-type]
@@ -68,6 +67,7 @@ async def auth_logout(
     token = cred.credentials if cred else request.cookies.get("uom_token")
     if token:
         await get_repo(request).invalidate_token(token)
+        invalidate_token_cache(token)
     return {"status": "ok"}
 
 

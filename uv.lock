@@ -531,6 +531,12 @@ wheels = [
 ]
 
 [[package]]
+name = "lunar-python"
+version = "1.4.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/45/5154c95ae7feaab7ca508e71c3288692c09952dfe33b03b7c2f18a32e2cd/lunar_python-1.4.8.tar.gz", hash = "sha256:3aa11cc73c25e70ddf0ba5bdac7398c03acc9491a3aa512a91c9642973b669d6", size = 105862 }
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2093,6 +2099,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "click" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "lunar-python" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "peewee" },
@@ -2120,6 +2127,7 @@ requires-dist = [
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "click", specifier = ">=8.3.1" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115" },
+    { name = "lunar-python", specifier = ">=1.4.8" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "open-clip-torch", marker = "extra == 'clip'", specifier = ">=2.24" },
     { name = "peewee", specifier = ">=3.19.0" },
