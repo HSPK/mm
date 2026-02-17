@@ -232,13 +232,14 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
 
     if lat_val is not None:
         gps_lat = lat_val
-        # Adjust for Ref if value is positive but Ref is South (rare with -n?)
-        # With -n, exiftool usually returns signed value for Composite tags.
-        # But for EXIF tags it might follow Ref.
-        # Let's trust the value if it's signed (handled by exiftool -n).
 
     if lon_val is not None:
         gps_lon = lon_val
+
+    # (0, 0) is the Gulf of Guinea — treat as "no GPS data"
+    if gps_lat == 0.0 and gps_lon == 0.0:
+        gps_lat = None
+        gps_lon = None
 
     return Metadata(
         media_id=media_id,

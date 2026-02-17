@@ -458,28 +458,20 @@ class Repository:
         except MetadataModel.DoesNotExist:
             return None
 
-    def get_metadata_needing_geo_update(
-        self, limit: int = 1000, force_reparse: bool = False
-    ) -> list[Metadata]:
+    def get_metadata_needing_geo_update(self, force_reparse: bool = False) -> list[Metadata]:
         """
         Get metadata records that need location update.
         If force_reparse=False, only items with NO location_label (missing completely).
-        If force_reparse=True, items with GPS but missing country/city details even if label exists.
+        If force_reparse=True, ALL items with valid GPS (re-geocode everything).
         """
         query = MetadataModel.select().where(
             MetadataModel.gps_lat.is_null(False),
             MetadataModel.gps_lon.is_null(False),
+            ~((MetadataModel.gps_lat == 0.0) & (MetadataModel.gps_lon == 0.0)),
         )
 
         if not force_reparse:
             query = query.where(MetadataModel.location_label.is_null())
-        else:
-            # Force reparse: Find items with GPS but missing country OR city
-            query = query.where(
-                (MetadataModel.location_country.is_null()) | (MetadataModel.location_city.is_null())
-            )
-
-        query = query.limit(limit)
 
         return [to_metadata(m) for m in query]
 

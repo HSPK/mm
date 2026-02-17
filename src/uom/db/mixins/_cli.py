@@ -192,19 +192,16 @@ class CliMixin:
 
     async def get_metadata_needing_geo_update(
         self,
-        limit: int = 1000,
         force_reparse: bool = False,
     ) -> list[Metadata]:
         q = MetadataModel.select().where(
-            MetadataModel.gps_lat.is_null(False) & MetadataModel.gps_lon.is_null(False)
+            MetadataModel.gps_lat.is_null(False)
+            & MetadataModel.gps_lon.is_null(False)
+            & ~((MetadataModel.gps_lat == 0.0) & (MetadataModel.gps_lon == 0.0))
         )
         if not force_reparse:
             q = q.where(MetadataModel.location_label.is_null())
-        else:
-            q = q.where(
-                MetadataModel.location_country.is_null() | MetadataModel.location_city.is_null()
-            )
-        rows = await self.objects.fetchall(q.limit(limit))
+        rows = await self.objects.fetchall(q)
         return [to_metadata(r) for r in rows]
 
     async def update_location_label(
