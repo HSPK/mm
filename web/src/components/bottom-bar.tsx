@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { NavLink } from "react-router-dom"
 import {
     Images,
     FolderHeart,
@@ -9,251 +10,20 @@ import {
     RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react"
-import { FloatingSearchBar } from "@/components/floating-search-bar"
 import { useMediaStore } from "@/stores/media"
-import { useAlbumSectionStore } from "@/stores/album-section"
 import { api } from "@/api/client"
 import { Button } from "@/components/ui/button"
-import MediaLibraryPage from "@/pages/media-library"
-import AlbumsPage from "@/pages/albums"
 
-const navItems = [
+// ─── Nav items (shared with layout) ──────────────────────
+
+export const navItems = [
     { to: "/", label: "Library", icon: Images },
     { to: "/albums", label: "Albums", icon: FolderHeart },
 ]
 
-const TAB_ROUTES = ["/", "/albums"]
-
-function getActiveIndex(pathname: string) {
-    // Exact match for "/", prefix match for others
-    const idx = navItems.findIndex((item) =>
-        item.to === "/" ? pathname === "/" : pathname.startsWith(item.to),
-    )
-    return idx === -1 ? 0 : idx
-}
-
-export default function AppLayout() {
-    const location = useLocation()
-    const navRef = useRef<HTMLElement>(null)
-    const itemRefs = useRef<(HTMLAnchorElement | null)[]>([])
-    const [indicator, setIndicator] = useState({ left: 0, width: 0 })
-    const isTabRoute = TAB_ROUTES.includes(location.pathname)
-    const activeTabIndex = getActiveIndex(location.pathname)
-
-    // ─── Per-tab scroll containers (state for reactivity) ──
-    const [libraryScrollEl, setLibraryScrollEl] = useState<HTMLDivElement | null>(null)
-    const [albumsScrollEl, setAlbumsScrollEl] = useState<HTMLDivElement | null>(null)
-    const [outletScrollEl, setOutletScrollEl] = useState<HTMLDivElement | null>(null)
-
-    // Scroll Library to top when entering album view
-    const { activeLabel: currentLabel, filters } = useMediaStore()
-    const isDeletedView = filters.deleted
-    const [prevLabel, setPrevLabel] = useState(currentLabel)
-    if (currentLabel !== prevLabel) {
-        setPrevLabel(currentLabel)
-        if (currentLabel && libraryScrollEl) {
-            libraryScrollEl.scrollTop = 0
-        }
-    }
-
-    const activeScrollEl = isTabRoute
-        ? (activeTabIndex === 0 ? libraryScrollEl : albumsScrollEl)
-        : outletScrollEl
-
-    // ─── Auto-hide both navs on scroll ─────────────────────
-    const [navVisible, setNavVisible] = useState(true)
-    const lastScrollY = useRef(0)
-
-    // Reset visibility when active scroll container changes (during render)
-    const [prevActiveScrollEl, setPrevActiveScrollEl] = useState(activeScrollEl)
-    if (activeScrollEl !== prevActiveScrollEl) {
-        setPrevActiveScrollEl(activeScrollEl)
-        setNavVisible(true)
-    }
-
-    useEffect(() => {
-        const el = activeScrollEl
-        if (!el) return
-        lastScrollY.current = el.scrollTop
-        const handle = () => {
-            const y = el.scrollTop
-            if (y > lastScrollY.current && y > 60) {
-                setNavVisible(false)
-            } else {
-                setNavVisible(true)
-            }
-            lastScrollY.current = y
-        }
-        el.addEventListener("scroll", handle, { passive: true })
-        return () => el.removeEventListener("scroll", handle)
-    }, [activeScrollEl])
-
-    // ─── Nav indicator ─────────────────────────────────────
-    const updateIndicator = useCallback(() => {
-        const el = itemRefs.current[activeTabIndex]
-        const nav = navRef.current
-        if (el && nav) {
-            const navRect = nav.getBoundingClientRect()
-            const elRect = el.getBoundingClientRect()
-            setIndicator({
-                left: elRect.left - navRect.left,
-                width: elRect.width,
-            })
-        }
-    }, [activeTabIndex])
-
-    useLayoutEffect(() => {
-        updateIndicator()
-    }, [updateIndicator])
-
-    useEffect(() => {
-        window.addEventListener("resize", updateIndicator)
-        return () => window.removeEventListener("resize", updateIndicator)
-    }, [updateIndicator])
-
-    // ─── Swipe gesture for tab switching ─────────────────
-    const navigate = useNavigate()
-    const { activeLabel: inAlbumView } = useMediaStore()
-    const albumSectionLabel = useAlbumSectionStore((s) => s.label)
-    const swipeDisabled = !!inAlbumView || !!albumSectionLabel
-    const touchRef = useRef<{ startX: number; startY: number; startTime: number } | null>(null)
-    const [swipeOffset, setSwipeOffset] = useState(0)
-    const [swiping, setSwiping] = useState(false)
-
-    const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        if (swipeDisabled) return
-        const t = e.touches[0]
-        touchRef.current = { startX: t.clientX, startY: t.clientY, startTime: Date.now() }
-        setSwipeOffset(0)
-        setSwiping(false)
-    }, [swipeDisabled])
-
-    const handleTouchMove = useCallback((e: React.TouchEvent) => {
-        if (!touchRef.current) return
-        const t = e.touches[0]
-        const dx = t.clientX - touchRef.current.startX
-        const dy = t.clientY - touchRef.current.startY
-
-        // If mostly vertical, ignore
-        if (!swiping && Math.abs(dy) > Math.abs(dx)) {
-            touchRef.current = null
-            return
-        }
-
-        // Start swiping only after a small threshold
-        if (!swiping && Math.abs(dx) > 10) {
-            setSwiping(true)
-        }
-
-        if (swiping || Math.abs(dx) > 10) {
-            // Clamp: don't swipe past edges
-            const maxLeft = activeTabIndex === 0 ? 0 : -Infinity
-            const maxRight = activeTabIndex === navItems.length - 1 ? 0 : Infinity
-            const clamped = Math.max(Math.min(dx, maxRight === Infinity ? dx : 0), maxLeft === -Infinity ? dx : 0)
-
-            // Rubber band at edges
-            if ((activeTabIndex === 0 && dx > 0) || (activeTabIndex === navItems.length - 1 && dx < 0)) {
-                setSwipeOffset(dx * 0.2) // resistance
-            } else {
-                setSwipeOffset(clamped)
-            }
-        }
-    }, [swiping, activeTabIndex])
-
-    const handleTouchEnd = useCallback(() => {
-        if (!touchRef.current || !swiping) {
-            touchRef.current = null
-            setSwipeOffset(0)
-            setSwiping(false)
-            return
-        }
-
-        const threshold = window.innerWidth * 0.25
-        const velocity = Math.abs(swipeOffset) / (Date.now() - touchRef.current.startTime) * 1000
-
-        if (swipeOffset > threshold || (swipeOffset > 30 && velocity > 500)) {
-            // Swipe right → go to previous tab
-            if (activeTabIndex > 0) {
-                navigate(navItems[activeTabIndex - 1].to)
-            }
-        } else if (swipeOffset < -threshold || (swipeOffset < -30 && velocity > 500)) {
-            // Swipe left → go to next tab
-            if (activeTabIndex < navItems.length - 1) {
-                navigate(navItems[activeTabIndex + 1].to)
-            }
-        }
-
-        touchRef.current = null
-        setSwipeOffset(0)
-        setSwiping(false)
-    }, [swipeOffset, swiping, activeTabIndex, navigate])
-
-    // Check if filter tags will be shown on Library page (for dynamic padding)
-    const hasFilterTags = !!(currentLabel || isDeletedView ||
-        filters.type || filters.camera ||
-        filters.date_from || filters.date_to ||
-        filters.min_rating ||
-        (filters.lat != null && filters.lon != null) ||
-        filters.search
-    )
-    const hasAlbumSectionTags = !!albumSectionLabel
-
-    return (
-        <div className="flex h-screen flex-col overflow-hidden bg-background">
-            {/* Floating search bar — only on tab routes */}
-            {isTabRoute && <FloatingSearchBar scrollContainer={activeScrollEl} />}
-
-            {/* Content area */}
-            <div className="flex-1 relative overflow-hidden">
-                {/* Tab carousel — both tabs side by side, slide via translateX */}
-                {isTabRoute && (
-                    <div
-                        className="absolute inset-0 flex"
-                        style={{
-                            transform: `translateX(calc(${-activeTabIndex * 100}% + ${swiping ? swipeOffset : 0}px))`,
-                            transition: swiping ? 'none' : 'transform 300ms ease',
-                            willChange: 'transform',
-                        }}
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                    >
-                        <div ref={setLibraryScrollEl} className={cn("w-full h-full shrink-0 overflow-y-auto", hasFilterTags ? "pt-[5.5rem]" : "pt-16")}>
-                            <MediaLibraryPage />
-                        </div>
-                        <div ref={setAlbumsScrollEl} className={cn("w-full h-full shrink-0 overflow-y-auto", hasAlbumSectionTags ? "pt-[5.5rem]" : "pt-16")}>
-                            <AlbumsPage />
-                        </div>
-                    </div>
-                )}
-
-                {/* Non-tab routes */}
-                {!isTabRoute && (
-                    <div
-                        ref={setOutletScrollEl}
-                        className="absolute inset-0 overflow-y-auto bg-background z-10"
-                    >
-                        <Outlet />
-                    </div>
-                )}
-            </div>
-
-            {/* Floating bottom navigation / selection action bar */}
-            <BottomBar
-                isTabRoute={isTabRoute}
-                navVisible={navVisible}
-                navRef={navRef}
-                itemRefs={itemRefs}
-                indicator={indicator}
-            />
-        </div>
-    )
-}
-
 // ─── Bottom Bar: morphs between nav tabs and selection action bar ──
 
-function BottomBar({
+export function BottomBar({
     isTabRoute,
     navVisible,
     navRef,
@@ -319,14 +89,12 @@ function BottomBar({
         const ids = [...selectedIds]
         if (ids.length === 0) return
         if (isDeletedView) {
-            // In trash: permanent delete
             if (!window.confirm(`Permanently delete ${ids.length} item(s)?`)) return
             await Promise.allSettled(ids.map((id) => api.delete(`/media/${id}`, { params: { permanent: true } })))
             removeItems(ids)
             exitSelectionMode()
             if (items.length - ids.length <= 0) resetFilters()
         } else {
-            // Normal: soft delete
             try {
                 await api.post("/batch/delete", { media_ids: ids })
             } catch {
@@ -422,7 +190,7 @@ function BottomBar({
             {/* The bar itself */}
             <div className="flex justify-center px-4 pb-4">
                 {selectionMode ? (
-                    /* ── Selection action bar (works for both library and trash) ── */
+                    /* ── Selection action bar ── */
                     <div className="relative flex items-center gap-1 px-2 py-1.5 bg-background border border-border shadow-2xl shadow-black/10 rounded-full">
                         <button
                             onClick={() => { exitSelectionMode() }}
@@ -489,7 +257,7 @@ function BottomBar({
                         )}
                     </div>
                 ) : isDeletedView ? (
-                    /* ── Trash default bar (no selection yet) ── */
+                    /* ── Trash default bar ── */
                     <div className="relative flex items-center gap-1 px-2 py-1.5 bg-background border border-border shadow-2xl shadow-black/10 rounded-full">
                         <button
                             onClick={resetFilters}

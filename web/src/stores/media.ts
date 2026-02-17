@@ -8,6 +8,7 @@ export interface Filters {
     camera: string | null
     date_from: string | null
     date_to: string | null
+    date_ranges: string[][] | null
     sort: string
     order: string
     search: string | null
@@ -62,6 +63,7 @@ const defaultFilters: Filters = {
     camera: null,
     date_from: null,
     date_to: null,
+    date_ranges: null,
     sort: "date_taken",
     order: "desc",
     search: null,
@@ -127,7 +129,8 @@ export const useMediaStore = create<MediaState>((set, get) => ({
             // Add non-null filters
             for (const [k, v] of Object.entries(currentState.filters)) {
                 if (v !== null && v !== false && v !== "") {
-                    params[k] = v
+                    // date_ranges must be JSON-encoded for the API
+                    params[k] = k === "date_ranges" && Array.isArray(v) ? JSON.stringify(v) : v
                 }
             }
 

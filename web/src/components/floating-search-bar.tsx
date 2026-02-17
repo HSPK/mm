@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useAuthStore } from "@/stores/auth"
 import { useMediaStore } from "@/stores/media"
+import { useAlbumSectionStore } from "@/stores/album-section"
 import { api } from "@/api/client"
 import { Input } from "@/components/ui/input"
 import { StarRating } from "@/components/ui/star-rating"
@@ -67,6 +68,10 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const isInAlbumView = isOnLibrary && !!activeLabel  // viewing album content on Library tab
     const showFilters = isOnLibrary && !isDeletedView  // hide media filters when viewing trash
 
+    // Album section detail state (二级页面)
+    const { label: albumSectionLabel, search: albumSectionSearch, setSearch: setAlbumSectionSearch, exit: exitAlbumSection } = useAlbumSectionStore()
+    const isInAlbumSection = isOnAlbums && !!albumSectionLabel
+
     // Sync searchInput when store filter changes externally (during render)
     const [prevFilterSearch, setPrevFilterSearch] = useState(filters.search)
     if (filters.search !== prevFilterSearch) {
@@ -99,6 +104,25 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
 
     // Build active filter tags (shown below search bar on Library page)
     const filterTags = useMemo(() => {
+        // Album section detail tags
+        if (isInAlbumSection) {
+            const tags: { key: string; label: string; color?: string; removable: boolean; onRemove: () => void }[] = []
+            tags.push({
+                key: "section",
+                label: albumSectionLabel!,
+                removable: true,
+                onRemove: exitAlbumSection,
+            })
+            if (albumSectionSearch) {
+                tags.push({
+                    key: "search",
+                    label: `"${albumSectionSearch}"`,
+                    removable: true,
+                    onRemove: () => setAlbumSectionSearch(""),
+                })
+            }
+            return tags
+        }
         if (!isOnLibrary) return []
         const tags: { key: string; label: string; color?: string; removable: boolean; onRemove: () => void }[] = []
         // Only filters whose keys are in albumFilterKeys are locked (non-removable)
@@ -173,12 +197,12 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
 
         return tags
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOnLibrary, filters, albumFilterKeys, total])
+    }, [isOnLibrary, isInAlbumSection, albumSectionLabel, albumSectionSearch, filters, albumFilterKeys, total])
 
     // Auto-hide on scroll down, show on scroll up
-    // Always visible when in album view or trash mode (need back button)
+    // Always visible when in album view, trash mode, or album section detail (need back button)
     useEffect(() => {
-        if (activeLabel || isDeletedView) {
+        if (activeLabel || isDeletedView || isInAlbumSection) {
             setVisible(true)
             return
         }
@@ -197,7 +221,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         }
         el.addEventListener("scroll", handle, { passive: true })
         return () => el.removeEventListener("scroll", handle)
-    }, [scrollContainer, activeLabel, isDeletedView])
+    }, [scrollContainer, activeLabel, isDeletedView, isInAlbumSection])
 
     // Close menu on outside click
     useEffect(() => {
@@ -261,17 +285,19 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                         {/* Back button — animates in/out */}
                         <button
                             onClick={() => {
-                                if (isDeletedView || activeLabel) {
+                                if (isInAlbumSection) {
+                                    exitAlbumSection()
+                                } else if (isDeletedView || activeLabel) {
                                     resetFilters()
                                     navigate("/albums")
                                 }
                             }}
                             className={cn(
                                 "absolute left-2.5 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground/50 hover:text-foreground hover:bg-secondary/60 transition-all duration-200 shrink-0",
-                                (activeLabel || isDeletedView) ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
+                                (activeLabel || isDeletedView || isInAlbumSection) ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
                             )}
                             aria-label="Back"
-                            tabIndex={(activeLabel || isDeletedView) ? 0 : -1}
+                            tabIndex={(activeLabel || isDeletedView || isInAlbumSection) ? 0 : -1}
                         >
                             <ChevronLeft className="h-4 w-4" />
                         </button>
@@ -279,22 +305,23 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                         {/* Search icon — fades when back button is visible */}
                         <Search className={cn(
                             "absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground/40 transition-opacity duration-200",
-                            (activeLabel || isDeletedView) ? "opacity-0" : "opacity-100"
+                            (activeLabel || isDeletedView || isInAlbumSection) ? "opacity-0" : "opacity-100"
                         )} />
 
                         <Input
-                            value={searchInput}
-                            onChange={(e) => setSearchInput(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && submitSearch()}
+                            value={isInAlbumSection ? albumSectionSearch : searchInput}
+                            onChange={(e) => isInAlbumSection ? setAlbumSectionSearch(e.target.value) : setSearchInput(e.target.value)}
+                            onKeyDown={(e) => !isInAlbumSection && e.key === "Enter" && submitSearch()}
                             placeholder={
-                                isDeletedView ? "Search deleted…"
-                                    : isInAlbumView ? `Search in ${activeLabel}…`
-                                        : isOnAlbums ? "Search albums…"
-                                            : "Search photos…"
+                                isInAlbumSection ? `Search ${albumSectionLabel}…`
+                                    : isDeletedView ? "Search deleted…"
+                                        : isInAlbumView ? `Search in ${activeLabel}…`
+                                            : isOnAlbums ? "Search albums…"
+                                                : "Search photos…"
                             }
                             className={cn(
                                 "w-full h-11 pr-4 text-sm bg-background/80 backdrop-blur-xl border border-border/60 rounded-full placeholder:text-muted-foreground/40 focus-visible:ring-1 focus-visible:ring-ring/30 shadow-lg shadow-black/10 transition-[padding] duration-200",
-                                (activeLabel || isDeletedView) ? "pl-10" : "pl-11",
+                                (activeLabel || isDeletedView || isInAlbumSection) ? "pl-10" : "pl-11",
                             )}
                         />
                     </div>

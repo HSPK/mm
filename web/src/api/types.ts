@@ -87,3 +87,50 @@ export interface User {
     display_name: string
     is_admin: boolean
 }
+
+// ─── Smart Albums ─────────────────────────────────────────
+
+export interface SmartAlbum {
+    key: string
+    title: string
+    subtitle?: string
+    count?: number
+    cover_id?: number | null
+    icon?: string
+    color?: string
+    filters: Record<string, unknown>
+    search_text?: string
+    festival_id?: string
+}
+
+export interface SmartAlbumsResponse {
+    library: SmartAlbum[]
+    tags: SmartAlbum[]
+    cameras: SmartAlbum[]
+    festivals: SmartAlbum[]
+    years: SmartAlbum[]
+    places: SmartAlbum[]
+}
+
+export type SectionId = "tags" | "cameras" | "festivals" | "years" | "places"
+
+export interface AlbumItem {
+    key: string
+    icon: import("lucide-react").LucideIcon
+    title: string
+    subtitle?: string
+    count?: number
+    coverId?: number | null
+    onClick: () => void
+    color?: string
+    searchText: string
+}
+
+export interface SectionDef {
+    id: SectionId
+    icon: import("lucide-react").LucideIcon
+    title: string
+    items: AlbumItem[]
+    previewItems?: AlbumItem[]
+    previewCount: number
+}
