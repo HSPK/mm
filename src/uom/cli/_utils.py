@@ -98,3 +98,107 @@ def parallel_scan(
                 bar.update(1)
 
     return results, errors
+
+
+# ---------------------------------------------------------------------------
+# Scan summary (shared by scan, import)
+# ---------------------------------------------------------------------------
+
+
+def print_scan_summary(results: list[ScanResult], errors: int = 0) -> None:
+    """Print a detailed summary of scan results."""
+    if not results:
+        return
+
+    # Counters by media type
+    photos, videos, audios = [], [], []
+    for r in results:
+        if r.media_type == "photo":
+            photos.append(r)
+        elif r.media_type == "video":
+            videos.append(r)
+        elif r.media_type == "audio":
+            audios.append(r)
+
+    total_size = sum(r.file_size for r in results)
+    photo_size = sum(r.file_size for r in photos)
+    video_size = sum(r.file_size for r in videos)
+    audio_size = sum(r.file_size for r in audios)
+
+    # Missing metadata
+    missing_date = [r for r in results if not r.md_date_taken]
+    missing_camera = [r for r in results if not r.md_camera_model]
+    missing_gps = [r for r in results if r.md_gps_lat is None]
+    missing_resolution = [r for r in results if r.md_width is None]
+
+    # Camera breakdown
+    cameras: dict[str, int] = {}
+    for r in results:
+        if r.md_camera_model:
+            key = r.md_camera_model
+            if r.md_camera_make and r.md_camera_make.lower() not in r.md_camera_model.lower():
+                key = f"{r.md_camera_make} {r.md_camera_model}"
+            cameras[key] = cameras.get(key, 0) + 1
+
+    # Date range
+    dates = [r.md_date_taken for r in results if r.md_date_taken]
+    date_range = ""
+    if dates:
+        dates.sort()
+        earliest = dates[0][:10]  # YYYY-MM-DD
+        latest = dates[-1][:10]
+        if earliest == latest:
+            date_range = earliest
+        else:
+            date_range = f"{earliest} ~ {latest}"
+
+    # Video duration
+    video_duration = sum(r.md_duration or 0 for r in videos)
+
+    # Print summary
+    click.echo()
+    click.secho("─── Scan Summary ───────────────────────────────────────", fg="cyan")
+
+    # By type
+    click.echo(f"  📸 Photos : {len(photos):>5}  ({fmt_size(photo_size)})")
+    click.echo(f"  🎬 Videos : {len(videos):>5}  ({fmt_size(video_size)})")
+    if audios:
+        click.echo(f"  🎵 Audio  : {len(audios):>5}  ({fmt_size(audio_size)})")
+    click.echo(f"  {'─' * 30}")
+    click.echo(f"  📁 Total  : {len(results):>5}  ({fmt_size(total_size)})")
+
+    if video_duration > 0:
+        click.echo(f"  ⏱️  Video duration: {fmt_duration(video_duration)}")
+
+    if date_range:
+        click.echo(f"  📅 Date range: {date_range}")
+
+    # Missing metadata
+    if missing_date or missing_camera or missing_gps:
+        click.echo()
+        click.secho("  ⚠️  Missing metadata:", fg="yellow")
+        if missing_date:
+            click.echo(f"     • No date taken: {len(missing_date)} file(s)")
+        if missing_camera:
+            click.echo(f"     • No camera info: {len(missing_camera)} file(s)")
+        if missing_gps:
+            click.echo(f"     • No GPS: {len(missing_gps)} file(s)")
+        if missing_resolution:
+            click.echo(f"     • No resolution: {len(missing_resolution)} file(s)")
+
+    # Top cameras
+    if cameras:
+        click.echo()
+        click.echo("  📷 Cameras:")
+        sorted_cams = sorted(cameras.items(), key=lambda x: -x[1])
+        for cam, cnt in sorted_cams[:5]:
+            click.echo(f"     • {cam}: {cnt}")
+        if len(cameras) > 5:
+            click.echo(f"     • ... and {len(cameras) - 5} more")
+
+    # Errors
+    if errors:
+        click.echo()
+        click.secho(f"  ❌ Errors: {errors} file(s) failed to scan", fg="red")
+
+    click.secho("────────────────────────────────────────────────────────", fg="cyan")

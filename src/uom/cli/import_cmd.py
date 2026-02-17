@@ -86,7 +86,7 @@ def import_cmd(
 
     if not media_under_src:
         click.echo(f"No media in DB for {source}. Scanning source first...")
-        from uom.cli._utils import parallel_scan
+        from uom.cli._utils import parallel_scan, print_scan_summary
         from uom.core.scanner import discover_media, save_scan_result
 
         files = list(discover_media(source))
@@ -96,7 +96,7 @@ def import_cmd(
             results, _errors = parallel_scan(files, label="Scanning")
             for result in results:
                 save_scan_result(repo, result, library_root=library_root)
-            click.echo(f"Scanned {len(files)} file(s).")
+            print_scan_summary(results, _errors)
 
         # Refresh
         all_media = repo.all_media()

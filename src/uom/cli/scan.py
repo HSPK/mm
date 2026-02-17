@@ -8,7 +8,7 @@ from typing import Any
 import click
 
 from uom.cli import Context, pass_ctx
-from uom.cli._utils import find_media_by_path, parallel_scan
+from uom.cli._utils import find_media_by_path, parallel_scan, print_scan_summary
 from uom.core.scanner import save_scan_result
 
 # ---------------------------------------------------------------------------
@@ -123,8 +123,9 @@ def scan(
                 new_count += 1
 
     click.echo(f"\nDone. Added {new_count} new, updated {updated_count} existing.")
-    if errors:
-        click.echo(f"  {errors} file(s) had errors.")
+
+    # Print detailed summary
+    print_scan_summary(results, errors)
 
     # Phase 4 (optional): embeddings
     if embed:
