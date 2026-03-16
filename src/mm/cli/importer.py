@@ -4,8 +4,6 @@ from pathlib import Path
 
 import click
 
-from mm.config import DEFAULT_IMPORT_TEMPLATE
-
 
 @click.command("import")
 @click.argument("source", type=click.Path(exists=True, file_okay=False, path_type=Path))
@@ -22,9 +20,7 @@ def import_cmd(source: Path, move: bool) -> None:
     library_root = get_library_root()
     click.echo(f"Library: {library_root}")
 
-    # Read template from DB config
-    stored = repo.get_config("import_template")
-    template = stored if stored else DEFAULT_IMPORT_TEMPLATE
+    template = repo.get_config("import_template")
     click.echo(f"Template: {template}")
 
     # ── 1. Discover media files on disk ──────────────────────────

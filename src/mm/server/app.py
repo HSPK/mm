@@ -57,16 +57,12 @@ def create_app(db_path: str | Path) -> FastAPI:
     ):
         app.include_router(r.router)
 
-    # Serve frontend static files
-    web_dist = Path(os.environ.get("MM_WEB_DIST", "web/dist"))
+    # Serve frontend static files (bundled in package)
+    web_dist = Path(__file__).resolve().parent.parent / "_web_dist"
     if not web_dist.is_dir():
-        for candidate in [
-            Path(__file__).resolve().parents[3] / "web" / "dist",
-            Path.cwd() / "web" / "dist",
-        ]:
-            if candidate.is_dir():
-                web_dist = candidate
-                break
+        env_dist = os.environ.get("MM_WEB_DIST")
+        if env_dist:
+            web_dist = Path(env_dist)
 
     if web_dist.is_dir():
         assets_dir = web_dist / "assets"

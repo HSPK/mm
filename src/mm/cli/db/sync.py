@@ -10,22 +10,20 @@ from mm.config import resolve_media_path
 
 
 @db.command("sync")
-@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("-j", "--jobs", type=int, default=0, help="Worker count (0 = auto).")
 @click.option("-y", "--yes", is_flag=True, help="Skip confirmation prompt.")
-def db_sync(directory: Path, jobs: int, yes: bool) -> None:
+def db_sync(jobs: int, yes: bool) -> None:
     """Sync database with disk: remove stale entries and re-scan changed files.
 
-    This is equivalent to running `db clean` followed by `scan` for the
-    given directory, but it also detects files that moved or changed size.
+    Scans the entire library, detects missing files and files whose size
+    has changed since last scan.
     """
-    from mm.cli import get_db_path, get_repo
+    from mm.cli import get_library_root, get_repo
 
     repo = get_repo()
-    root = str(directory.resolve())
-    library_root = str(get_db_path().resolve().parent)
+    library_root = str(get_library_root().resolve())
 
-    # ---- Phase 1: find stale records under this directory ----
+    # ---- Phase 1: find stale records ----
     all_rows = repo.all_media_paths()
     stale_ids: list[int] = []
     stale_paths: list[str] = []
@@ -34,8 +32,6 @@ def db_sync(directory: Path, jobs: int, yes: bool) -> None:
 
     for mid, path in all_rows:
         abs_path = resolve_media_path(path, library_root)
-        if not abs_path.startswith(root):
-            continue
         if not os.path.exists(abs_path):
             stale_ids.append(mid)
             stale_paths.append(abs_path)
@@ -46,10 +42,8 @@ def db_sync(directory: Path, jobs: int, yes: bool) -> None:
                 changed_ids.append(mid)
                 changed_paths.append(abs_path)
 
-    click.echo(f"Directory : {root}")
-    click.echo(
-        f"DB records: {sum(1 for _, p in all_rows if resolve_media_path(p, library_root).startswith(root))}"
-    )
+    click.echo(f"Library   : {library_root}")
+    click.echo(f"DB records: {len(all_rows)}")
     click.echo(f"Stale     : {len(stale_ids)}")
     click.echo(f"Changed   : {len(changed_ids)}")
 

@@ -9,7 +9,7 @@ src/mm/_version.py
 node_modules/
 .vite/
 /ssd
-
+_web_dist/
 # Virtual environments
 .venv
 *.db
