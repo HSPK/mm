@@ -4,6 +4,6 @@ except ImportError:
     from importlib.metadata import PackageNotFoundError, version
 
     try:
-        __version__ = version("mm")
+        __version__ = version("litemm")
     except PackageNotFoundError:
         __version__ = "0.0.0-dev"

@@ -1,5 +1,5 @@
 [project]
-name = "mm"
+name = "litemm"
 dynamic = ["version"]
 description = "Media Manager & Visualizer"
 readme = "README.md"
