@@ -31,9 +31,7 @@ async def get_current_library(
     db_path = str(getattr(request.app.state, "db_path", ""))
     return {
         "db_path": db_path,
-        "name": Path(db_path).parent.name
-        if "/" in db_path or "\\" in db_path
-        else "default",
+        "name": Path(db_path).parent.name if "/" in db_path or "\\" in db_path else "default",
     }
 
 
@@ -42,8 +40,8 @@ async def list_recent_libraries(
     user: User | None = Depends(get_current_user),
 ) -> list[dict[str, str]]:
     """Return the list of recently used library paths."""
-    raw = os.environ.get("UOM_LIBRARIES", "")
-    current = os.environ.get("UOM_DB", "uom.db")
+    raw = os.environ.get("MM_LIBRARIES", "")
+    current = os.environ.get("MM_DB", "mm.db")
     paths: list[str] = [p.strip() for p in raw.split(";") if p.strip()]
     if current and current not in paths:
         paths.insert(0, current)
@@ -71,11 +69,11 @@ async def switch_library(
 
     The db_path can be either:
     - A direct path to a .db file
-    - A directory path (will look for uom.db inside it)
+    - A directory path (will look for mm.db inside it)
     """
     target = Path(body.db_path)
 
-    # If a directory is given, look for uom.db inside
+    # If a directory is given, look for mm.db inside
     if target.is_dir():
         target = target / DEFAULT_DB_NAME
 
@@ -95,7 +93,7 @@ async def switch_library(
     request.app.state.repo = new_repo
     request.app.state.db_path = resolved
     request.app.state.library_root = str(Path(resolved).parent)
-    os.environ["UOM_DB"] = resolved
+    os.environ["MM_DB"] = resolved
 
     # Invalidate caches
     invalidate_token_cache()

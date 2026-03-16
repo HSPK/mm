@@ -66,9 +66,3 @@ class AsyncRepository(
                 )
             except Exception:
                 pass
-        if await self.count_users() == 0:
-            await self.create_user(
-                "admin", password="admin123", display_name="Admin", is_admin=True
-            )
-            print("[uom] Created default admin user: admin / admin123")
-        await self._seed_smart_albums()

@@ -1,5 +1,3 @@
-"""FastAPI application — REST API for UOM media library."""
-
 from __future__ import annotations
 
 import os
@@ -32,7 +30,7 @@ def _derive_library_root(db_path: str | Path) -> str:
 
 
 def create_app(db_path: str | Path) -> FastAPI:
-    app = FastAPI(title="UOM Media Library", version="3.0.0", lifespan=lifespan)
+    app = FastAPI(title="Media Library", version="3.0.0", lifespan=lifespan)
     app.state.db_path = db_path
     app.state.library_root = _derive_library_root(db_path)
 
@@ -60,7 +58,7 @@ def create_app(db_path: str | Path) -> FastAPI:
         app.include_router(r.router)
 
     # Serve frontend static files
-    web_dist = Path(os.environ.get("UOM_WEB_DIST", "web/dist"))
+    web_dist = Path(os.environ.get("MM_WEB_DIST", "web/dist"))
     if not web_dist.is_dir():
         for candidate in [
             Path(__file__).resolve().parents[3] / "web" / "dist",
@@ -103,5 +101,5 @@ def create_app(db_path: str | Path) -> FastAPI:
 
 
 # ASGI entry point
-db_path_env = os.environ.get("UOM_DB", "uom.db")
+db_path_env = os.environ.get("MM_DB", "mm.db")
 app = create_app(db_path_env)

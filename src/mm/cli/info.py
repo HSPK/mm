@@ -1,21 +1,16 @@
-"""uom info — show metadata for a single file."""
-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import click
 
-from mm.cli import Context, pass_ctx
 from mm.cli._utils import fmt_size as _fmt_size
+from mm.db.dto import Metadata
 
 
 @click.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--raw", is_flag=True, help="Always extract from file (ignore database).")
-@pass_ctx
-def info(ctx: Context, file: Path, raw: bool) -> None:
+def info(file: Path) -> None:
     """Show metadata for a single media file."""
     from mm.core.metadata import check_tools
     from mm.core.scanner import scan_and_extract
@@ -29,81 +24,24 @@ def info(ctx: Context, file: Path, raw: bool) -> None:
             err=True,
         )
 
-    resolved = str(file.resolve())
-    repo = ctx.repo
+    res = scan_and_extract(file, compute_hash=True)
 
-    media = None
-    if not raw:
-        media = repo.get_media_by_path(resolved)
+    if res.error:
+        click.secho(f"Error scanning file: {res.error}", fg="red")
+        return
 
-    if media and media.id is not None:
-        # DB Mode
-        click.secho(f"Source: Database (ID: {media.id})", fg="cyan")
-        click.echo(f"File     : {media.path}")
-        click.echo(f"Type     : {media.media_type.value}")
-        click.echo(f"Size     : {_fmt_size(media.file_size)}")
-        click.echo(f"Hash     : {media.file_hash or '(not computed)'}")
-        click.echo(f"Scanned  : {media.scanned_at}")
-        click.echo()
+    m = res.media
+    click.echo(f"File     : {m.path}")
+    click.echo(f"Type     : {m.media_type.value}")
+    click.echo(f"Size     : {_fmt_size(m.file_size)}")
+    click.echo(f"Hash     : {m.file_hash}")
+    click.echo(f"Modified : {m.modified_at}")
+    click.echo()
 
-        md = repo.get_metadata(media.id)
-        if md:
-            _print_metadata(md)
-        else:
-            click.echo("(no metadata in database)")
-
-        tags_info = repo.tags_for_media(media.id)
-        if tags_info:
-            click.echo()
-            click.echo("Tags:")
-            for t, conf in tags_info:
-                conf_str = f" ({conf:.2f})" if conf < 1.0 else ""
-                click.echo(f"  {t.name}{conf_str}  [{t.source.value}]")
-    else:
-        # RAW Mode (Live extraction via shared scanner logic)
-        source_label = "Disk (Live extraction)" if not raw else "Disk (Force raw)"
-        click.secho(f"Source: {source_label}", fg="yellow")
-
-        # scan_and_extract handles extraction + basic stat
-        # We pass compute_hash=False to keep it fast for 'info' unless needed,
-        # but user sees 'Hash' field, maybe we should just compute it to be accurate?
-        # Let's compute it. It's usually fast enough for one file.
-        res = scan_and_extract(file, compute_hash=True)
-
-        if res.error:
-            click.secho(f"Error scanning file: {res.error}", fg="red")
-            return
-
-        click.echo(f"File     : {res.path}")
-        click.echo(f"Type     : {res.media_type}")
-        click.echo(f"Size     : {_fmt_size(res.file_size)}")
-        click.echo(f"Hash     : {res.file_hash}")
-        click.echo(f"Modified : {res.modified_at}")
-        click.echo()
-
-        from types import SimpleNamespace
-
-        md = SimpleNamespace(
-            date_taken=res.md_date_taken,
-            camera_make=res.md_camera_make,
-            camera_model=res.md_camera_model,
-            lens_model=res.md_lens_model,
-            focal_length=res.md_focal_length,
-            aperture=res.md_aperture,
-            shutter_speed=res.md_shutter_speed,
-            iso=res.md_iso,
-            width=res.md_width,
-            height=res.md_height,
-            duration=res.md_duration,
-            gps_lat=res.md_gps_lat,
-            gps_lon=res.md_gps_lon,
-            orientation=res.md_orientation,
-        )
-
-        _print_metadata(md)
+    print_metadata(res.metadata)
 
 
-def _print_metadata(md: Any) -> None:  # type: ignore[no-untyped-def]
+def print_metadata(md: Metadata) -> None:
     """Print metadata fields in a readable format."""
     fields = [
         ("Date taken", md.date_taken),

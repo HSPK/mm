@@ -1,12 +1,9 @@
-"""uom geo — manage location metadata."""
-
 from __future__ import annotations
 
 import time
 
 import click
 
-from mm.cli import Context, pass_ctx
 from mm.core.geocoding import reverse_geocode_batch
 
 
@@ -21,10 +18,11 @@ def geo() -> None:
     is_flag=True,
     help="Re-geocode ALL items with GPS, including already labelled ones.",
 )
-@pass_ctx
-def update(ctx: Context, reparse: bool) -> None:
+def update(reparse: bool) -> None:
     """Update location for media files with GPS data (offline, no network needed)."""
-    repo = ctx.repo
+    from mm.cli import get_repo
+
+    repo = get_repo()
 
     items = repo.get_metadata_needing_geo_update(force_reparse=reparse)
     if not items:

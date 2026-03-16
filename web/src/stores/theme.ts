@@ -336,14 +336,14 @@ interface ThemeState {
     setTheme: (id: string) => void
 }
 
-const savedId = localStorage.getItem("uom-theme") || "midnight"
+const savedId = localStorage.getItem("mm-theme") || "midnight"
 
 export const useThemeStore = create<ThemeState>((set) => ({
     themeId: savedId,
     setTheme: (id: string) => {
         const theme = themes.find((t) => t.id === id)
         if (!theme) return
-        localStorage.setItem("uom-theme", id)
+        localStorage.setItem("mm-theme", id)
         applyTheme(theme)
         set({ themeId: id })
     },

@@ -26,9 +26,7 @@ def add_tags(repo: AsyncRepository | Any, media_id: int, tag_names: list[str]) -
         repo.add_media_tag(media_id, tag.id, confidence=1.0)
 
 
-def remove_tags(
-    repo: AsyncRepository | Any, media_id: int, tag_names: list[str]
-) -> None:
+def remove_tags(repo: AsyncRepository | Any, media_id: int, tag_names: list[str]) -> None:
     """Remove tags from a media entry."""
     for name in tag_names:
         tag = repo.get_tag_by_name(name)
@@ -112,7 +110,7 @@ def apply_clip_tags(
     """Run zero-shot CLIP classification and tag above threshold.
 
     Returns list of (tag_name, confidence) pairs that were added.
-    Imports torch/open_clip lazily so the rest of UOM works without them.
+    Imports torch/open_clip lazily so the rest of MM works without them.
     """
     from mm.config import DEFAULT_CLIP_LABELS
     from mm.core.embeddings import (  # noqa: delayed import

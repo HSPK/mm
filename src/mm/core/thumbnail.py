@@ -31,7 +31,7 @@ THUMB_SIZES = {
     "xl": (1920, 1080),  # Full HD preview
 }
 
-DEFAULT_CACHE_DIR = Path.home() / ".cache" / "uom" / "thumbs"
+DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mm" / "thumbs"
 
 _FFMPEG: str | None = shutil.which("ffmpeg")
 
@@ -97,9 +97,7 @@ def _cache_path(cache_dir: Path, media_id: int, size: str, ext: str = ".webp") -
 # ---------------------------------------------------------------------------
 
 
-def _generate_image(
-    source_path: str, dest: Path, max_size: tuple[int, int]
-) -> Path | None:
+def _generate_image(source_path: str, dest: Path, max_size: tuple[int, int]) -> Path | None:
     """Generate a thumbnail from an image file."""
     _try_register_heif()
     img = None
@@ -172,9 +170,7 @@ def _generate_image(
 # ---------------------------------------------------------------------------
 
 
-def _generate_video(
-    source_path: str, dest: Path, max_size: tuple[int, int]
-) -> Path | None:
+def _generate_video(source_path: str, dest: Path, max_size: tuple[int, int]) -> Path | None:
     """Extract a frame from a video and generate a thumbnail.
 
     Tries to grab a frame at 1 second; if that fails, tries the first frame.

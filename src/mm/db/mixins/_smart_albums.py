@@ -37,17 +37,13 @@ class SmartAlbumsMixin:
 
     async def list_all_smart_album_definitions(self) -> list[dict[str, Any]]:
         rows = await self.objects.fetchall(
-            SmartAlbumModel.select().order_by(
-                SmartAlbumModel.section, SmartAlbumModel.position
-            )
+            SmartAlbumModel.select().order_by(SmartAlbumModel.section, SmartAlbumModel.position)
         )
         return [self._sa_to_dict(r) for r in rows]
 
     async def get_smart_album_definition(self, album_id: int) -> dict[str, Any] | None:
         try:
-            return self._sa_to_dict(
-                await self.objects.get(SmartAlbumModel, id=album_id)
-            )
+            return self._sa_to_dict(await self.objects.get(SmartAlbumModel, id=album_id))
         except SmartAlbumModel.DoesNotExist:
             return None
 
@@ -132,6 +128,10 @@ class SmartAlbumsMixin:
         )
         return await self.get_smart_album_definition(album_id)
 
+    async def seed_smart_albums(self) -> int:
+        """Seed default smart albums if none exist."""
+        return await self._seed_smart_albums()
+
     async def reset_smart_albums(self) -> int:
         await self.objects.execute(SmartAlbumModel.delete())
         return await self._seed_smart_albums()
@@ -148,9 +148,7 @@ class SmartAlbumsMixin:
             "color": row.color or "",
             "filters": json.loads(row.filters) if row.filters else {},
             "generator": row.generator,
-            "generator_config": json.loads(row.generator_config)
-            if row.generator_config
-            else {},
+            "generator_config": json.loads(row.generator_config) if row.generator_config else {},
             "position": row.position,
             "is_system": bool(row.is_system),
             "enabled": bool(row.enabled),
@@ -183,5 +181,5 @@ class SmartAlbumsMixin:
             )
             created += 1
         if created:
-            print(f"[uom] Seeded {created} default smart album definitions")
+            print(f"[mm] Seeded {created} default smart album definitions")
         return created

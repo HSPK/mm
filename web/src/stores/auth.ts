@@ -14,9 +14,9 @@ interface AuthState {
 }
 
 // Sync token to cookie on initial load
-const initialToken = localStorage.getItem("uom_token")
+const initialToken = localStorage.getItem("mm_token")
 if (initialToken) {
-    document.cookie = `uom_token=${initialToken}; path=/; SameSite=Strict`
+    document.cookie = `mm_token=${initialToken}; path=/; SameSite=Strict`
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -33,8 +33,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         try {
             const res = await api.post<{ token: string; user: User }>("/auth/login", { username, password })
             const token = res.data.token
-            localStorage.setItem("uom_token", token)
-            document.cookie = `uom_token=${token}; path=/; SameSite=Strict`
+            localStorage.setItem("mm_token", token)
+            document.cookie = `mm_token=${token}; path=/; SameSite=Strict`
             set({ token, loading: false })
             await get().fetchUser()
             return true
@@ -55,8 +55,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     },
 
     logout: () => {
-        localStorage.removeItem("uom_token")
-        document.cookie = "uom_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+        localStorage.removeItem("mm_token")
+        document.cookie = "mm_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
         set({ token: null, user: null })
     },
 }))

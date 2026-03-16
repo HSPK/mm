@@ -74,7 +74,7 @@ async def get_current_user(
     # 2. Extract token from Header, Cookie, or Query Param
     token = cred.credentials if cred else None
     if not token:
-        token = request.cookies.get("uom_token")
+        token = request.cookies.get("mm_token")
     if not token:
         token = request.query_params.get("token")
 

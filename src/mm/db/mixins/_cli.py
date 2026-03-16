@@ -27,17 +27,13 @@ class CliMixin:
     async def all_media(self) -> list[Media]:
         return [
             to_media(r)
-            for r in await self.objects.fetchall(
-                MediaModel.select().order_by(MediaModel.path)
-            )
+            for r in await self.objects.fetchall(MediaModel.select().order_by(MediaModel.path))
         ]
 
     async def all_tags(self) -> list[Tag]:
         return [
             to_tag(r)
-            for r in await self.objects.fetchall(
-                TagModel.select().order_by(TagModel.name)
-            )
+            for r in await self.objects.fetchall(TagModel.select().order_by(TagModel.name))
         ]
 
     async def all_media_paths(self) -> list[tuple[int, str]]:
@@ -45,6 +41,63 @@ class CliMixin:
             MediaModel.select(MediaModel.id, MediaModel.path).order_by(MediaModel.path)
         )
         return [(r.id, r.path) for r in rows]
+
+    async def find_duplicate_hashes(self) -> dict[str, list[Media]]:
+        """Return groups of media that share the same file_hash."""
+        # Find hashes that appear more than once
+        dup_query = (
+            MediaModel.select(MediaModel.file_hash)
+            .where(MediaModel.file_hash != "", MediaModel.deleted_at.is_null())
+            .group_by(MediaModel.file_hash)
+            .having(fn.COUNT(MediaModel.id) > 1)
+        )
+        dup_hashes = [r.file_hash for r in await self.objects.fetchall(dup_query)]
+        if not dup_hashes:
+            return {}
+
+        rows = await self.objects.fetchall(
+            MediaModel.select()
+            .where(MediaModel.file_hash.in_(dup_hashes))
+            .order_by(MediaModel.file_hash, MediaModel.file_size.desc())
+        )
+        groups: dict[str, list[Media]] = {}
+        for r in rows:
+            groups.setdefault(r.file_hash, []).append(to_media(r))
+        return groups
+
+    async def hash_exists(self, file_hash: str) -> Media | None:
+        """Return the first media with this hash, or None."""
+        if not file_hash:
+            return None
+        try:
+            row = await self.objects.get(
+                MediaModel,
+                MediaModel.file_hash == file_hash,
+                MediaModel.deleted_at.is_null(),
+            )
+            return to_media(row)
+        except MediaModel.DoesNotExist:
+            return None
+
+    async def hashes_exist(self, hashes: list[str]) -> set[str]:
+        """Return the subset of *hashes* that already exist in the library."""
+        if not hashes:
+            return set()
+        found: set[str] = set()
+        # Query in batches of 500 to avoid SQLite variable limit
+        batch_size = 500
+        for i in range(0, len(hashes), batch_size):
+            batch = hashes[i : i + batch_size]
+            rows = await self.objects.fetchall(
+                MediaModel.select(MediaModel.file_hash)
+                .where(
+                    MediaModel.file_hash.in_(batch),
+                    MediaModel.deleted_at.is_null(),
+                )
+                .distinct()
+            )
+            found.update(r.file_hash for r in rows)
+        return found
 
     async def all_embeddings(self) -> list[Embedding]:
         return [
@@ -145,15 +198,11 @@ class CliMixin:
         return [
             to_media(r)
             for r in await self.objects.fetchall(
-                MediaModel.select()
-                .where(MediaModel.id.not_in(sub))
-                .order_by(MediaModel.path)
+                MediaModel.select().where(MediaModel.id.not_in(sub)).order_by(MediaModel.path)
             )
         ]
 
-    async def media_ids_by_tags(
-        self, tag_names: list[str], match_all: bool = True
-    ) -> list[int]:
+    async def media_ids_by_tags(self, tag_names: list[str], match_all: bool = True) -> list[int]:
         if not tag_names:
             return []
         names = [normalise_tag(n) for n in tag_names]
@@ -171,9 +220,7 @@ class CliMixin:
         rows = await self.objects.fetchall(q)
         return [r.media_id for r in rows]
 
-    async def bulk_delete_media(
-        self, media_ids: list[int], batch_size: int = 500
-    ) -> int:
+    async def bulk_delete_media(self, media_ids: list[int], batch_size: int = 500) -> int:
         deleted = 0
         for i in range(0, len(media_ids), batch_size):
             chunk = media_ids[i : i + batch_size]

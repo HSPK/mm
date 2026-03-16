@@ -1,4 +1,4 @@
-"""Peewee ORM models for UOM's SQLite database."""
+"""Peewee ORM models for MM's SQLite database."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ class MediaType(str, Enum):
     PHOTO = "photo"
     VIDEO = "video"
     AUDIO = "audio"
+    NOT_MEDIA = "not_media"
 
 
 class TagSource(str, Enum):

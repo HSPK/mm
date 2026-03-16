@@ -15,6 +15,7 @@ dependencies = [
     "peewee-async>=1.2.1",
     "pillow>=10.0",
     "pillow-heif>=0.18",
+    "pyyaml>=6.0",
     "rawpy>=0.26.1",
 ]
 
@@ -22,7 +23,7 @@ dependencies = [
 clip = ["open-clip-torch>=2.24", "torch>=2.0", "pillow>=10.0"]
 
 [project.scripts]
-uom = "uom.cli:cli"
+mm = "mm.cli:cli"
 
 [build-system]
 requires = ["hatchling"]

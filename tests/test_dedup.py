@@ -4,33 +4,74 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mm.core.dedup import find_hash_duplicates, find_name_duplicates
+from mm.core.dedup import find_duplicates, is_duplicate
+from mm.db.sync_repo import SyncRepo
 
 
-def test_name_duplicates(tmp_path: Path):
-    content = b"\xff\xd8" + b"\x00" * 100
-    big_content = b"\xff\xd8" + b"\x00" * 200
-
-    (tmp_path / "photo.jpg").write_bytes(content)
-    (tmp_path / "photo.jpeg").write_bytes(big_content)
-
-    pairs = find_name_duplicates(tmp_path)
-    assert len(pairs) == 1
-    # Keep the larger one (.jpeg = 202 bytes > .jpg = 102 bytes)
-    assert pairs[0].keep.suffix == ".jpeg"
-    assert pairs[0].remove.suffix == ".jpg"
+def _make_repo(tmp_path: Path) -> SyncRepo:
+    """Create a temporary SyncRepo with a fresh DB."""
+    db_path = tmp_path / "test.db"
+    return SyncRepo(db_path)
 
 
-def test_hash_duplicates(tmp_path: Path):
-    content = b"\xff\xd8SAME_CONTENT" + b"\x00" * 100
-    (tmp_path / "a.jpg").write_bytes(content)
-    sub = tmp_path / "sub"
-    sub.mkdir()
-    (sub / "b.jpg").write_bytes(content)
+def test_find_duplicates(tmp_path: Path):
+    """Media with the same hash in the DB should be grouped."""
+    repo = _make_repo(tmp_path)
+    from mm.db.dto import Media
+    from mm.db.models import MediaType
 
-    # Different content file
-    (tmp_path / "c.jpg").write_bytes(b"\xff\xd8DIFFERENT")
+    # Insert two media entries with the same hash
+    m1 = Media(
+        path="a.jpg",
+        filename="a.jpg",
+        extension=".jpg",
+        media_type=MediaType.PHOTO,
+        file_size=200,
+        file_hash="aaa111",
+    )
+    m2 = Media(
+        path="b.jpg",
+        filename="b.jpg",
+        extension=".jpg",
+        media_type=MediaType.PHOTO,
+        file_size=100,
+        file_hash="aaa111",
+    )
+    # And one unique entry
+    m3 = Media(
+        path="c.jpg",
+        filename="c.jpg",
+        extension=".jpg",
+        media_type=MediaType.PHOTO,
+        file_size=300,
+        file_hash="bbb222",
+    )
+    repo.upsert_media(m1)
+    repo.upsert_media(m2)
+    repo.upsert_media(m3)
 
-    pairs = find_hash_duplicates(tmp_path, progress=False)
-    assert len(pairs) == 1
-    assert pairs[0].reason == "hash-dup"
+    groups = find_duplicates(repo)
+    assert len(groups) == 1
+    # Largest file (200 bytes) is kept
+    assert groups[0].keep == Path("a.jpg")
+    assert groups[0].duplicates == [Path("b.jpg")]
+
+
+def test_is_duplicate(tmp_path: Path):
+    repo = _make_repo(tmp_path)
+    from mm.db.dto import Media
+    from mm.db.models import MediaType
+
+    m = Media(
+        path="x.jpg",
+        filename="x.jpg",
+        extension=".jpg",
+        media_type=MediaType.PHOTO,
+        file_size=100,
+        file_hash="abc123",
+    )
+    repo.upsert_media(m)
+
+    assert is_duplicate(repo, "abc123") is True
+    assert is_duplicate(repo, "nonexistent") is False
+    assert is_duplicate(repo, "") is False

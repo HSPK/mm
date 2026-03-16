@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_CACHE_DIR = Path.home() / ".cache" / "uom" / "geonames"
+_CACHE_DIR = Path.home() / ".cache" / "mm" / "geonames"
 
 # ─── Country code → name ──────────────────────────────────
 

@@ -92,7 +92,7 @@ def parallel_scan(
                 result = future.result()
                 if result.error:
                     errors += 1
-                    click.echo(f"\n  [WARN] {result.path}: {result.error}", err=True)
+                    click.echo(f"\n  [WARN] {result.media.path}: {result.error}", err=True)
                 else:
                     results.append(result)
                 bar.update(1)
@@ -113,50 +113,53 @@ def print_scan_summary(results: list[ScanResult], errors: int = 0) -> None:
     # Counters by media type
     photos, videos, audios = [], [], []
     for r in results:
-        if r.media_type == "photo":
+        mt = (
+            r.media.media_type.value if hasattr(r.media.media_type, "value") else r.media.media_type
+        )
+        if mt == "photo":
             photos.append(r)
-        elif r.media_type == "video":
+        elif mt == "video":
             videos.append(r)
-        elif r.media_type == "audio":
+        elif mt == "audio":
             audios.append(r)
 
-    total_size = sum(r.file_size for r in results)
-    photo_size = sum(r.file_size for r in photos)
-    video_size = sum(r.file_size for r in videos)
-    audio_size = sum(r.file_size for r in audios)
+    total_size = sum(r.media.file_size for r in results)
+    photo_size = sum(r.media.file_size for r in photos)
+    video_size = sum(r.media.file_size for r in videos)
+    audio_size = sum(r.media.file_size for r in audios)
 
     # Missing metadata
-    missing_date = [r for r in results if not r.md_date_taken]
-    missing_camera = [r for r in results if not r.md_camera_model]
-    missing_gps = [r for r in results if r.md_gps_lat is None]
-    missing_resolution = [r for r in results if r.md_width is None]
+    missing_date = [r for r in results if not r.metadata.date_taken]
+    missing_camera = [r for r in results if not r.metadata.camera_model]
+    missing_gps = [r for r in results if r.metadata.gps_lat is None]
+    missing_resolution = [r for r in results if r.metadata.width is None]
 
     # Camera breakdown
     cameras: dict[str, int] = {}
     for r in results:
-        if r.md_camera_model:
-            key = r.md_camera_model
+        if r.metadata.camera_model:
+            key = r.metadata.camera_model
             if (
-                r.md_camera_make
-                and r.md_camera_make.lower() not in r.md_camera_model.lower()
+                r.metadata.camera_make
+                and r.metadata.camera_make.lower() not in r.metadata.camera_model.lower()
             ):
-                key = f"{r.md_camera_make} {r.md_camera_model}"
+                key = f"{r.metadata.camera_make} {r.metadata.camera_model}"
             cameras[key] = cameras.get(key, 0) + 1
 
     # Date range
-    dates = [r.md_date_taken for r in results if r.md_date_taken]
+    dates = [r.metadata.date_taken for r in results if r.metadata.date_taken]
     date_range = ""
     if dates:
         dates.sort()
-        earliest = dates[0][:10]  # YYYY-MM-DD
-        latest = dates[-1][:10]
+        earliest = dates[0].strftime("%Y-%m-%d")
+        latest = dates[-1].strftime("%Y-%m-%d")
         if earliest == latest:
             date_range = earliest
         else:
             date_range = f"{earliest} ~ {latest}"
 
     # Video duration
-    video_duration = sum(r.md_duration or 0 for r in videos)
+    video_duration = sum(r.metadata.duration or 0 for r in videos)
 
     # Print summary
     click.echo()

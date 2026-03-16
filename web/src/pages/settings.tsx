@@ -269,13 +269,13 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Open Library</label>
                             <p className="text-xs text-muted-foreground">
-                                Enter a server-side path to a library directory (containing uom.db) or a .db file.
+                                Enter a server-side path to a library directory (containing mm.db) or a .db file.
                             </p>
                             <div className="flex gap-2">
                                 <Input
                                     value={newLibraryPath}
                                     onChange={(e) => setNewLibraryPath(e.target.value)}
-                                    placeholder="/path/to/library or /path/to/uom.db"
+                                    placeholder="/path/to/library or /path/to/mm.db"
                                     onKeyDown={(e) => e.key === "Enter" && handleSwitchLibrary(newLibraryPath)}
                                 />
                                 <Button

@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import peewee_aio
 
-from mm.config import DEFAULT_IMPORT_TEMPLATE
 from mm.db.models import LibraryConfigModel
 
 # Well-known config keys
 KEY_IMPORT_TEMPLATE = "import_template"
+KEY_LIBRARY_NAME = "library_name"
+KEY_LIBRARY_ROOT = "library_root"
 
 
 class ConfigMixin:
@@ -30,30 +31,23 @@ class ConfigMixin:
 
     async def set_config(self, key: str, value: str) -> None:
         """Insert or update a config key."""
+        now = dt.datetime.now()
         try:
-            row = await self.objects.get(LibraryConfigModel, key=key)
-            row.value = value
-            row.updated_at = dt.datetime.now()
-            await self.objects.update(row)
+            await self.objects.get(LibraryConfigModel, key=key)
+            await self.objects.execute(
+                LibraryConfigModel.update(value=value, updated_at=now).where(
+                    LibraryConfigModel.key == key
+                )
+            )
         except LibraryConfigModel.DoesNotExist:
             await self.objects.create(
                 LibraryConfigModel,
                 key=key,
                 value=value,
-                updated_at=dt.datetime.now(),
+                updated_at=now,
             )
 
     async def get_all_config(self) -> dict[str, str]:
         """Return all config key-value pairs."""
         rows = await self.objects.fetchall(LibraryConfigModel.select())
         return {r.key: r.value for r in rows}
-
-    # ── Convenience helpers ───────────────────────────────
-
-    async def get_import_template(self) -> str:
-        """Return the stored import template, or the default."""
-        return await self.get_config(KEY_IMPORT_TEMPLATE, DEFAULT_IMPORT_TEMPLATE)
-
-    async def set_import_template(self, template: str) -> None:
-        """Store the import template."""
-        await self.set_config(KEY_IMPORT_TEMPLATE, template)

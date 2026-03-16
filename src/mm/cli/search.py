@@ -1,12 +1,8 @@
-"""uom search — vector search (image/text) and tag search."""
-
 from __future__ import annotations
 
 from pathlib import Path
 
 import click
-
-from mm.cli import Context, pass_ctx
 
 
 @click.command()
@@ -20,9 +16,7 @@ from mm.cli import Context, pass_ctx
 @click.option("--tag", "tag_names", multiple=True, help="Filter by tag(s). Repeat for AND logic.")
 @click.option("--tag-or", is_flag=True, help="Use OR logic for tags instead of AND.")
 @click.option("-k", "--top-k", default=10, show_default=True, help="Number of results.")
-@pass_ctx
 def search(
-    ctx: Context,
     image_path: Path | None,
     text_query: str | None,
     tag_names: tuple[str, ...],
@@ -30,7 +24,9 @@ def search(
     top_k: int,
 ) -> None:
     """Search media by image similarity, text description, or tags."""
-    repo = ctx.repo
+    from mm.cli import get_repo
+
+    repo = get_repo()
 
     # Tag pre-filter
     filter_ids: set[int] | None = None
@@ -49,7 +45,6 @@ def search(
         vs = VectorStore(repo)
         n = vs.load()
         if n == 0:
-            click.echo("No embeddings in database. Run 'uom scan --embed' first.")
             return
 
         if image_path:

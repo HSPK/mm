@@ -89,21 +89,21 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     albumFilterKeys: new Set<string>(),
     selectionMode: false,
     selectedIds: new Set<number>(),
-    viewMode: (localStorage.getItem("uom-view-mode") === "grid" ? "grid" : "justified") as ViewMode,
-    dateGroupMode: (localStorage.getItem("uom-date-group-mode") === "day" ? "day" : "month") as DateGroupMode,
-    thumbSize: Math.min(400, Math.max(80, Number(localStorage.getItem("uom-thumb-size")) || 220)),
+    viewMode: (localStorage.getItem("mm-view-mode") === "grid" ? "grid" : "justified") as ViewMode,
+    dateGroupMode: (localStorage.getItem("mm-date-group-mode") === "day" ? "day" : "month") as DateGroupMode,
+    thumbSize: Math.min(400, Math.max(80, Number(localStorage.getItem("mm-thumb-size")) || 220)),
 
     setViewMode: (mode) => {
-        localStorage.setItem("uom-view-mode", mode)
+        localStorage.setItem("mm-view-mode", mode)
         set({ viewMode: mode })
     },
     setDateGroupMode: (mode) => {
-        localStorage.setItem("uom-date-group-mode", mode)
+        localStorage.setItem("mm-date-group-mode", mode)
         set({ dateGroupMode: mode })
     },
     setThumbSize: (size) => {
         const clamped = Math.min(400, Math.max(80, size))
-        localStorage.setItem("uom-thumb-size", String(clamped))
+        localStorage.setItem("mm-thumb-size", String(clamped))
         set({ thumbSize: clamped })
     },
 

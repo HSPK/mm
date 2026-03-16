@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mm.config import DEFAULT_IMPORT_TEMPLATE
-from mm.core.scanner import file_hash
 from mm.db.dto import Media, Metadata
 
 
@@ -77,7 +76,10 @@ def plan_import(
     dest_root: Path,
     template: str = DEFAULT_IMPORT_TEMPLATE,
 ) -> list[ImportAction]:
-    """Build a list of planned file operations without executing them."""
+    """Build a list of planned file operations without executing them.
+
+    Assumes duplicate checking has already been done by the caller.
+    """
     actions: list[ImportAction] = []
     used_paths: set[Path] = set()
 
@@ -85,32 +87,21 @@ def plan_import(
         src = Path(media.path)
         if not src.exists():
             actions.append(
-                ImportAction(
-                    source=src, destination=src, skipped=True, reason="source missing"
-                )
+                ImportAction(source=src, destination=src, skipped=True, reason="source missing")
             )
             continue
 
         dest = build_dest_path(media, metadata, template, dest_root, tags)
 
-        # Handle conflicts
+        # Skip if source and destination resolve to the same file
+        if src.resolve() == dest.resolve():
+            actions.append(
+                ImportAction(source=src, destination=dest, skipped=True, reason="already in place")
+            )
+            continue
+
+        # Handle path conflicts
         if dest.exists() or dest in used_paths:
-            # Check if it's the same file by hash
-            if dest.exists():
-                try:
-                    if file_hash(src) == file_hash(dest):
-                        actions.append(
-                            ImportAction(
-                                source=src,
-                                destination=dest,
-                                skipped=True,
-                                reason="already exists",
-                            )
-                        )
-                        continue
-                except OSError:
-                    pass
-            # Rename with counter
             stem = dest.stem
             suffix = dest.suffix
             parent = dest.parent

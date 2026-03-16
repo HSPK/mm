@@ -64,7 +64,7 @@ async def auth_logout(
     request: Request,
     cred: HTTPAuthorizationCredentials | None = Security(_bearer),
 ) -> dict[str, str]:
-    token = cred.credentials if cred else request.cookies.get("uom_token")
+    token = cred.credentials if cred else request.cookies.get("mm_token")
     if token:
         await get_repo(request).invalidate_token(token)
         invalidate_token_cache(token)

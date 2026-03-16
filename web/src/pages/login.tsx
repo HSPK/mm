@@ -22,7 +22,7 @@ export default function LoginPage() {
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <Card className="w-full max-w-sm">
                 <CardHeader className="text-center">
-                    <CardTitle>UOM</CardTitle>
+                    <CardTitle>MM</CardTitle>
                     <p className="text-sm text-muted-foreground">Sign in to your media library</p>
                 </CardHeader>
                 <CardContent>

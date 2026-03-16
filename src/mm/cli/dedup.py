@@ -1,77 +1,55 @@
-"""uom dedup — find and remove duplicate media files."""
-
 from __future__ import annotations
 
-from pathlib import Path
+import os
 
 import click
 
-from mm.cli import Context, pass_ctx
-from mm.core.dedup import DedupStrategy
-
-
-def _click_progress():
-    """Return an on_progress callback that drives a click progressbar."""
-    bar = None
-
-    def _cb(current: int, total: int) -> None:
-        nonlocal bar
-        if bar is None:
-            bar = click.progressbar(length=total, label="Hashing files")
-            bar.__enter__()
-        bar.update(1)
-        if current >= total:
-            bar.__exit__(None, None, None)
-
-    return _cb
-
 
 @click.command()
-@click.argument(
-    "directory", type=click.Path(exists=True, file_okay=False, path_type=Path)
-)
-@click.option(
-    "--strategy",
-    "-s",
-    type=click.Choice(["name", "hash"], case_sensitive=False),
-    default="name",
-    show_default=True,
-    help="Dedup strategy: 'name' (same stem .jpg/.jpeg) or 'hash' (identical SHA-256).",
-)
-@click.option(
-    "--delete", is_flag=True, help="Actually delete duplicates (default: dry-run)."
-)
-@pass_ctx
-def dedup(ctx: Context, directory: Path, strategy: str, delete: bool) -> None:
-    """Find and remove duplicate media files."""
+def dedup() -> None:
+    """Find and remove duplicate media files (by hash in the database)."""
+    from mm.cli import get_repo
     from mm.core.dedup import find_duplicates
 
-    strat = DedupStrategy(strategy)
-    click.echo(f"Strategy: {strat.value}")
-    click.echo(f"Scanning: {directory.resolve()}\n")
+    repo = get_repo()
+    click.echo("Searching for duplicates in the database...\n")
 
-    pairs = find_duplicates(directory, strategy=strat, on_progress=_click_progress())
+    groups = find_duplicates(repo)
 
-    if not pairs:
+    if not groups:
         click.echo("No duplicates found.")
         return
 
-    total_saved = sum(p.remove.stat().st_size for p in pairs if p.remove.exists())
+    total_dups = sum(len(g.duplicates) for g in groups)
+    total_saved = 0
+    for g in groups:
+        for p in g.duplicates:
+            try:
+                total_saved += os.path.getsize(p)
+            except OSError:
+                pass
+
     click.echo(
-        f"\nFound {len(pairs)} duplicate pair(s), can free {total_saved / 1024 / 1024:.1f} MB\n"
+        f"Found {total_dups} duplicate(s) in {len(groups)} group(s), "
+        f"can free {total_saved / 1024 / 1024:.1f} MB\n"
     )
 
-    if delete:
-        with click.progressbar(pairs, label="Deleting duplicates") as bar:
-            for pair in bar:
-                if pair.remove.exists():
-                    pair.remove.unlink()
-        click.echo(
-            f"\nDone. Removed {len(pairs)} file(s), freed {total_saved / 1024 / 1024:.1f} MB."
-        )
+    for g in groups:
+        click.echo(f"  KEEP   : {g.keep}")
+        for dup in g.duplicates:
+            click.echo(f"  REMOVE : {dup}")
+        click.echo()
+
+    if click.confirm("Delete these duplicates?"):
+        deleted = 0
+        for g in groups:
+            for dup in g.duplicates:
+                try:
+                    if os.path.exists(dup):
+                        os.unlink(dup)
+                        deleted += 1
+                except OSError as e:
+                    click.echo(f"  Error deleting {dup}: {e}", err=True)
+        click.echo(f"\nDone. Removed {deleted} file(s), freed {total_saved / 1024 / 1024:.1f} MB.")
     else:
-        for pair in pairs:
-            click.echo(f"  KEEP   : {pair.keep}")
-            click.echo(f"  REMOVE : {pair.remove}")
-            click.echo()
-        click.echo("Dry-run mode — no files deleted. Use --delete to remove them.")
+        click.echo("Aborted — no files deleted.")
