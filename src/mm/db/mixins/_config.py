@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import peewee_aio
 
-from uom.config import DEFAULT_IMPORT_TEMPLATE
-from uom.db.models import LibraryConfigModel
+from mm.config import DEFAULT_IMPORT_TEMPLATE
+from mm.db.models import LibraryConfigModel
 
 # Well-known config keys
 KEY_IMPORT_TEMPLATE = "import_template"

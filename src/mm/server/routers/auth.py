@@ -5,9 +5,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from uom.db.dto import User
-from uom.server.dependencies import get_current_user, get_repo, invalidate_token_cache
-from uom.server.schemas import ChangePasswordBody, LoginBody, SetupBody
+from mm.db.dto import User
+from mm.server.dependencies import get_current_user, get_repo, invalidate_token_cache
+from mm.server.schemas import ChangePasswordBody, LoginBody, SetupBody
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 _bearer = HTTPBearer(auto_error=False)

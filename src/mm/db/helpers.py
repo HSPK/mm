@@ -6,8 +6,8 @@ import datetime as dt
 import hashlib
 import secrets
 
-from uom.db.dto import Embedding, Media, Metadata, Tag, User
-from uom.db.models import (
+from mm.db.dto import Embedding, Media, Metadata, Tag, User
+from mm.db.models import (
     EmbeddingModel,
     MediaModel,
     MediaType,
@@ -31,7 +31,10 @@ def verify_password(password: str, stored: str) -> bool:
         salt, h = stored.split(":")
     except ValueError:
         return False
-    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex() == h
+    return (
+        hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
+        == h
+    )
 
 
 # ── Tag normalisation ────────────────────────────────────
@@ -95,7 +98,12 @@ def to_metadata(row: MetadataModel) -> Metadata:
 
 
 def to_tag(row: TagModel) -> Tag:
-    return Tag(id=row.id, name=row.name, source=TagSource(row.source), created_at=row.created_at)
+    return Tag(
+        id=row.id,
+        name=row.name,
+        source=TagSource(row.source),
+        created_at=row.created_at,
+    )
 
 
 def to_embedding(row: EmbeddingModel) -> Embedding:

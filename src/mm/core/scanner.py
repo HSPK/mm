@@ -10,15 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from uom.config import (
+from mm.config import (
     ALL_MEDIA_EXTENSIONS,
     AUDIO_EXTENSIONS,
     HASH_CHUNK_SIZE,
     PHOTO_EXTENSIONS,
     VIDEO_EXTENSIONS,
 )
-from uom.db.dto import Media, Metadata
-from uom.db.models import MediaType
+from mm.db.dto import Media, Metadata
+from mm.db.models import MediaType
 
 
 @dataclass
@@ -116,7 +116,7 @@ def scan_file(path: Path, compute_hash: bool = True) -> Media:
 def scan_and_extract(path: Path, compute_hash: bool = True) -> ScanResult:
     """Scan a file and extract its metadata, handling errors gracefully."""
     try:
-        from uom.core.metadata import extract_metadata  # lazy import
+        from mm.core.metadata import extract_metadata  # lazy import
 
         media = scan_file(path, compute_hash=compute_hash)
 
@@ -176,7 +176,9 @@ def scan_and_extract(path: Path, compute_hash: bool = True) -> ScanResult:
         )
 
 
-def save_scan_result(repo: Any, result: ScanResult, library_root: Path | str | None = None) -> int:
+def save_scan_result(
+    repo: Any, result: ScanResult, library_root: Path | str | None = None
+) -> int:
     """Save a ScanResult to the database using the provided repository.
 
     If *library_root* is given, the stored path will be relative to it so the
@@ -194,14 +196,20 @@ def save_scan_result(repo: Any, result: ScanResult, library_root: Path | str | N
         media_type=MediaType(result.media_type),
         file_size=result.file_size,
         file_hash=result.file_hash,
-        created_at=datetime.fromisoformat(result.created_at) if result.created_at else None,
-        modified_at=datetime.fromisoformat(result.modified_at) if result.modified_at else None,
+        created_at=datetime.fromisoformat(result.created_at)
+        if result.created_at
+        else None,
+        modified_at=datetime.fromisoformat(result.modified_at)
+        if result.modified_at
+        else None,
     )
     media_id = repo.upsert_media(media)
 
     md = Metadata(
         media_id=media_id,
-        date_taken=datetime.fromisoformat(result.md_date_taken) if result.md_date_taken else None,
+        date_taken=datetime.fromisoformat(result.md_date_taken)
+        if result.md_date_taken
+        else None,
         camera_make=result.md_camera_make,
         camera_model=result.md_camera_model,
         lens_model=result.md_lens_model,

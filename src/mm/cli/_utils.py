@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import click
 
 if TYPE_CHECKING:
-    from uom.core.scanner import ScanResult
+    from mm.core.scanner import ScanResult
 
 # ---------------------------------------------------------------------------
 # Formatting
@@ -73,7 +73,7 @@ def parallel_scan(
 
     Returns (results, error_count).
     """
-    from uom.core.scanner import process_pool_worker
+    from mm.core.scanner import process_pool_worker
 
     num_workers = jobs if jobs > 0 else min(mp.cpu_count(), 8)
     work_items = [(str(p.resolve()), compute_hash) for p in files]
@@ -136,7 +136,10 @@ def print_scan_summary(results: list[ScanResult], errors: int = 0) -> None:
     for r in results:
         if r.md_camera_model:
             key = r.md_camera_model
-            if r.md_camera_make and r.md_camera_make.lower() not in r.md_camera_model.lower():
+            if (
+                r.md_camera_make
+                and r.md_camera_make.lower() not in r.md_camera_model.lower()
+            ):
                 key = f"{r.md_camera_make} {r.md_camera_model}"
             cameras[key] = cameras.get(key, 0) + 1
 

@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from uom.config import ALL_MEDIA_EXTENSIONS
-from uom.core.scanner import file_hash
+from mm.config import ALL_MEDIA_EXTENSIONS
+from mm.core.scanner import file_hash
 
 
 class DedupStrategy(str, Enum):
@@ -135,5 +135,7 @@ def find_duplicates(
     if strategy == DedupStrategy.NAME:
         return find_name_duplicates(directory)
     if strategy == DedupStrategy.HASH:
-        return find_hash_duplicates(directory, progress=progress, on_progress=on_progress)
+        return find_hash_duplicates(
+            directory, progress=progress, on_progress=on_progress
+        )
     raise ValueError(f"Unknown strategy: {strategy}")

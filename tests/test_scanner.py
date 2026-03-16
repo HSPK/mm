@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from uom.core.scanner import classify_extension, discover_media, scan_file
-from uom.db.models import MediaType
+from mm.core.scanner import classify_extension, discover_media, scan_file
+from mm.db.models import MediaType
 
 
 def test_classify_extension():

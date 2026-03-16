@@ -9,18 +9,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from uom.config import resolve_media_path
-from uom.core.thumbnail import get_thumbnail
-from uom.db.dto import User
-from uom.server.dependencies import get_current_user, get_library_root, get_media_path, get_repo
-from uom.server.schemas import (
+from mm.config import resolve_media_path
+from mm.core.thumbnail import get_thumbnail
+from mm.db.dto import User
+from mm.server.dependencies import (
+    get_current_user,
+    get_library_root,
+    get_media_path,
+    get_repo,
+)
+from mm.server.schemas import (
     RatingBody,
     TagsBody,
     UpdateMetadataBody,
     serialize_media,
     serialize_media_brief,
 )
-from uom.server.utils import stream_file
+from mm.server.utils import stream_file
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -30,14 +35,17 @@ _THUMB_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 def _make_etag(thumb_path: Path) -> str:
     st = thumb_path.stat()
-    return f'W/"{hashlib.md5(f"{st.st_mtime_ns}-{st.st_size}".encode()).hexdigest()[:16]}"'
+    return (
+        f'W/"{hashlib.md5(f"{st.st_mtime_ns}-{st.st_size}".encode()).hexdigest()[:16]}"'
+    )
 
 
 def _check_not_modified(request: Request, etag: str) -> Response | None:
     inm = request.headers.get("if-none-match")
     if inm and etag in inm:
         return Response(
-            status_code=304, headers={"ETag": etag, "Cache-Control": _THUMB_CACHE_CONTROL}
+            status_code=304,
+            headers={"ETag": etag, "Cache-Control": _THUMB_CACHE_CONTROL},
         )
     return None
 

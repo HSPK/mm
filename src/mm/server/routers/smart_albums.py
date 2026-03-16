@@ -6,10 +6,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from uom.db.dto import User
-from uom.server.dependencies import get_current_user, get_repo
-from uom.server.schemas import SmartAlbumBody, SmartAlbumUpdateBody
-from uom.server.smart_albums import build_smart_albums
+from mm.db.dto import User
+from mm.server.dependencies import get_current_user, get_repo
+from mm.server.schemas import SmartAlbumBody, SmartAlbumUpdateBody
+from mm.server.smart_albums import build_smart_albums
 
 router = APIRouter(prefix="/api/smart-albums", tags=["smart-albums"])
 

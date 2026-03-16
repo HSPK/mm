@@ -10,8 +10,8 @@ from pathlib import Path
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.config import resolve_media_path
+from mm.cli import Context, pass_ctx
+from mm.config import resolve_media_path
 
 
 @click.group(invoke_without_command=False)
@@ -37,8 +37,8 @@ def db_stats(ctx: Context) -> None:
 
     repo = ctx.repo
 
-    from uom.cli._utils import fmt_duration as _dur
-    from uom.cli._utils import fmt_size as _sz
+    from mm.cli._utils import fmt_duration as _dur
+    from mm.cli._utils import fmt_size as _sz
 
     # ── Helpers ───────────────────────────────────────────────
 
@@ -115,7 +115,9 @@ def db_stats(ctx: Context) -> None:
             click.echo(f"  │  {row_str}  │")
         click.secho(f"  └{border}┘", dim=True)
 
-    def _kv(label: str, value: str, label_w: int = 18, color: str | None = None) -> None:
+    def _kv(
+        label: str, value: str, label_w: int = 18, color: str | None = None
+    ) -> None:
         """Print a key-value line."""
         padded_label = _pad(label, label_w)
         w = max(_last_table_width, 56)
@@ -273,7 +275,12 @@ def db_stats(ctx: Context) -> None:
         _table(
             ["Extension", "Count", "Size", ""],
             [
-                [e["ext"], f"{e['count']:,}", _sz(e["size"]), _bar(e["count"], max_ext_cnt)]
+                [
+                    e["ext"],
+                    f"{e['count']:,}",
+                    _sz(e["size"]),
+                    _bar(e["count"], max_ext_cnt),
+                ]
                 for e in exts
             ],
         )
@@ -302,7 +309,12 @@ def db_stats(ctx: Context) -> None:
         _table(
             ["Tag", "Source", "Count", ""],
             [
-                [tg["tag"][:30], tg["source"], f"{tg['count']:,}", _bar(tg["count"], max_tag_cnt)]
+                [
+                    tg["tag"][:30],
+                    tg["source"],
+                    f"{tg['count']:,}",
+                    _bar(tg["count"], max_tag_cnt),
+                ]
                 for tg in tags
             ],
         )
@@ -312,10 +324,17 @@ def db_stats(ctx: Context) -> None:
 
 @db.command("export")
 @click.option(
-    "--format", "fmt", type=click.Choice(["csv", "json"]), default="json", show_default=True
+    "--format",
+    "fmt",
+    type=click.Choice(["csv", "json"]),
+    default="json",
+    show_default=True,
 )
 @click.option(
-    "-o", "--output", type=click.Path(path_type=Path), help="Output file (default: stdout)."
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file (default: stdout).",
 )
 @pass_ctx
 def db_export(ctx: Context, fmt: str, output: Path | None) -> None:
@@ -427,7 +446,9 @@ def db_clean(ctx: Context, dry_run: bool, yes: bool) -> None:
 
 
 @db.command("sync")
-@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument(
+    "directory", type=click.Path(exists=True, file_okay=False, path_type=Path)
+)
 @click.option("-j", "--jobs", type=int, default=0, help="Worker count (0 = auto).")
 @click.option("-y", "--yes", is_flag=True, help="Skip confirmation prompt.")
 @pass_ctx
@@ -507,8 +528,8 @@ def db_sync(ctx: Context, directory: Path, jobs: int, yes: bool) -> None:
 
     # ---- Phase 3: re-scan changed files ----
     if changed_ids:
-        from uom.cli._utils import parallel_scan
-        from uom.core.scanner import save_scan_result
+        from mm.cli._utils import parallel_scan
+        from mm.core.scanner import save_scan_result
 
         # Delete old records so they'll be re-inserted fresh
         repo.bulk_delete_media(changed_ids)
@@ -521,7 +542,9 @@ def db_sync(ctx: Context, directory: Path, jobs: int, yes: bool) -> None:
         for r in results:
             save_scan_result(repo, r, library_root=library_root)
 
-        click.echo(f"Re-scanned {len(results)} file(s).{f' {errors} error(s).' if errors else ''}")
+        click.echo(
+            f"Re-scanned {len(results)} file(s).{f' {errors} error(s).' if errors else ''}"
+        )
 
 
 @db.command("migrate-paths")
@@ -534,7 +557,7 @@ def db_migrate_paths(ctx: Context, dry_run: bool) -> None:
     Only paths that are absolute AND start with the library root will be
     converted; all other rows are left untouched.
     """
-    from uom.db.models import MediaModel
+    from mm.db.models import MediaModel
 
     repo = ctx.repo
     library_root = str(ctx.db_path.resolve().parent)

@@ -11,8 +11,8 @@ from pathlib import Path
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.config import DEFAULT_DB_NAME, DEFAULT_IMPORT_TEMPLATE, resolve_media_path
+from mm.cli import Context, pass_ctx
+from mm.config import DEFAULT_DB_NAME, DEFAULT_IMPORT_TEMPLATE, resolve_media_path
 
 
 @click.command("import")
@@ -29,7 +29,10 @@ from uom.config import DEFAULT_DB_NAME, DEFAULT_IMPORT_TEMPLATE, resolve_media_p
 )
 @click.option("--move", is_flag=True, help="Move files instead of copying.")
 @click.option(
-    "--dry-run/--no-dry-run", default=True, show_default=True, help="Preview without executing."
+    "--dry-run/--no-dry-run",
+    default=True,
+    show_default=True,
+    help="Preview without executing.",
 )
 @pass_ctx
 def import_cmd(
@@ -45,7 +48,7 @@ def import_cmd(
     Scans SOURCE for media, organises files into DESTINATION using a
     template, and stores the library database inside DESTINATION.
     """
-    from uom.core.importer import execute_import, plan_import
+    from mm.core.importer import execute_import, plan_import
 
     # Use DB in the destination directory
     dest = destination.resolve()
@@ -53,7 +56,7 @@ def import_cmd(
     db_path = dest / DEFAULT_DB_NAME
 
     # Re-initialise repo pointing at the destination DB
-    from uom.db.sync_repo import SyncRepo
+    from mm.db.sync_repo import SyncRepo
 
     repo = SyncRepo(db_path)
     click.echo(f"Library database: {db_path}")
@@ -86,8 +89,8 @@ def import_cmd(
 
     if not media_under_src:
         click.echo(f"No media in DB for {source}. Scanning source first...")
-        from uom.cli._utils import parallel_scan, print_scan_summary
-        from uom.core.scanner import discover_media, save_scan_result
+        from mm.cli._utils import parallel_scan, print_scan_summary
+        from mm.core.scanner import discover_media, save_scan_result
 
         files = list(discover_media(source))
         click.echo(f"Found {len(files)} media file(s).")

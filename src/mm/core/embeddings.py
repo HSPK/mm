@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from uom.config import CLIP_MODEL_NAME, CLIP_PRETRAINED
+from mm.config import CLIP_MODEL_NAME, CLIP_PRETRAINED
 
 # ---------------------------------------------------------------------------
 # Model loading (cached singleton)
@@ -78,7 +78,10 @@ def encode_text(text: str) -> np.ndarray:
 
 
 def encode_texts(
-    texts: list[str], model: Any = None, tokenizer: Any = None, device: str | None = None
+    texts: list[str],
+    model: Any = None,
+    tokenizer: Any = None,
+    device: str | None = None,
 ) -> np.ndarray:
     """Encode multiple texts and return a normalised (N, D) float32 array."""
     import torch
@@ -111,9 +114,9 @@ def generate_embeddings(
     *library_root* is the base directory for resolving relative media paths.
     Returns the count of newly embedded images.
     """
-    from uom.config import resolve_media_path
-    from uom.db.dto import Embedding
-    from uom.db.vector_store import vector_to_bytes
+    from mm.config import resolve_media_path
+    from mm.db.dto import Embedding
+    from mm.db.vector_store import vector_to_bytes
 
     media_list = repo.media_without_embedding()
     media_list = [m for m in media_list if m.media_type.value == "photo"]
@@ -123,7 +126,9 @@ def generate_embeddings(
     model, preprocess, _, device = get_clip_model()
     done = 0
     for media in media_list:
-        abs_path = resolve_media_path(media.path, library_root) if library_root else media.path
+        abs_path = (
+            resolve_media_path(media.path, library_root) if library_root else media.path
+        )
         vec = encode_image_from_path(Path(abs_path), model, preprocess, device)
         if vec is not None:
             emb = Embedding(

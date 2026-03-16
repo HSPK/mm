@@ -8,16 +8,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from uom.config import DEFAULT_DB_NAME
-from uom.db.async_repository import AsyncRepository
-from uom.db.dto import User
-from uom.server.dependencies import (
+from mm.config import DEFAULT_DB_NAME
+from mm.db.async_repository import AsyncRepository
+from mm.db.dto import User
+from mm.server.dependencies import (
     get_current_user,
     get_repo,
     invalidate_media_path_cache,
     invalidate_token_cache,
 )
-from uom.server.schemas import SwitchLibraryBody
+from mm.server.schemas import SwitchLibraryBody
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 
@@ -31,7 +31,9 @@ async def get_current_library(
     db_path = str(getattr(request.app.state, "db_path", ""))
     return {
         "db_path": db_path,
-        "name": Path(db_path).parent.name if "/" in db_path or "\\" in db_path else "default",
+        "name": Path(db_path).parent.name
+        if "/" in db_path or "\\" in db_path
+        else "default",
     }
 
 
@@ -118,7 +120,7 @@ async def get_library_config(
     cfg = await repo.get_all_config()
     # Always include import_template even if not yet stored
     if "import_template" not in cfg:
-        from uom.config import DEFAULT_IMPORT_TEMPLATE
+        from mm.config import DEFAULT_IMPORT_TEMPLATE
 
         cfg["import_template"] = DEFAULT_IMPORT_TEMPLATE
     return cfg

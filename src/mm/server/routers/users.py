@@ -4,9 +4,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from uom.db.dto import User
-from uom.server.dependencies import get_repo, require_admin
-from uom.server.schemas import CreateUserBody
+from mm.db.dto import User
+from mm.server.dependencies import get_repo, require_admin
+from mm.server.schemas import CreateUserBody
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 

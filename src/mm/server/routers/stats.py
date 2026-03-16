@@ -5,9 +5,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from uom.db.dto import User
-from uom.server.dependencies import get_current_user, get_repo
-from uom.server.schemas import serialize_media_brief
+from mm.db.dto import User
+from mm.server.dependencies import get_current_user, get_repo
+from mm.server.schemas import serialize_media_brief
 
 router = APIRouter(prefix="/api", tags=["stats"])
 

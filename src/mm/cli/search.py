@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from uom.cli import Context, pass_ctx
+from mm.cli import Context, pass_ctx
 
 
 @click.command()
@@ -44,7 +44,7 @@ def search(
 
     # Vector search
     if image_path or text_query:
-        from uom.db.vector_store import VectorStore
+        from mm.db.vector_store import VectorStore
 
         vs = VectorStore(repo)
         n = vs.load()
@@ -53,7 +53,7 @@ def search(
             return
 
         if image_path:
-            from uom.core.embeddings import encode_image_from_path
+            from mm.core.embeddings import encode_image_from_path
 
             query_vec = encode_image_from_path(image_path)
             if query_vec is None:
@@ -62,7 +62,7 @@ def search(
             query_vec = query_vec.flatten()
             click.echo(f"\nSearching by image: {image_path}\n")
         else:
-            from uom.core.embeddings import encode_text
+            from mm.core.embeddings import encode_text
 
             assert text_query is not None
             query_vec = encode_text(text_query).flatten()

@@ -12,9 +12,9 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from uom.db.async_repository import AsyncRepository
-from uom.server.routers import albums, auth, batch, library, media, stats, tags, users
-from uom.server.routers import smart_albums as smart_albums_router
+from mm.db.async_repository import AsyncRepository
+from mm.server.routers import albums, auth, batch, library, media, stats, tags, users
+from mm.server.routers import smart_albums as smart_albums_router
 
 
 @asynccontextmanager
@@ -46,7 +46,17 @@ def create_app(db_path: str | Path) -> FastAPI:
     )
 
     # Register routes
-    for r in (auth, users, media, tags, stats, batch, albums, smart_albums_router, library):
+    for r in (
+        auth,
+        users,
+        media,
+        tags,
+        stats,
+        batch,
+        albums,
+        smart_albums_router,
+        library,
+    ):
         app.include_router(r.router)
 
     # Serve frontend static files
@@ -63,7 +73,11 @@ def create_app(db_path: str | Path) -> FastAPI:
     if web_dist.is_dir():
         assets_dir = web_dist / "assets"
         if assets_dir.is_dir():
-            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="frontend-assets")
+            app.mount(
+                "/assets",
+                StaticFiles(directory=str(assets_dir)),
+                name="frontend-assets",
+            )
 
         @app.get("/vite.svg")
         async def vite_svg():

@@ -7,9 +7,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from uom.config import DEFAULT_IMPORT_TEMPLATE
-from uom.core.scanner import file_hash
-from uom.db.dto import Media, Metadata
+from mm.config import DEFAULT_IMPORT_TEMPLATE
+from mm.core.scanner import file_hash
+from mm.db.dto import Media, Metadata
 
 
 @dataclass
@@ -85,7 +85,9 @@ def plan_import(
         src = Path(media.path)
         if not src.exists():
             actions.append(
-                ImportAction(source=src, destination=src, skipped=True, reason="source missing")
+                ImportAction(
+                    source=src, destination=src, skipped=True, reason="source missing"
+                )
             )
             continue
 
@@ -99,7 +101,10 @@ def plan_import(
                     if file_hash(src) == file_hash(dest):
                         actions.append(
                             ImportAction(
-                                source=src, destination=dest, skipped=True, reason="already exists"
+                                source=src,
+                                destination=dest,
+                                skipped=True,
+                                reason="already exists",
                             )
                         )
                         continue

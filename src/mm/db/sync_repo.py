@@ -11,7 +11,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from uom.db.async_repository import AsyncRepository
+from mm.db.async_repository import AsyncRepository
 
 
 class SyncRepo:

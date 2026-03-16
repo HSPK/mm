@@ -6,7 +6,7 @@ from pathlib import Path
 
 import peewee_aio
 
-from uom.db.mixins import (
+from mm.db.mixins import (
     AlbumsMixin,
     CliMixin,
     ConfigMixin,
@@ -17,7 +17,7 @@ from uom.db.mixins import (
     TagsMixin,
     UsersMixin,
 )
-from uom.db.models import (
+from mm.db.models import (
     ALL_TABLES,
     database,
 )

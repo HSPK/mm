@@ -7,17 +7,25 @@ from pathlib import Path
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.config import DEFAULT_DB_NAME
+from mm.cli import Context, pass_ctx
+from mm.config import DEFAULT_DB_NAME
 
 
 @click.command()
 @click.argument("directory", type=click.Path(path_type=Path), default=".")
-@click.option("-p", "--port", type=int, default=8000, show_default=True, help="Port to listen on.")
-@click.option("-h", "--host", default="127.0.0.1", show_default=True, help="Host to bind to.")
-@click.option("--reload", "do_reload", is_flag=True, help="Enable auto-reload for development.")
+@click.option(
+    "-p", "--port", type=int, default=8000, show_default=True, help="Port to listen on."
+)
+@click.option(
+    "-h", "--host", default="127.0.0.1", show_default=True, help="Host to bind to."
+)
+@click.option(
+    "--reload", "do_reload", is_flag=True, help="Enable auto-reload for development."
+)
 @pass_ctx
-def server(ctx: Context, directory: Path, port: int, host: str, do_reload: bool) -> None:
+def server(
+    ctx: Context, directory: Path, port: int, host: str, do_reload: bool
+) -> None:
     """Start the UOM web UI server.
 
     DIRECTORY is the library root folder (default: current directory).

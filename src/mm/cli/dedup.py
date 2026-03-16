@@ -6,8 +6,8 @@ from pathlib import Path
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.core.dedup import DedupStrategy
+from mm.cli import Context, pass_ctx
+from mm.core.dedup import DedupStrategy
 
 
 def _click_progress():
@@ -27,7 +27,9 @@ def _click_progress():
 
 
 @click.command()
-@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument(
+    "directory", type=click.Path(exists=True, file_okay=False, path_type=Path)
+)
 @click.option(
     "--strategy",
     "-s",
@@ -36,11 +38,13 @@ def _click_progress():
     show_default=True,
     help="Dedup strategy: 'name' (same stem .jpg/.jpeg) or 'hash' (identical SHA-256).",
 )
-@click.option("--delete", is_flag=True, help="Actually delete duplicates (default: dry-run).")
+@click.option(
+    "--delete", is_flag=True, help="Actually delete duplicates (default: dry-run)."
+)
 @pass_ctx
 def dedup(ctx: Context, directory: Path, strategy: str, delete: bool) -> None:
     """Find and remove duplicate media files."""
-    from uom.core.dedup import find_duplicates
+    from mm.core.dedup import find_duplicates
 
     strat = DedupStrategy(strategy)
     click.echo(f"Strategy: {strat.value}")

@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import peewee_aio
 
-from uom.db.dto import Metadata
-from uom.db.helpers import to_metadata
-from uom.db.models import MetadataModel
+from mm.db.dto import Metadata
+from mm.db.helpers import to_metadata
+from mm.db.models import MetadataModel
 
 
 class MetadataMixin:

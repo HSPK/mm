@@ -4,9 +4,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from uom.db.dto import User
-from uom.server.dependencies import get_current_user, get_repo
-from uom.server.schemas import BatchDeleteBody, BatchRatingBody, BatchTagBody, BatchTagRemoveBody
+from mm.db.dto import User
+from mm.server.dependencies import get_current_user, get_repo
+from mm.server.schemas import (
+    BatchDeleteBody,
+    BatchRatingBody,
+    BatchTagBody,
+    BatchTagRemoveBody,
+)
 
 router = APIRouter(prefix="/api/batch", tags=["batch"])
 

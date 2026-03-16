@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from uom.db.async_repository import AsyncRepository
+    from mm.db.async_repository import AsyncRepository
 
 
 def _bytes_to_vector(data: bytes) -> np.ndarray:

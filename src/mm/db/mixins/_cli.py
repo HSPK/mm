@@ -10,9 +10,9 @@ if TYPE_CHECKING:
 
 from peewee import fn
 
-from uom.db.dto import Embedding, Media, Metadata, Tag
-from uom.db.helpers import normalise_tag, to_embedding, to_media, to_metadata, to_tag
-from uom.db.models import (
+from mm.db.dto import Embedding, Media, Metadata, Tag
+from mm.db.helpers import normalise_tag, to_embedding, to_media, to_metadata, to_tag
+from mm.db.models import (
     EmbeddingModel,
     MediaModel,
     MediaTagModel,
@@ -27,13 +27,17 @@ class CliMixin:
     async def all_media(self) -> list[Media]:
         return [
             to_media(r)
-            for r in await self.objects.fetchall(MediaModel.select().order_by(MediaModel.path))
+            for r in await self.objects.fetchall(
+                MediaModel.select().order_by(MediaModel.path)
+            )
         ]
 
     async def all_tags(self) -> list[Tag]:
         return [
             to_tag(r)
-            for r in await self.objects.fetchall(TagModel.select().order_by(TagModel.name))
+            for r in await self.objects.fetchall(
+                TagModel.select().order_by(TagModel.name)
+            )
         ]
 
     async def all_media_paths(self) -> list[tuple[int, str]]:
@@ -141,11 +145,15 @@ class CliMixin:
         return [
             to_media(r)
             for r in await self.objects.fetchall(
-                MediaModel.select().where(MediaModel.id.not_in(sub)).order_by(MediaModel.path)
+                MediaModel.select()
+                .where(MediaModel.id.not_in(sub))
+                .order_by(MediaModel.path)
             )
         ]
 
-    async def media_ids_by_tags(self, tag_names: list[str], match_all: bool = True) -> list[int]:
+    async def media_ids_by_tags(
+        self, tag_names: list[str], match_all: bool = True
+    ) -> list[int]:
         if not tag_names:
             return []
         names = [normalise_tag(n) for n in tag_names]
@@ -163,7 +171,9 @@ class CliMixin:
         rows = await self.objects.fetchall(q)
         return [r.media_id for r in rows]
 
-    async def bulk_delete_media(self, media_ids: list[int], batch_size: int = 500) -> int:
+    async def bulk_delete_media(
+        self, media_ids: list[int], batch_size: int = 500
+    ) -> int:
         deleted = 0
         for i in range(0, len(media_ids), batch_size):
             chunk = media_ids[i : i + batch_size]

@@ -11,15 +11,17 @@ if TYPE_CHECKING:
 
 from peewee import fn
 
-from uom.db.dto import Tag
-from uom.db.helpers import normalise_tag, to_tag
-from uom.db.models import MediaTagModel, TagModel, TagSource
+from mm.db.dto import Tag
+from mm.db.helpers import normalise_tag, to_tag
+from mm.db.models import MediaTagModel, TagModel, TagSource
 
 
 class TagsMixin:
     objects: peewee_aio.Manager
 
-    async def get_or_create_tag(self, name: str, source: TagSource = TagSource.MANUAL) -> Tag:
+    async def get_or_create_tag(
+        self, name: str, source: TagSource = TagSource.MANUAL
+    ) -> Tag:
         name = normalise_tag(name)
         try:
             t = await self.objects.get(TagModel, name=name)
@@ -34,7 +36,9 @@ class TagsMixin:
         except TagModel.DoesNotExist:
             return None
 
-    async def add_media_tag(self, media_id: int, tag_id: int, confidence: float = 1.0) -> None:
+    async def add_media_tag(
+        self, media_id: int, tag_id: int, confidence: float = 1.0
+    ) -> None:
         try:
             await self.objects.create(
                 MediaTagModel, media=media_id, tag=tag_id, confidence=confidence
@@ -93,7 +97,9 @@ class TagsMixin:
 
     async def delete_orphan_tags(self) -> int:
         sub = MediaTagModel.select(MediaTagModel.tag).distinct()
-        return await self.objects.execute(TagModel.delete().where(TagModel.id.not_in(sub)))
+        return await self.objects.execute(
+            TagModel.delete().where(TagModel.id.not_in(sub))
+        )
 
     async def tags_for_media(self, media_id: int) -> list[tuple[Tag, float]]:
         rows = await self.objects.fetchall(

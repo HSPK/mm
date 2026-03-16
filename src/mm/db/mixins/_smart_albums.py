@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import peewee_aio
 
-from uom.db.models import SmartAlbumModel
+from mm.db.models import SmartAlbumModel
 
 # ── Lazy seed data loader ─────────────────────────────────
 _SEED_ALBUMS = _SEED_ALBUMS_UNSET = object()
@@ -18,7 +18,7 @@ _SEED_ALBUMS = _SEED_ALBUMS_UNSET = object()
 def _load_seed_albums() -> list[dict[str, Any]]:
     global _SEED_ALBUMS
     if _SEED_ALBUMS is _SEED_ALBUMS_UNSET:
-        from uom.db._seed import DEFAULT_SMART_ALBUMS
+        from mm.db._seed import DEFAULT_SMART_ALBUMS
 
         _SEED_ALBUMS = DEFAULT_SMART_ALBUMS
     return _SEED_ALBUMS  # type: ignore[return-value]
@@ -37,13 +37,17 @@ class SmartAlbumsMixin:
 
     async def list_all_smart_album_definitions(self) -> list[dict[str, Any]]:
         rows = await self.objects.fetchall(
-            SmartAlbumModel.select().order_by(SmartAlbumModel.section, SmartAlbumModel.position)
+            SmartAlbumModel.select().order_by(
+                SmartAlbumModel.section, SmartAlbumModel.position
+            )
         )
         return [self._sa_to_dict(r) for r in rows]
 
     async def get_smart_album_definition(self, album_id: int) -> dict[str, Any] | None:
         try:
-            return self._sa_to_dict(await self.objects.get(SmartAlbumModel, id=album_id))
+            return self._sa_to_dict(
+                await self.objects.get(SmartAlbumModel, id=album_id)
+            )
         except SmartAlbumModel.DoesNotExist:
             return None
 
@@ -76,7 +80,16 @@ class SmartAlbumsMixin:
         except SmartAlbumModel.DoesNotExist:
             return None
         updates: dict[str, Any] = {"updated_at": dt.datetime.now()}
-        for f in ("key", "section", "title", "subtitle", "icon", "color", "position", "enabled"):
+        for f in (
+            "key",
+            "section",
+            "title",
+            "subtitle",
+            "icon",
+            "color",
+            "position",
+            "enabled",
+        ):
             if f in data:
                 updates[f] = data[f]
         if "filters" in data:
@@ -135,7 +148,9 @@ class SmartAlbumsMixin:
             "color": row.color or "",
             "filters": json.loads(row.filters) if row.filters else {},
             "generator": row.generator,
-            "generator_config": json.loads(row.generator_config) if row.generator_config else {},
+            "generator_config": json.loads(row.generator_config)
+            if row.generator_config
+            else {},
             "position": row.position,
             "is_system": bool(row.is_system),
             "enabled": bool(row.enabled),

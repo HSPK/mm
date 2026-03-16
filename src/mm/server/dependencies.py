@@ -5,9 +5,9 @@ import time
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from uom.config import resolve_media_path
-from uom.db.async_repository import AsyncRepository
-from uom.db.dto import User
+from mm.config import resolve_media_path
+from mm.db.async_repository import AsyncRepository
+from mm.db.dto import User
 
 _bearer = HTTPBearer(auto_error=False)
 

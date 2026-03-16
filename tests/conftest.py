@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from uom.db.sync_repo import SyncRepo
+from mm.db.sync_repo import SyncRepo
 
 
 @pytest.fixture

@@ -6,8 +6,8 @@ import time
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.core.geocoding import reverse_geocode_batch
+from mm.cli import Context, pass_ctx
+from mm.core.geocoding import reverse_geocode_batch
 
 
 @click.group()

@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import peewee_aio
 
-from uom.db.dto import User
-from uom.db.helpers import hash_password, to_user, verify_password
-from uom.db.models import UserModel
+from mm.db.dto import User
+from mm.db.helpers import hash_password, to_user, verify_password
+from mm.db.models import UserModel
 
 
 class UsersMixin:
@@ -56,11 +56,15 @@ class UsersMixin:
         import secrets
 
         token = secrets.token_hex(32)
-        await self.objects.execute(UserModel.update(token=token).where(UserModel.id == user_id))
+        await self.objects.execute(
+            UserModel.update(token=token).where(UserModel.id == user_id)
+        )
         return token
 
     async def invalidate_token(self, token: str) -> None:
-        await self.objects.execute(UserModel.update(token=None).where(UserModel.token == token))
+        await self.objects.execute(
+            UserModel.update(token=None).where(UserModel.token == token)
+        )
 
     async def change_password(self, user_id: int, new_password: str) -> None:
         await self.objects.execute(

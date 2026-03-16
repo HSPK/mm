@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from uom.core.dedup import find_hash_duplicates, find_name_duplicates
+from mm.core.dedup import find_hash_duplicates, find_name_duplicates
 
 
 def test_name_duplicates(tmp_path: Path):

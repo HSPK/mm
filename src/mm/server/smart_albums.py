@@ -22,7 +22,7 @@ from typing import Any
 
 from lunar_python import Lunar
 
-from uom.db.async_repository import AsyncRepository
+from mm.db.async_repository import AsyncRepository
 
 # ═══════════════════════════════════════════════════════════
 # Festival date helpers
@@ -99,7 +99,9 @@ async def _fetch_cover_and_count(
     repo: AsyncRepository, filters: dict[str, Any]
 ) -> tuple[int | None, int]:
     """Query the first matching media id **and** total count for *filters*."""
-    items, total = await repo.query_media(page=1, per_page=1, **_filters_to_query_kwargs(filters))
+    items, total = await repo.query_media(
+        page=1, per_page=1, **_filters_to_query_kwargs(filters)
+    )
     return (items[0].id if items else None), total
 
 
@@ -434,7 +436,9 @@ async def build_smart_albums(repo: AsyncRepository) -> dict[str, Any]:
 
     # Remove festivals with no cover (no photos at all)
     if "festivals" in sections:
-        sections["festivals"] = [a for a in sections["festivals"] if a.get("cover_id") is not None]
+        sections["festivals"] = [
+            a for a in sections["festivals"] if a.get("cover_id") is not None
+        ]
 
     # ── 5. Ensure all expected section keys exist ──
     for key in ("library", "tags", "cameras", "festivals", "years", "places"):

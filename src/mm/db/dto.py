@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
 
-from uom.db.models import MediaType, TagSource
+from mm.db.models import MediaType, TagSource
 
 
 @dataclass

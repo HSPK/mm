@@ -7,8 +7,8 @@ from pathlib import Path
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.config import resolve_media_path
+from mm.cli import Context, pass_ctx
+from mm.config import resolve_media_path
 
 
 @click.group()
@@ -18,11 +18,13 @@ def tag() -> None:
 
 @tag.command("add")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
-@click.option("-t", "--tag", "tag_names", required=True, multiple=True, help="Tag(s) to add.")
+@click.option(
+    "-t", "--tag", "tag_names", required=True, multiple=True, help="Tag(s) to add."
+)
 @pass_ctx
 def tag_add(ctx: Context, path: Path, tag_names: tuple[str, ...]) -> None:
     """Add tag(s) to a file or all files under a directory."""
-    from uom.core.tagger import add_tags
+    from mm.core.tagger import add_tags
 
     repo = ctx.repo
     library_root = str(ctx.db_path.resolve().parent)
@@ -40,11 +42,13 @@ def tag_add(ctx: Context, path: Path, tag_names: tuple[str, ...]) -> None:
 
 @tag.command("remove")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
-@click.option("-t", "--tag", "tag_names", required=True, multiple=True, help="Tag(s) to remove.")
+@click.option(
+    "-t", "--tag", "tag_names", required=True, multiple=True, help="Tag(s) to remove."
+)
 @pass_ctx
 def tag_remove(ctx: Context, path: Path, tag_names: tuple[str, ...]) -> None:
     """Remove tag(s) from a file or all files under a directory."""
-    from uom.core.tagger import remove_tags
+    from mm.core.tagger import remove_tags
 
     repo = ctx.repo
     library_root = str(ctx.db_path.resolve().parent)
@@ -94,14 +98,22 @@ def tag_list(ctx: Context, path: Path | None) -> None:
 
 
 @tag.command("auto")
-@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument(
+    "directory", type=click.Path(exists=True, file_okay=False, path_type=Path)
+)
 @click.option("--rules/--no-rules", default=True, help="Apply rule-based tags.")
-@click.option("--clip", is_flag=True, help="Apply CLIP-based auto-tags (requires torch).")
-@click.option("--threshold", default=0.25, show_default=True, help="CLIP confidence threshold.")
+@click.option(
+    "--clip", is_flag=True, help="Apply CLIP-based auto-tags (requires torch)."
+)
+@click.option(
+    "--threshold", default=0.25, show_default=True, help="CLIP confidence threshold."
+)
 @pass_ctx
-def tag_auto(ctx: Context, directory: Path, rules: bool, clip: bool, threshold: float) -> None:
+def tag_auto(
+    ctx: Context, directory: Path, rules: bool, clip: bool, threshold: float
+) -> None:
     """Automatically tag media via rules and/or CLIP."""
-    from uom.core.tagger import apply_clip_tags, apply_rule_tags
+    from mm.core.tagger import apply_clip_tags, apply_rule_tags
 
     repo = ctx.repo
     media_list = repo.all_media()
@@ -109,11 +121,15 @@ def tag_auto(ctx: Context, directory: Path, rules: bool, clip: bool, threshold: 
     dir_str = str(directory.resolve())
     library_root = str(ctx.db_path.resolve().parent)
     media_list = [
-        m for m in media_list if resolve_media_path(m.path, library_root).startswith(dir_str)
+        m
+        for m in media_list
+        if resolve_media_path(m.path, library_root).startswith(dir_str)
     ]
 
     if not media_list:
-        click.echo("No media found in database under this directory. Run 'uom scan' first.")
+        click.echo(
+            "No media found in database under this directory. Run 'uom scan' first."
+        )
         return
 
     if rules:
@@ -173,5 +189,6 @@ def _resolve_targets(repo, path: Path, library_root: str | None = None) -> list[
         return [
             m.id
             for m in all_media
-            if m.id is not None and resolve_media_path(m.path, library_root).startswith(resolved)
+            if m.id is not None
+            and resolve_media_path(m.path, library_root).startswith(resolved)
         ]

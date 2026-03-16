@@ -4,9 +4,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from uom.db.dto import User
-from uom.server.dependencies import get_current_user, get_repo
-from uom.server.schemas import RenameTagBody
+from mm.db.dto import User
+from mm.server.dependencies import get_current_user, get_repo
+from mm.server.schemas import RenameTagBody
 
 router = APIRouter(prefix="/api/tags", tags=["tags"])
 

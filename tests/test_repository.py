@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from uom.db.dto import Media
-from uom.db.models import MediaType, TagSource
-from uom.db.sync_repo import SyncRepo
+from mm.db.dto import Media
+from mm.db.models import MediaType, TagSource
+from mm.db.sync_repo import SyncRepo
 
 
 def test_upsert_and_get_media(repo: SyncRepo):

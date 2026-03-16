@@ -18,7 +18,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from uom.config import VIDEO_EXTENSIONS
+from mm.config import VIDEO_EXTENSIONS
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -97,7 +97,9 @@ def _cache_path(cache_dir: Path, media_id: int, size: str, ext: str = ".webp") -
 # ---------------------------------------------------------------------------
 
 
-def _generate_image(source_path: str, dest: Path, max_size: tuple[int, int]) -> Path | None:
+def _generate_image(
+    source_path: str, dest: Path, max_size: tuple[int, int]
+) -> Path | None:
     """Generate a thumbnail from an image file."""
     _try_register_heif()
     img = None
@@ -170,7 +172,9 @@ def _generate_image(source_path: str, dest: Path, max_size: tuple[int, int]) -> 
 # ---------------------------------------------------------------------------
 
 
-def _generate_video(source_path: str, dest: Path, max_size: tuple[int, int]) -> Path | None:
+def _generate_video(
+    source_path: str, dest: Path, max_size: tuple[int, int]
+) -> Path | None:
     """Extract a frame from a video and generate a thumbnail.
 
     Tries to grab a frame at 1 second; if that fails, tries the first frame.

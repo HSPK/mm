@@ -6,12 +6,12 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from uom.db.dto import Media, Metadata
-from uom.db.helpers import normalise_tag
-from uom.db.models import TagSource
+from mm.db.dto import Media, Metadata
+from mm.db.helpers import normalise_tag
+from mm.db.models import TagSource
 
 if TYPE_CHECKING:
-    from uom.db.async_repository import AsyncRepository
+    from mm.db.async_repository import AsyncRepository
 
 # ---------------------------------------------------------------------------
 # Manual tagging
@@ -26,7 +26,9 @@ def add_tags(repo: AsyncRepository | Any, media_id: int, tag_names: list[str]) -
         repo.add_media_tag(media_id, tag.id, confidence=1.0)
 
 
-def remove_tags(repo: AsyncRepository | Any, media_id: int, tag_names: list[str]) -> None:
+def remove_tags(
+    repo: AsyncRepository | Any, media_id: int, tag_names: list[str]
+) -> None:
     """Remove tags from a media entry."""
     for name in tag_names:
         tag = repo.get_tag_by_name(name)
@@ -112,8 +114,8 @@ def apply_clip_tags(
     Returns list of (tag_name, confidence) pairs that were added.
     Imports torch/open_clip lazily so the rest of UOM works without them.
     """
-    from uom.config import DEFAULT_CLIP_LABELS
-    from uom.core.embeddings import (  # noqa: delayed import
+    from mm.config import DEFAULT_CLIP_LABELS
+    from mm.core.embeddings import (  # noqa: delayed import
         encode_image_from_path,
         encode_texts,
         get_clip_model,

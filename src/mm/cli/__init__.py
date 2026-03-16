@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
-
 from uom import __version__
-from uom.config import DEFAULT_DB_NAME
+
+from mm.config import DEFAULT_DB_NAME
 
 if TYPE_CHECKING:
-    from uom.db.sync_repo import SyncRepo
+    from mm.db.sync_repo import SyncRepo
 
 # ---------------------------------------------------------------------------
 # Shared context / pass-decorator
@@ -28,7 +28,7 @@ class Context:
     @property
     def repo(self) -> SyncRepo:
         if self._repo is None:
-            from uom.db.sync_repo import SyncRepo as _SyncRepo
+            from mm.db.sync_repo import SyncRepo as _SyncRepo
 
             self._repo = _SyncRepo(self.db_path)
         return self._repo
@@ -63,15 +63,15 @@ def cli(ctx: click.Context, db: Path) -> None:
 
 
 def _register() -> None:
-    from uom.cli.db import db  # noqa: F811
-    from uom.cli.dedup import dedup  # noqa: F811
-    from uom.cli.geo import geo  # noqa: F811
-    from uom.cli.import_cmd import import_cmd  # noqa: F811
-    from uom.cli.info import info  # noqa: F811
-    from uom.cli.scan import scan  # noqa: F811
-    from uom.cli.search import search  # noqa: F811
-    from uom.cli.server import server  # noqa: F811
-    from uom.cli.tag import tag  # noqa: F811
+    from mm.cli.db import db  # noqa: F811
+    from mm.cli.dedup import dedup  # noqa: F811
+    from mm.cli.geo import geo  # noqa: F811
+    from mm.cli.import_cmd import import_cmd  # noqa: F811
+    from mm.cli.info import info  # noqa: F811
+    from mm.cli.scan import scan  # noqa: F811
+    from mm.cli.search import search  # noqa: F811
+    from mm.cli.server import server  # noqa: F811
+    from mm.cli.tag import tag  # noqa: F811
 
     cli.add_command(scan)
     cli.add_command(search)

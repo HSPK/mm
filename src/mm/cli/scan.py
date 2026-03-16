@@ -7,9 +7,9 @@ from typing import Any
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.cli._utils import find_media_by_path, parallel_scan, print_scan_summary
-from uom.core.scanner import save_scan_result
+from mm.cli import Context, pass_ctx
+from mm.cli._utils import find_media_by_path, parallel_scan, print_scan_summary
+from mm.core.scanner import save_scan_result
 
 # ---------------------------------------------------------------------------
 # CLI command
@@ -17,7 +17,9 @@ from uom.core.scanner import save_scan_result
 
 
 @click.command()
-@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument(
+    "directory", type=click.Path(exists=True, file_okay=False, path_type=Path)
+)
 @click.option("--no-hash", is_flag=True, help="Skip SHA-256 hash computation (faster).")
 @click.option("--embed", is_flag=True, help="Generate CLIP embeddings during scan.")
 @click.option(
@@ -26,7 +28,9 @@ from uom.core.scanner import save_scan_result
     type=click.Choice(["photo", "video", "audio"]),
     help="Filter by media type (e.g. video only).",
 )
-@click.option("--force", is_flag=True, help="Force re-scan of all files even if unchanged.")
+@click.option(
+    "--force", is_flag=True, help="Force re-scan of all files even if unchanged."
+)
 @click.option(
     "-j",
     "--jobs",
@@ -46,8 +50,8 @@ def scan(
     jobs: int,
 ) -> None:
     """Scan a directory and ingest media files into the database."""
-    from uom.config import AUDIO_EXTENSIONS, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS
-    from uom.core.scanner import discover_media
+    from mm.config import AUDIO_EXTENSIONS, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS
+    from mm.core.scanner import discover_media
 
     repo = ctx.repo
     library_root = ctx.db_path.resolve().parent
@@ -105,7 +109,10 @@ def scan(
 
     # Phase 2: parallel scan + metadata extraction
     results, errors = parallel_scan(
-        to_scan, compute_hash=not no_hash, jobs=jobs, label="Scanning & extracting metadata"
+        to_scan,
+        compute_hash=not no_hash,
+        jobs=jobs,
+        label="Scanning & extracting metadata",
     )
 
     # Phase 3: bulk write to DB (single-threaded, fast)
@@ -135,7 +142,7 @@ def scan(
 
 def _generate_embeddings(repo: Any, library_root: Path | str | None = None) -> None:
     """Generate embeddings for media without one."""
-    from uom.core.embeddings import generate_embeddings
+    from mm.core.embeddings import generate_embeddings
 
     pending = repo.media_without_embedding()
     pending = [m for m in pending if m.media_type.value == "photo"]

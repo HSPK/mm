@@ -7,8 +7,8 @@ from typing import Any
 
 import click
 
-from uom.cli import Context, pass_ctx
-from uom.cli._utils import fmt_size as _fmt_size
+from mm.cli import Context, pass_ctx
+from mm.cli._utils import fmt_size as _fmt_size
 
 
 @click.command()
@@ -17,8 +17,8 @@ from uom.cli._utils import fmt_size as _fmt_size
 @pass_ctx
 def info(ctx: Context, file: Path, raw: bool) -> None:
     """Show metadata for a single media file."""
-    from uom.core.metadata import check_tools
-    from uom.core.scanner import scan_and_extract
+    from mm.core.metadata import check_tools
+    from mm.core.scanner import scan_and_extract
 
     missing = check_tools()
     if missing:

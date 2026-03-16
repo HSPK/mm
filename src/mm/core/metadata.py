@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from uom.config import AUDIO_EXTENSIONS, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS
-from uom.db.dto import Metadata
+from mm.config import AUDIO_EXTENSIONS, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS
+from mm.db.dto import Metadata
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -27,7 +27,12 @@ def _run_json(cmd: list[str]) -> dict[str, Any]:
         if result.returncode != 0:
             return {}
         return json.loads(result.stdout)  # type: ignore[no-any-return]
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError, UnicodeError):
+    except (
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+        FileNotFoundError,
+        UnicodeError,
+    ):
         return {}
 
 
@@ -102,7 +107,9 @@ def extract_photo_metadata(path: Path, media_id: int) -> Metadata:
     return Metadata(
         media_id=media_id,
         date_taken=_parse_exif_date(
-            d.get("EXIF:DateTimeOriginal") or d.get("EXIF:CreateDate") or d.get("XMP:DateCreated")
+            d.get("EXIF:DateTimeOriginal")
+            or d.get("EXIF:CreateDate")
+            or d.get("XMP:DateCreated")
         ),
         camera_make=str(d.get("EXIF:Make", "") or ""),
         camera_model=str(d.get("EXIF:Model", "") or ""),
@@ -200,7 +207,8 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
         exif.get("Composite:GPSLatitudeRef", "") or exif.get("EXIF:GPSLatitudeRef", "")
     ).upper()
     lon_ref = str(
-        exif.get("Composite:GPSLongitudeRef", "") or exif.get("EXIF:GPSLongitudeRef", "")
+        exif.get("Composite:GPSLongitudeRef", "")
+        or exif.get("EXIF:GPSLongitudeRef", "")
     ).upper()
 
     lat_val = _safe_float(
