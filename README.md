@@ -119,11 +119,11 @@ Scan, tag, search, deduplicate, and browse your media collection with a beautifu
 # Install with uv (recommended)
 uv pip install -e .
 
-# Scan your photo library
-mm scan ~/Photos
+# Create a new library (interactive)
+mm init ~/Photos
 
 # Start the web server
-mm server ~/Photos
+mm server
 # → Open http://localhost:8000
 ```
 
@@ -173,31 +173,39 @@ cd ..
 
 | Command | Description |
 |---|---|
-| `mm scan <dir>` | Scan and ingest media files |
+| `mm init [dir]` | Create or open a media library (interactive setup) |
 | `mm server [dir]` | Start the web UI server |
+| `mm import <source>` | Import media files into the active library |
 | `mm search` | Search by text, image, or tags (requires CLIP) |
-| `mm dedup <dir>` | Find and remove duplicate files |
-| `mm tag` | Manage tags (add, remove, list, auto) |
-| `mm import <src> <dst>` | Import & organize media with templates |
+| `mm dedup` | Find and remove duplicate media files by hash |
 | `mm info <file>` | Show detailed file metadata |
+| `mm config [key] [value]` | Get or set library config values |
 | `mm geo update` | Offline reverse geocode GPS-tagged media |
-| `mm db init` | Initialize the database |
-| `mm db stats` | Show library statistics |
+| `mm db list` | List all registered databases |
+| `mm db set <n>` | Switch the active database |
+| `mm db add <path>` | Register an existing database file |
+| `mm db rm <n>` | Unregister a database (optionally delete) |
+| `mm db stats` | Show detailed library statistics |
+| `mm db clean` | Remove entries for files no longer on disk |
+| `mm db sync <dir>` | Clean stale entries and re-scan changed files |
 
-### Scanning
+### Library Setup
 
 ```bash
-# Basic scan
-mm scan ~/Photos
+# Create a new library interactively
+mm init ~/Photos
 
-# Scan with CLIP embeddings for AI search
-mm scan ~/Photos --embed
+# View all config values
+mm config
 
-# Scan only photos, skip hashing for speed
-mm scan ~/Photos --type photo --no-hash
+# Set the import template
+mm config import_template "{year}/{year}-{month:02d}-{day:02d}/{original_name}{ext}"
 
-# Parallel scan with 8 workers
-mm scan ~/Photos -j 8
+# Sync database with disk (remove stale + re-scan)
+mm db sync ~/Photos
+
+# Parallel sync with 8 workers
+mm db sync ~/Photos -j 8
 ```
 
 ### Searching
@@ -216,43 +224,34 @@ mm search --tag landscape --tag nature
 ### Deduplication
 
 ```bash
-# Find duplicates by name (same stem, different extensions)
-mm dedup ~/Photos --strategy name
-
-# Find duplicates by content hash
-mm dedup ~/Photos --strategy hash
-
-# Actually delete duplicates (default is dry-run)
-mm dedup ~/Photos --strategy hash --delete
+# Find and remove duplicate media files (by hash)
+mm dedup
 ```
 
 ### Importing & Organizing
 
 ```bash
-# Import with default template: {year}/{month}/{day}/{filename}{ext}
-mm import ~/DCIM ~/Photos
-
-# Custom template
-mm import ~/DCIM ~/Photos --template "{year}/{camera}/{filename}{ext}"
+# Import from SD card (copies into library using configured template)
+mm import ~/DCIM
 
 # Move instead of copy
-mm import ~/DCIM ~/Photos --move
-
-# Preview changes without executing
-mm import ~/DCIM ~/Photos --dry-run
+mm import ~/DCIM --move
 ```
 
 ### Web Server
 
 ```bash
 # Start on default port (8000)
+mm server
+
+# Specify library directory
 mm server ~/Photos
 
 # Custom host and port
-mm server ~/Photos -h 0.0.0.0 -p 9000
+mm server -h 0.0.0.0 -p 9000
 
 # Development mode with auto-reload
-mm server ~/Photos --reload
+mm server --reload
 ```
 
 ## 🌐 Web UI
