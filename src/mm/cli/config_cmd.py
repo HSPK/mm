@@ -1,4 +1,4 @@
-"""uom config — get/set library config values."""
+"""mm config — get/set library config values."""
 
 from __future__ import annotations
 

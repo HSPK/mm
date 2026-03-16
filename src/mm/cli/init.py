@@ -1,4 +1,4 @@
-"""uom init — create or open a media library."""
+"""mm init — create or open a media library."""
 
 from __future__ import annotations
 
