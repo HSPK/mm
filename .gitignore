@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+src/mm/_version.py
 node_modules/
 .vite/
 /ssd
