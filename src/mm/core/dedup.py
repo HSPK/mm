@@ -7,8 +7,9 @@ Also provides a helper for the importer to skip files already in the library.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
+
+from mm.db.dto import Media
 
 if TYPE_CHECKING:
     from mm.db.sync_repo import SyncRepo
@@ -19,8 +20,8 @@ class DedupGroup:
     """A group of media entries sharing the same hash."""
 
     file_hash: str
-    keep: Path
-    duplicates: list[Path]
+    keep: Media
+    duplicates: list[Media]
 
 
 def find_duplicates(repo: SyncRepo) -> list[DedupGroup]:
@@ -33,9 +34,9 @@ def find_duplicates(repo: SyncRepo) -> list[DedupGroup]:
     result: list[DedupGroup] = []
     for file_hash, media_list in groups_map.items():
         # Already sorted by file_size desc from DB query
-        keep = Path(media_list[0].path)
-        duplicates = [Path(m.path) for m in media_list[1:]]
-        result.append(DedupGroup(file_hash=file_hash, keep=keep, duplicates=duplicates))
+        result.append(
+            DedupGroup(file_hash=file_hash, keep=media_list[0], duplicates=media_list[1:])
+        )
     return result
 
 

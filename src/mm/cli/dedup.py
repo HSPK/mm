@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import os
-
 import click
 
 
 @click.command()
 def dedup() -> None:
     """Find and remove duplicate media files (by hash in the database)."""
-    from mm.cli import get_repo
+    from mm.cli import get_library_root, get_repo
     from mm.core.dedup import find_duplicates
 
     repo = get_repo()
+    root = get_library_root()
     click.echo("Searching for duplicates in the database...\n")
 
     groups = find_duplicates(repo)
@@ -25,7 +24,7 @@ def dedup() -> None:
     for g in groups:
         for p in g.duplicates:
             try:
-                total_saved += os.path.getsize(p)
+                total_saved += (root / p.path).stat().st_size
             except OSError:
                 pass
 
@@ -35,9 +34,9 @@ def dedup() -> None:
     )
 
     for g in groups:
-        click.echo(f"  KEEP   : {g.keep}")
+        click.echo(f"  KEEP   : {g.keep.path}")
         for dup in g.duplicates:
-            click.echo(f"  REMOVE : {dup}")
+            click.echo(f"  REMOVE : {dup.path}")
         click.echo()
 
     if click.confirm("Delete these duplicates?"):
@@ -45,8 +44,9 @@ def dedup() -> None:
         for g in groups:
             for dup in g.duplicates:
                 try:
-                    if os.path.exists(dup):
-                        os.unlink(dup)
+                    repo.delete_media(dup.id)
+                    if (root / dup.path).exists():
+                        (root / dup.path).unlink(missing_ok=True)
                         deleted += 1
                 except OSError as e:
                     click.echo(f"  Error deleting {dup}: {e}", err=True)
