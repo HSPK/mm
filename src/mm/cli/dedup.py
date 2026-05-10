@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import click
 
+from mm.cli import ui
+
 
 @click.command()
 def dedup() -> None:
@@ -11,12 +13,12 @@ def dedup() -> None:
 
     repo = get_repo()
     root = get_library_root()
-    click.echo("Searching for duplicates in the database...\n")
+    ui.info("Searching for duplicates in the database...")
 
     groups = find_duplicates(repo)
 
     if not groups:
-        click.echo("No duplicates found.")
+        ui.success("No duplicates found.")
         return
 
     total_dups = sum(len(g.duplicates) for g in groups)
@@ -28,18 +30,27 @@ def dedup() -> None:
             except OSError:
                 pass
 
-    click.echo(
-        f"Found {total_dups} duplicate(s) in {len(groups)} group(s), "
-        f"can free {total_saved / 1024 / 1024:.1f} MB\n"
+    ui.key_values(
+        "Duplicate Summary",
+        [
+            ("Duplicate files", f"{total_dups:,}"),
+            ("Duplicate groups", f"{len(groups):,}"),
+            ("Recoverable space", f"{total_saved / 1024 / 1024:.1f} MB"),
+        ],
     )
 
+    rows: list[list[object]] = []
     for g in groups:
-        click.echo(f"  KEEP   : {g.keep.path}")
+        rows.append([g.file_hash[:12], "KEEP", ui.path(g.keep.path)])
         for dup in g.duplicates:
-            click.echo(f"  REMOVE : {dup.path}")
-        click.echo()
+            rows.append([g.file_hash[:12], "REMOVE", ui.path(dup.path)])
+    ui.print_table(
+        [ui.Column("Hash"), ui.Column("Action"), ui.Column("Path", max_width=88)],
+        rows,
+        title="Duplicate Plan",
+    )
 
-    if click.confirm("Delete these duplicates?"):
+    if ui.confirm("Delete these duplicates?"):
         deleted = 0
         for g in groups:
             for dup in g.duplicates:
@@ -49,7 +60,7 @@ def dedup() -> None:
                         (root / dup.path).unlink(missing_ok=True)
                         deleted += 1
                 except OSError as e:
-                    click.echo(f"  Error deleting {dup}: {e}", err=True)
-        click.echo(f"\nDone. Removed {deleted} file(s), freed {total_saved / 1024 / 1024:.1f} MB.")
+                    ui.error(f"Error deleting {dup}: {e}")
+        ui.success(f"Removed {deleted:,} file(s), freed {total_saved / 1024 / 1024:.1f} MB.")
     else:
-        click.echo("Aborted — no files deleted.")
+        ui.warning("Aborted — no files deleted.")

@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from mm import __version__
+from mm.cli import ui
 from mm.config import get_active_db
 
 # ---------------------------------------------------------------------------
@@ -16,11 +17,7 @@ def get_db_path() -> Path:
     """Return the active database path, or exit with an error."""
     db_path = get_active_db()
     if db_path is None or not db_path.exists():
-        click.secho(
-            "No active database. Run `mm init <directory>` to create one.",
-            fg="red",
-            err=True,
-        )
+        ui.error("No active database. Run `mm init <directory>` to create one.")
         raise SystemExit(1)
     return db_path
 

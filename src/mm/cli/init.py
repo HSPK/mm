@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from mm.cli import ui
 from mm.config import DEFAULT_DB_NAME, DEFAULT_IMPORT_TEMPLATE, add_database
 
 
@@ -50,15 +51,17 @@ def init(directory: Path | None) -> None:
         admin_name = click.prompt("Admin username", default="admin")
         admin_pass = click.prompt("Admin password", hide_input=True, confirmation_prompt=True)
         repo.create_user(admin_name, password=admin_pass, display_name=admin_name, is_admin=True)
-        click.echo(f"Created admin user: {admin_name}")
-    if click.confirm("Seed default smart albums?", default=True):
-        repo.seed_smart_albums()
+        ui.success(f"Created admin user: {admin_name}")
+    if ui.confirm("Seed default smart albums?", default=True):
+        seeded = repo.seed_smart_albums()
+        if seeded:
+            ui.success(f"Seeded {seeded:,} default smart album definitions.")
 
-    click.echo(f"Database ready: {db_path}")
+    ui.success(f"Database ready: {db_path}")
 
     idx = add_database(db_path, name=name)
     # Ensure it's the active one
     from mm.config import set_active_database
 
     set_active_database(idx)
-    click.echo(f"Active library: {dest}  (#{idx + 1})")
+    ui.key_values("Active Library", [("Path", ui.path(dest)), ("Number", f"#{idx + 1}")])

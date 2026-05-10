@@ -8,7 +8,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import click
+from mm.cli import ui
 
 if TYPE_CHECKING:
     from mm.core.scanner import ScanResult
@@ -83,19 +83,19 @@ def parallel_scan(
     if not work_items:
         return results, errors
 
-    click.echo(f"Using {num_workers} worker process(es).")
+    ui.info(f"Using {num_workers} worker process(es).")
 
     with ProcessPoolExecutor(max_workers=num_workers) as pool:
         futures = {pool.submit(process_pool_worker, item): item for item in work_items}
-        with click.progressbar(length=len(futures), label=label) as bar:
+        with ui.progress(label, len(futures)) as bar:
             for future in as_completed(futures):
                 result = future.result()
                 if result.error:
                     errors += 1
-                    click.echo(f"\n  [WARN] {result.media.path}: {result.error}", err=True)
+                    ui.warning(f"{result.media.path}: {result.error}", stderr=True)
                 else:
                     results.append(result)
-                bar.update(1)
+                bar.advance()
 
     return results, errors
 
@@ -161,50 +161,63 @@ def print_scan_summary(results: list[ScanResult], errors: int = 0) -> None:
     # Video duration
     video_duration = sum(r.metadata.duration or 0 for r in videos)
 
-    # Print summary
-    click.echo()
-    click.secho("─── Scan Summary ───────────────────────────────────────", fg="cyan")
-
-    # By type
-    click.echo(f"  📸 Photos : {len(photos):>5}  ({fmt_size(photo_size)})")
-    click.echo(f"  🎬 Videos : {len(videos):>5}  ({fmt_size(video_size)})")
+    ui.section("Scan Summary")
+    type_rows: list[list[object]] = [
+        ["Photos", f"{len(photos):,}", fmt_size(photo_size)],
+        ["Videos", f"{len(videos):,}", fmt_size(video_size)],
+    ]
     if audios:
-        click.echo(f"  🎵 Audio  : {len(audios):>5}  ({fmt_size(audio_size)})")
-    click.echo(f"  {'─' * 30}")
-    click.echo(f"  📁 Total  : {len(results):>5}  ({fmt_size(total_size)})")
+        type_rows.append(["Audio", f"{len(audios):,}", fmt_size(audio_size)])
+    type_rows.append(["Total", f"{len(results):,}", fmt_size(total_size)])
+    ui.print_table(
+        [
+            ui.Column("Type"),
+            ui.Column("Files", justify="right"),
+            ui.Column("Size", justify="right"),
+        ],
+        type_rows,
+    )
 
+    facts: list[tuple[str, object]] = []
     if video_duration > 0:
-        click.echo(f"  ⏱️  Video duration: {fmt_duration(video_duration)}")
+        facts.append(("Video duration", fmt_duration(video_duration)))
 
     if date_range:
-        click.echo(f"  📅 Date range: {date_range}")
+        facts.append(("Date range", date_range))
+
+    if facts:
+        ui.key_values("Details", facts)
 
     # Missing metadata
     if missing_date or missing_camera or missing_gps:
-        click.echo()
-        click.secho("  ⚠️  Missing metadata:", fg="yellow")
+        missing_rows: list[list[object]] = []
         if missing_date:
-            click.echo(f"     • No date taken: {len(missing_date)} file(s)")
+            missing_rows.append(["Date taken", f"{len(missing_date):,}"])
         if missing_camera:
-            click.echo(f"     • No camera info: {len(missing_camera)} file(s)")
+            missing_rows.append(["Camera info", f"{len(missing_camera):,}"])
         if missing_gps:
-            click.echo(f"     • No GPS: {len(missing_gps)} file(s)")
+            missing_rows.append(["GPS", f"{len(missing_gps):,}"])
         if missing_resolution:
-            click.echo(f"     • No resolution: {len(missing_resolution)} file(s)")
+            missing_rows.append(["Resolution", f"{len(missing_resolution):,}"])
+        ui.print_table(
+            [ui.Column("Missing metadata"), ui.Column("Files", justify="right")],
+            missing_rows,
+            title="Needs Attention",
+        )
 
     # Top cameras
     if cameras:
-        click.echo()
-        click.echo("  📷 Cameras:")
         sorted_cams = sorted(cameras.items(), key=lambda x: -x[1])
-        for cam, cnt in sorted_cams[:5]:
-            click.echo(f"     • {cam}: {cnt}")
-        if len(cameras) > 5:
-            click.echo(f"     • ... and {len(cameras) - 5} more")
+        camera_rows = [[cam, f"{cnt:,}"] for cam, cnt in sorted_cams[:5]]
+        ui.print_table(
+            [ui.Column("Camera", max_width=48), ui.Column("Files", justify="right")],
+            camera_rows,
+            title="Top Cameras",
+            caption=(
+                f"... and {len(cameras) - 5} more" if len(cameras) > 5 else None
+            ),
+        )
 
     # Errors
     if errors:
-        click.echo()
-        click.secho(f"  ❌ Errors: {errors} file(s) failed to scan", fg="red")
-
-    click.secho("────────────────────────────────────────────────────────", fg="cyan")
+        ui.error(f"{errors} file(s) failed to scan")

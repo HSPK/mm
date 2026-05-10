@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from mm.cli import ui
 from mm.config import (
     add_database,
     load_config,
@@ -21,9 +22,9 @@ def db(ctx: click.Context) -> None:
 
         db_path = get_active_db()
         if db_path:
-            click.echo(f"Active database: {db_path}")
+            ui.key_values("Database", [("Active", ui.path(db_path))])
         else:
-            click.echo("No active database. Run `mm init <directory>` first.")
+            ui.warning("No active database. Run `mm init <directory>` first.")
 
 
 # ---------------------------------------------------------------------------
@@ -39,20 +40,34 @@ def db_list() -> None:
     active = cfg.get("active", -1)
 
     if not dbs:
-        click.echo("No databases registered. Run `mm init <directory>` to create one.")
+        ui.warning("No databases registered. Run `mm init <directory>` to create one.")
         return
 
+    rows: list[list[object]] = []
     for i, entry in enumerate(dbs):
-        marker = "*" if i == active else " "
         name = entry.get("name", "")
         path = entry["path"]
-        label = f"  {marker} {i + 1}. {path}"
-        if name:
-            label += f"  ({name})"
         exists = Path(path).exists()
-        if not exists:
-            label += "  [missing]"
-        click.echo(label)
+        rows.append(
+            [
+                "●" if i == active else "",
+                str(i + 1),
+                name or "-",
+                ui.path(path),
+                "ok" if exists else "missing",
+            ]
+        )
+    ui.print_table(
+        [
+            ui.Column("Active", justify="center"),
+            ui.Column("#", justify="right"),
+            ui.Column("Name"),
+            ui.Column("Path", max_width=72),
+            ui.Column("Status"),
+        ],
+        rows,
+        title="Registered Databases",
+    )
 
 
 @db.command("add")
@@ -66,10 +81,10 @@ def db_add(path: Path, name: str | None) -> None:
 
         resolved = resolved / DEFAULT_DB_NAME
     if not resolved.exists():
-        click.secho(f"File not found: {resolved}", fg="red", err=True)
+        ui.error(f"File not found: {resolved}")
         raise SystemExit(1)
     idx = add_database(resolved, name=name)
-    click.echo(f"Added database #{idx + 1}: {resolved}")
+    ui.success(f"Added database #{idx + 1}: {resolved}")
 
 
 @db.command("set")
@@ -78,9 +93,9 @@ def db_set(number: int) -> None:
     """Set the active database by its number (from `db list`)."""
     try:
         path = set_active_database(number - 1)  # user sees 1-based
-        click.echo(f"Active database set to #{number}: {path}")
+        ui.success(f"Active database set to #{number}: {path}")
     except ValueError as e:
-        click.secho(str(e), fg="red", err=True)
+        ui.error(str(e))
         raise SystemExit(1)
 
 
@@ -96,17 +111,17 @@ def db_rm(number: int, delete_data: bool) -> None:
     try:
         removed = remove_database(number - 1)
     except ValueError as e:
-        click.secho(str(e), fg="red", err=True)
+        ui.error(str(e))
         raise SystemExit(1)
 
-    click.echo(f"Removed #{number}: {removed}")
+    ui.success(f"Removed #{number}: {removed}")
 
     if delete_data and removed.exists():
-        if click.confirm(f"Delete {removed} from disk?"):
+        if ui.confirm(f"Delete {removed} from disk?"):
             removed.unlink()
-            click.echo("Database file deleted.")
+            ui.success("Database file deleted.")
         else:
-            click.echo("File kept on disk.")
+            ui.info("File kept on disk.")
 
 
 # ---------------------------------------------------------------------------

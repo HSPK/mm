@@ -202,15 +202,6 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
     gps_lat: float | None = None
     gps_lon: float | None = None
 
-    # Check common GPS keys in exiftool output
-    lat_ref = str(
-        exif.get("Composite:GPSLatitudeRef", "") or exif.get("EXIF:GPSLatitudeRef", "")
-    ).upper()
-    lon_ref = str(
-        exif.get("Composite:GPSLongitudeRef", "")
-        or exif.get("EXIF:GPSLongitudeRef", "")
-    ).upper()
-
     lat_val = _safe_float(
         exif.get("Composite:GPSLatitude")
         or exif.get("EXIF:GPSLatitude")
@@ -224,7 +215,7 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
         or exif.get("Keys:GPSCoordinates-lon")
     )
 
-    # Some tools return signed float directly (e.g. QuickTime:GPSCoordinates is often a string like "30.123 120.456")
+    # Some tools return signed float directly (e.g. "30.123 120.456").
     # But usually exiftool -n -j gives decimal degrees.
     # If not using -n (which we use), we might get "30 deg 12' 34""
     # But we use -n in _extract_exiftool, so values should be decimal.

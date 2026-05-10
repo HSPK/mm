@@ -4,6 +4,7 @@ import time
 
 import click
 
+from mm.cli import ui
 from mm.core.geocoding import reverse_geocode_batch
 
 
@@ -26,36 +27,57 @@ def update(reparse: bool) -> None:
 
     items = repo.get_metadata_needing_geo_update(force_reparse=reparse)
     if not items:
-        click.echo("No items found needing location update.")
+        ui.success("No items found needing location update.")
         return
 
     # Filter items with valid GPS coordinates
     valid = [(md, md.gps_lat, md.gps_lon) for md in items if md.gps_lat and md.gps_lon]
     if not valid:
-        click.echo("No items with valid GPS coordinates.")
+        ui.warning("No items with valid GPS coordinates.")
         return
 
-    click.echo(f"Geocoding {len(valid)} items (offline)...")
+    ui.info(f"Geocoding {len(valid):,} items (offline)...")
     t0 = time.perf_counter()
 
     # Batch geocode — single KD-tree query for all coordinates
     coords = [(lat, lon) for _, lat, lon in valid]
-    results = reverse_geocode_batch(coords)
+    with ui.status("Resolving coordinates..."):
+        results = reverse_geocode_batch(coords)
 
     elapsed = time.perf_counter() - t0
-    click.echo(f"Geocoded {len(results)} coordinates in {elapsed:.2f}s")
+    ui.key_values(
+        "Geocoding",
+        [("Coordinates", f"{len(results):,}"), ("Elapsed", f"{elapsed:.2f}s")],
+    )
 
     # Write results to DB
     count = 0
-    for (md, lat, lon), (label, country, city) in zip(valid, results):
-        if not label:
-            click.echo(f"[{md.id}] No result for {lat:.4f},{lon:.4f}")
-            continue
-        try:
-            repo.update_location_label(md.id, label, country=country, city=city)
-            click.echo(f"[{md.id}] {lat:.4f},{lon:.4f} -> {label} ({country}, {city})")
-            count += 1
-        except Exception as e:
-            click.echo(f"Error updating {md.id}: {e}")
+    rows: list[list[object]] = []
+    with ui.progress("Updating locations", len(valid)) as bar:
+        for (md, lat, lon), (label, country, city) in zip(valid, results):
+            coords_label = f"{lat:.4f},{lon:.4f}"
+            if not label:
+                rows.append([str(md.id), coords_label, "No result", "-", "-"])
+                bar.advance()
+                continue
+            try:
+                repo.update_location_label(md.id, label, country=country, city=city)
+                rows.append([str(md.id), coords_label, label, country, city])
+                count += 1
+            except Exception as e:
+                rows.append([str(md.id), coords_label, f"Error: {e}", "-", "-"])
+            finally:
+                bar.advance()
 
-    click.echo(f"Done. Updated {count} / {len(valid)} items.")
+    ui.print_table(
+        [
+            ui.Column("ID", justify="right"),
+            ui.Column("GPS"),
+            ui.Column("Location", max_width=48),
+            ui.Column("Country"),
+            ui.Column("City"),
+        ],
+        rows,
+        title="Location Updates",
+    )
+    ui.success(f"Updated {count:,} / {len(valid):,} items.")

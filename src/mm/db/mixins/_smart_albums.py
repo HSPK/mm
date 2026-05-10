@@ -180,6 +180,4 @@ class SmartAlbumsMixin:
                 updated_at=now,
             )
             created += 1
-        if created:
-            print(f"[mm] Seeded {created} default smart album definitions")
         return created

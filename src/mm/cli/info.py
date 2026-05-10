@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from mm.cli import ui
 from mm.cli._utils import fmt_size as _fmt_size
 from mm.db.dto import Metadata
 
@@ -17,26 +18,29 @@ def info(file: Path) -> None:
 
     missing = check_tools()
     if missing:
-        click.secho(
-            f"Warning: {', '.join(missing)} not found — metadata may be incomplete."
-            " Install via: brew install exiftool ffmpeg",
-            fg="yellow",
-            err=True,
+        ui.warning(
+            f"{', '.join(missing)} not found — metadata may be incomplete. "
+            "Install via: brew install exiftool ffmpeg",
+            stderr=True,
         )
 
     res = scan_and_extract(file, compute_hash=True)
 
     if res.error:
-        click.secho(f"Error scanning file: {res.error}", fg="red")
+        ui.error(f"Error scanning file: {res.error}")
         return
 
     m = res.media
-    click.echo(f"File     : {m.path}")
-    click.echo(f"Type     : {m.media_type.value}")
-    click.echo(f"Size     : {_fmt_size(m.file_size)}")
-    click.echo(f"Hash     : {m.file_hash}")
-    click.echo(f"Modified : {m.modified_at}")
-    click.echo()
+    ui.key_values(
+        "File",
+        [
+            ("Path", ui.path(m.path)),
+            ("Type", m.media_type.value),
+            ("Size", _fmt_size(m.file_size)),
+            ("Hash", m.file_hash),
+            ("Modified", m.modified_at),
+        ],
+    )
 
     print_metadata(res.metadata)
 
@@ -57,7 +61,8 @@ def print_metadata(md: Metadata) -> None:
         ("Orientation", md.orientation),
     ]
 
-    click.echo("Metadata:")
-    for label, value in fields:
-        if value is not None:
-            click.echo(f"  {label:<15} {value}")
+    rows = [(label, value) for label, value in fields if value is not None]
+    if rows:
+        ui.key_values("Metadata", rows)
+    else:
+        ui.warning("No metadata found.")

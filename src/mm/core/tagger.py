@@ -113,7 +113,7 @@ def apply_clip_tags(
     Imports torch/open_clip lazily so the rest of MM works without them.
     """
     from mm.config import DEFAULT_CLIP_LABELS
-    from mm.core.embeddings import (  # noqa: delayed import
+    from mm.core.embeddings import (
         encode_image_from_path,
         encode_texts,
         get_clip_model,

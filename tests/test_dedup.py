@@ -53,8 +53,8 @@ def test_find_duplicates(tmp_path: Path):
     groups = find_duplicates(repo)
     assert len(groups) == 1
     # Largest file (200 bytes) is kept
-    assert groups[0].keep == Path("a.jpg")
-    assert groups[0].duplicates == [Path("b.jpg")]
+    assert groups[0].keep.path == "a.jpg"
+    assert [m.path for m in groups[0].duplicates] == ["b.jpg"]
 
 
 def test_is_duplicate(tmp_path: Path):

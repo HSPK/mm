@@ -4,6 +4,8 @@ import os
 
 import click
 
+from mm.cli import ui
+
 
 @click.command()
 @click.option("-p", "--port", type=int, default=8000, show_default=True, help="Port to listen on.")
@@ -17,20 +19,22 @@ def server(port: int, host: str, do_reload: bool) -> None:
 
     active = get_active_db()
     if not active or not active.exists():
-        click.secho(
-            "No active database. Run `mm init <directory>` first.",
-            fg="red",
-            err=True,
-        )
+        ui.error("No active database. Run `mm init <directory>` first.")
         raise SystemExit(1)
 
     db_path = active
     lib_dir = db_path.parent
 
-    click.echo(f"Starting MM server at http://{host}:{port}")
-    click.echo(f"Library : {lib_dir}")
-    click.echo(f"Database: {db_path}")
-    click.echo("Press Ctrl+C to stop.\n")
+    ui.key_values(
+        "MM Server",
+        [
+            ("URL", f"http://{host}:{port}"),
+            ("Library", ui.path(lib_dir)),
+            ("Database", ui.path(db_path)),
+        ],
+    )
+    ui.info("Press Ctrl+C to stop.")
+    ui.blank()
 
     os.environ["MM_DB"] = str(db_path)
 

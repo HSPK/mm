@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import click
 
+from mm.cli import ui
+
 
 @click.command("config")
 @click.argument("key", required=False)
@@ -27,27 +29,29 @@ def config(key: str | None, value: str | None, unset: bool) -> None:
         # List all config
         all_cfg = repo.get_all_config()
         if not all_cfg:
-            click.echo("No config values set.")
+            ui.warning("No config values set.")
             return
-        max_key_len = max(len(k) for k in all_cfg)
-        for k, v in sorted(all_cfg.items()):
-            click.echo(f"  {k:<{max_key_len}}  {v}")
+        ui.print_table(
+            [ui.Column("Key"), ui.Column("Value", max_width=96)],
+            [[k, v] for k, v in sorted(all_cfg.items())],
+            title="Config",
+        )
         return
 
     if unset:
         repo.set_config(key, "")
-        click.echo(f"Unset: {key}")
+        ui.success(f"Unset: {key}")
         return
 
     if value is None:
         # Get
         result = repo.get_config(key)
         if result:
-            click.echo(result)
+            ui.plain(result)
         else:
-            click.secho(f"Key not found: {key}", fg="yellow", err=True)
+            ui.warning(f"Key not found: {key}", stderr=True)
             raise SystemExit(1)
     else:
         # Set
         repo.set_config(key, value)
-        click.echo(f"{key} = {value}")
+        ui.success(f"{key} = {value}")

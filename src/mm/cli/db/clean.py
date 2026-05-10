@@ -4,6 +4,7 @@ import os
 
 import click
 
+from mm.cli import ui
 from mm.cli.db import db
 from mm.config import resolve_media_path
 
@@ -17,7 +18,7 @@ def db_clean(dry_run: bool, yes: bool) -> None:
 
     repo = get_repo()
     all_rows = repo.all_media_paths()
-    click.echo(f"Checking {len(all_rows)} records ...")
+    ui.info(f"Checking {len(all_rows):,} records ...")
 
     library_root = str(get_db_path().resolve().parent)
     missing_ids: list[int] = []
@@ -29,32 +30,23 @@ def db_clean(dry_run: bool, yes: bool) -> None:
             missing_paths.append(path)
 
     if missing_ids:
-        click.echo(f"Found {len(missing_ids)} record(s) with missing files.")
-        if len(missing_paths) <= 20:
-            for p in missing_paths:
-                click.echo(f"  ✗ {p}")
-        else:
-            for p in missing_paths[:10]:
-                click.echo(f"  ✗ {p}")
-            click.echo(f"  ... and {len(missing_paths) - 10} more")
+        ui.warning(f"Found {len(missing_ids):,} record(s) with missing files.")
+        ui.bullet_list("Missing Files", missing_paths, limit=20)
 
         if dry_run:
-            click.echo("(dry-run) No changes made.")
+            ui.info("(dry-run) No changes made.")
             return
 
         if not yes:
-            click.confirm(
-                click.style(
-                    f"⚠  Delete {len(missing_ids)} record(s) from database? This cannot be undone.",
-                    fg="yellow",
-                ),
+            ui.confirm(
+                f"Delete {len(missing_ids)} record(s) from database? This cannot be undone.",
                 abort=True,
             )
 
         deleted = repo.bulk_delete_media(missing_ids)
-        click.echo(f"Deleted {deleted} media record(s).")
+        ui.success(f"Deleted {deleted:,} media record(s).")
     else:
-        click.echo("All media records are valid.")
+        ui.success("All media records are valid.")
 
     # Always clean orphaned rows (metadata, tags, embeddings whose media was deleted)
     orphan_meta = repo.delete_orphan_metadata()
@@ -62,10 +54,10 @@ def db_clean(dry_run: bool, yes: bool) -> None:
     orphan_embeddings = repo.delete_orphan_embeddings()
     orphan_tags = repo.delete_orphan_tags()
     if orphan_meta:
-        click.echo(f"Removed {orphan_meta} orphan metadata row(s).")
+        ui.success(f"Removed {orphan_meta:,} orphan metadata row(s).")
     if orphan_media_tags:
-        click.echo(f"Removed {orphan_media_tags} orphan media-tag row(s).")
+        ui.success(f"Removed {orphan_media_tags:,} orphan media-tag row(s).")
     if orphan_embeddings:
-        click.echo(f"Removed {orphan_embeddings} orphan embedding(s).")
+        ui.success(f"Removed {orphan_embeddings:,} orphan embedding(s).")
     if orphan_tags:
-        click.echo(f"Removed {orphan_tags} orphan tag(s).")
+        ui.success(f"Removed {orphan_tags:,} orphan tag(s).")

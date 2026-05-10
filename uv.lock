@@ -547,6 +547,7 @@ dependencies = [
     { name = "pillow-heif" },
     { name = "pyyaml" },
     { name = "rawpy" },
+    { name = "rich" },
 ]
 
 [package.optional-dependencies]
@@ -577,6 +578,7 @@ requires-dist = [
     { name = "pillow-heif", specifier = ">=0.18" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rawpy", specifier = ">=0.26.1" },
+    { name = "rich", specifier = ">=13.9" },
     { name = "torch", marker = "extra == 'clip'", specifier = ">=2.0" },
 ]
 provides-extras = ["clip"]
