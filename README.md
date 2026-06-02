@@ -18,7 +18,7 @@ Scan, tag, search, import safely, and browse your media collection with a beauti
 
 ---
 
-[Features](#-features) · [Quick Start](#-quick-start) · [Installation](#-installation) · [Usage](#-usage) · [Web UI](#-web-ui) · [API](#-api) · [Contributing](#-contributing)
+[Homepage](https://hspk.github.io/mm/) · [Features](#-features) · [Quick Start](#-quick-start) · [Installation](#-installation) · [Usage](#-usage) · [Web UI](#-web-ui) · [API](#-api) · [Contributing](#-contributing)
 
 </div>
 
