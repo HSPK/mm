@@ -23,7 +23,7 @@ class DatabaseTarget:
     default_library_root: Path
 
     @classmethod
-    def from_value(cls, value: str | Path) -> "DatabaseTarget":
+    def from_value(cls, value: str | Path) -> DatabaseTarget:
         raw = str(value)
         parsed = urlparse(raw)
         if parsed.scheme in _POSTGRES_SCHEMES:

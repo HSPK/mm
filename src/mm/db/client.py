@@ -29,8 +29,6 @@ from mm.db.models import (
 if TYPE_CHECKING:
     from mm.db.sync_client import DBClient
 
-AnyDBClient: TypeAlias = "AsyncDBClient | DBClient"
-
 
 class AsyncDBClient:
     """Async Peewee-aio database client with namespaced APIs."""
@@ -82,3 +80,9 @@ class AsyncDBClient:
                 await self.manager.execute(
                     SQL("ALTER TABLE media ADD COLUMN deleted_at DATETIME DEFAULT NULL")
                 )
+
+
+if TYPE_CHECKING:
+    AnyDBClient: TypeAlias = AsyncDBClient | DBClient
+else:
+    AnyDBClient: TypeAlias = AsyncDBClient
