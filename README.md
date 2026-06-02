@@ -1,219 +1,85 @@
 # MM
 
-Local-first media library management for photos, videos, and audio.
+MM is a local-first media library manager for photos, videos, and audio. It helps
+you scan existing folders, import new files safely, organize media with tags and
+albums, and browse everything from a web UI.
 
-[Homepage](https://hspk.github.io/mm/) · [PyPI](https://pypi.org/project/litemm/) · [Source](https://github.com/HSPK/mm) · [Issues](https://github.com/HSPK/mm/issues)
+[Homepage and docs](https://hspk.github.io/mm/) · [PyPI](https://pypi.org/project/litemm/) · [Issues](https://github.com/HSPK/mm/issues)
 
 [![PyPI](https://img.shields.io/pypi/v/litemm)](https://pypi.org/project/litemm/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://python.org)
 [![License](https://img.shields.io/github/license/HSPK/mm)](LICENSE)
 
-MM indexes existing folders, imports new media safely, extracts metadata, creates thumbnails, organizes smart albums, and serves a bundled web UI from one Python package.
+## What you can do with MM
 
-It is designed for people who want a scriptable, self-hosted media library without starting from a multi-container stack. SQLite works out of the box; PostgreSQL is supported when you want a server database.
+- Browse your local media collection in a web UI.
+- Import photos and videos into predictable folders.
+- Keep your original files untouched while indexing.
+- Search and organize media with tags, albums, ratings, places, and dates.
+- Start locally and move to a server-backed setup later if you need it.
 
-## Features
+## Install
 
-- **Safe imports**: template-based destinations, hashing, duplicate checks, and copy/move plans.
-- **Non-destructive indexing**: original files are not modified, and paths remain portable.
-- **CLI and web UI**: automate with `mm`, then browse from a responsive gallery.
-- **Smart organization**: tags, albums, cameras, years, places, ratings, and generated collections.
-- **Local intelligence**: optional OpenCLIP auto-tagging and offline reverse geocoding.
-- **Flexible database backend**: SQLite by default, PostgreSQL URL support for server deployments.
+Install the recommended media tools first:
 
-## Architecture
-
-```text
-React web UI
-    |
-FastAPI server
-    |
-Scanner · importer · metadata · thumbnails · tags · geocoding
-    |
-SQLite or PostgreSQL via Peewee / peewee-aio
-```
-
-## Quick Start
+macOS:
 
 ```bash
-# Install with pipx (recommended)
-pipx install litemm
-
-# Create a new library (interactive)
-mm init
-
-# Start the web server
-mm server
-# → Open http://localhost:8000
-```
-
-## Installation
-
-### Prerequisites
-
-- **Python 3.10+**
-- **[uv](https://docs.astral.sh/uv/)** (recommended) or pip
-- **exiftool** — for EXIF metadata extraction
-- **ffmpeg** / **ffprobe** — for video/audio metadata & thumbnails
-
-```bash
-# macOS
 brew install exiftool ffmpeg
+```
 
-# Ubuntu / Debian
+Ubuntu / Debian:
+
+```bash
 sudo apt install libimage-exiftool-perl ffmpeg
 ```
 
-### Install mm
+Then install MM:
 
 ```bash
-# Install with pipx (recommended)
 pipx install litemm
 ```
 
-### Build the Frontend
+## First run
+
+Create a library for your media folder:
 
 ```bash
-cd web
-npm install
-npm run build
-cd ..
-```
-
-## Usage
-
-### CLI Commands
-
-| Command | Description |
-|---|---|
-| `mm init [dir]` | Create or open a media library (interactive setup) |
-| `mm server [dir]` | Start the web UI server |
-| `mm import <source>` | Import media files into the active library |
-| `mm search` | Search by tags |
-| `mm info <file>` | Show detailed file metadata |
-| `mm config [key] [value]` | Get or set library config values |
-| `mm geo update` | Offline reverse geocode GPS-tagged media |
-| `mm db list` | List all registered databases |
-| `mm db set <n>` | Switch the active database |
-| `mm db add <path-or-url>` | Register an existing SQLite database file/directory or PostgreSQL URL |
-| `mm db rm <n>` | Unregister a database (optionally delete) |
-| `mm db stats` | Show detailed library statistics |
-| `mm db clean` | Remove entries for files no longer on disk |
-| `mm db sync <dir>` | Clean stale entries and re-scan changed files |
-
-### Library Setup
-
-```bash
-# Create a new library interactively
 mm init ~/Photos
-
-# View all config values
-mm config
-
-# Set the import template
-mm config import_template "{year}/{year}-{month:02d}-{day:02d}/{hour:02d}{minute:02d}{second:02d}{ext}"
-
-# Sync database with disk (remove stale + re-scan)
-mm db sync ~/Photos
-
-# Parallel sync with 8 workers
-mm db sync ~/Photos -j 8
 ```
 
-### Searching
+Start the web UI:
 
 ```bash
-# Filter by tags
-mm search --tag landscape --tag nature
-```
-
-### Importing & Organizing
-
-```bash
-# Import from SD card (copies into library using configured template)
-mm import ~/DCIM
-
-# Move instead of copy
-mm import ~/DCIM --move
-```
-
-### Web Server
-
-```bash
-# Start on default port (8000)
 mm server
-
-# Specify library directory
-mm server ~/Photos
-
-# Custom host and port
-mm server -h 0.0.0.0 -p 9000
-
-# Development mode with auto-reload
-mm server --reload
 ```
 
-## Web UI
+Open `http://localhost:8000` in your browser.
 
-The web interface provides a full-featured media browser:
+## Import new media
 
-- **Library** — Browse all media with infinite scroll, date grouping, and adjustable thumbnail sizes
-- **Albums** — Smart albums auto-generated by tag, camera, year, festival, and location
-- **Search** — Quick tag and metadata filtering
-- **Detail View** — Full metadata, EXIF info, location, tags, and star ratings
-- **Batch Operations** — Multi-select for bulk tagging, rating, and deletion
-- **Settings** — Theme switching (light/dark), library management
-- **Auth** — User accounts with token-based authentication
-
-## API
-
-mm exposes a comprehensive REST API at `/api/`:
-
-| Endpoint | Description |
-|---|---|
-| `/api/auth/*` | Authentication (login, setup, logout) |
-| `/api/media` | Media CRUD, thumbnails, file streaming |
-| `/api/batch/*` | Bulk operations (tags, ratings, delete) |
-| `/api/albums/*` | Album management |
-| `/api/smart-albums/*` | Smart album definitions & resolution |
-| `/api/tags` | Tag CRUD with usage counts |
-| `/api/stats` | Library statistics & timeline |
-| `/api/library` | Multi-library switching |
-| `/api/users` | User management (admin) |
-
-Interactive API docs available at **`/docs`** (Swagger UI) when the server is running.
-
-## Tech Stack
-
-| Component | Technology |
-|---|---|
-| **Backend** | Python 3.10+, FastAPI, Peewee ORM, SQLite/PostgreSQL |
-| **AI/ML** | OpenCLIP (ViT-B-32), PyTorch |
-| **Frontend** | React 19, TypeScript, TailwindCSS, Vite |
-| **State** | Zustand |
-| **UI Kit** | shadcn/ui, Radix UI, Lucide Icons |
-| **Media** | Pillow, pillow-heif, rawpy, exiftool, ffmpeg |
-| **Geocoding** | GeoNames (offline), lunar-python |
-
-## Contributing
-
-Contributions are welcome! Here's how to get started:
+Copy new media into the library:
 
 ```bash
-# Clone and install in dev mode
-git clone https://github.com/HSPK/mm.git
-cd mm
-uv sync
-
-# Run tests
-pytest
-
-# Start frontend dev server
-cd web && npm install && npm run dev
+mm import ~/Downloads/Camera
 ```
 
-Please open an issue first to discuss what you would like to change.
+If files changed on disk and MM should update its index:
+
+```bash
+mm db sync ~/Photos
+```
+
+## Learn more
+
+The full documentation site includes:
+
+- [Getting Started](https://hspk.github.io/mm/tutorials/getting-started/)
+- [Import and Organize](https://hspk.github.io/mm/tutorials/import-and-organize/)
+- [Web UI Guide](https://hspk.github.io/mm/tutorials/web-ui/)
+- [Architecture notes](https://hspk.github.io/mm/architecture/overview/)
+- [Developer setup](https://hspk.github.io/mm/development/setup/)
 
 ## License
 
-This project is open source. See the [LICENSE](LICENSE) file for details.
+This project is open source. See [LICENSE](LICENSE) for details.

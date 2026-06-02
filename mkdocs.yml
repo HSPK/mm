@@ -1,0 +1,46 @@
+site_name: MM
+site_description: Local-first media library management for photos, videos, and audio.
+site_url: https://hspk.github.io/mm/
+repo_name: HSPK/mm
+repo_url: https://github.com/HSPK/mm
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: black
+      accent: indigo
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - Getting Started: tutorials/getting-started.md
+      - Import and Organize: tutorials/import-and-organize.md
+      - Web UI Guide: tutorials/web-ui.md
+  - Architecture:
+      - Design Overview: architecture/overview.md
+  - Development:
+      - Developer Setup: development/setup.md

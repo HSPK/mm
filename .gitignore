@@ -10,6 +10,7 @@ node_modules/
 .vite/
 /ssd
 _web_dist/
+/site/
 # Virtual environments
 .venv
 *.db
