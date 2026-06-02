@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import peewee_aio
 
-from mm.db.dto import User
 from mm.db.api._source import DbApi
+from mm.db.dto import User
 from mm.db.helpers import hash_password, to_user, verify_password
 from mm.db.models import UserModel
 
@@ -57,15 +57,11 @@ class UsersApi(DbApi):
         import secrets
 
         token = secrets.token_hex(32)
-        await self.objects.execute(
-            UserModel.update(token=token).where(UserModel.id == user_id)
-        )
+        await self.objects.execute(UserModel.update(token=token).where(UserModel.id == user_id))
         return token
 
     async def invalidate(self, token: str) -> None:
-        await self.objects.execute(
-            UserModel.update(token=None).where(UserModel.token == token)
-        )
+        await self.objects.execute(UserModel.update(token=None).where(UserModel.token == token))
 
     async def change_password(self, user_id: int, new_password: str) -> None:
         await self.objects.execute(
@@ -77,7 +73,6 @@ class UsersApi(DbApi):
     async def count(self) -> int:
         return await self.objects.count(UserModel.select())
 
-    
     async def list(self) -> list[User]:
         return [to_user(u) for u in await self.objects.fetchall(UserModel.select())]
 

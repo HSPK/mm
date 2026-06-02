@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import peewee_aio
 
-from mm.db.models import SmartAlbumModel
 from mm.db.api._source import DbApi
+from mm.db.models import SmartAlbumModel
 
 # ── Lazy seed data loader ─────────────────────────────────
 _SEED_ALBUMS = _SEED_ALBUMS_UNSET = object()
@@ -69,9 +69,7 @@ class SmartAlbumsApi(DbApi):
         )
         return self._sa_to_dict(row)
 
-    async def update(
-        self, album_id: int, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    async def update(self, album_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
         try:
             await self.objects.get(SmartAlbumModel, id=album_id)
         except SmartAlbumModel.DoesNotExist:

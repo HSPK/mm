@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from mm.db.models import MediaType
+from mm.db.sync_client import DBClient
+from mm.library.settings import LibraryConfig
 from mm.media.scanner import (
     classify_extension,
     discover_media,
@@ -11,9 +14,6 @@ from mm.media.scanner import (
     scan_and_extract,
     scan_file,
 )
-from mm.db.models import MediaType
-from mm.db.sync_client import DBClient
-from mm.library.settings import LibraryConfig
 
 
 def test_classify_extension():
@@ -55,9 +55,7 @@ def test_save_media_metadata_can_store_destination_path(tmp_path: Path, db: DBCl
 
     library_root = tmp_path / "library"
     destination = library_root / "2026" / "renamed.jpg"
-    db.library_config.set(
-        LibraryConfig(library_root=library_root, import_template="{type}{ext}")
-    )
+    db.library_config.set(LibraryConfig(library_root=library_root, import_template="{type}{ext}"))
 
     result = scan_and_extract(source)
     media_id = save_media_metadata(db, result.media, result.metadata, media_path=destination)

@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import peewee_aio
 
-from mm.db.dto import Metadata
 from mm.db.api._source import DbApi
+from mm.db.dto import Metadata
 from mm.db.helpers import to_metadata
 from mm.db.models import MediaModel, MetadataModel
 
@@ -54,9 +54,7 @@ class MetadataApi(DbApi):
             )
             return row.id
         except MetadataModel.DoesNotExist:
-            row = await self.objects.create(
-                MetadataModel, media=metadata.media_id, **fields
-            )
+            row = await self.objects.create(MetadataModel, media=metadata.media_id, **fields)
             return row.id
 
     async def delete_orphans(self) -> int:

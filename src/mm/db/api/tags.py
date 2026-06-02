@@ -11,8 +11,8 @@ if TYPE_CHECKING:
 
 from peewee import fn
 
-from mm.db.dto import Tag
 from mm.db.api._source import DbApi
+from mm.db.dto import Tag
 from mm.db.helpers import to_tag
 from mm.db.models import MediaModel, MediaTagModel, TagModel, TagSource
 from mm.utils.text import normalise_tag
@@ -27,9 +27,7 @@ class TagsApi(DbApi):
             for row in await self.objects.fetchall(TagModel.select().order_by(TagModel.name))
         ]
 
-    async def get_or_create(
-        self, name: str, source: TagSource = TagSource.MANUAL
-    ) -> Tag:
+    async def get_or_create(self, name: str, source: TagSource = TagSource.MANUAL) -> Tag:
         name = normalise_tag(name)
         try:
             t = await self.objects.get(TagModel, name=name)
@@ -44,9 +42,7 @@ class TagsApi(DbApi):
         except TagModel.DoesNotExist:
             return None
 
-    async def add_media(
-        self, media_id: int, tag_id: int, confidence: float = 1.0
-    ) -> None:
+    async def add_media(self, media_id: int, tag_id: int, confidence: float = 1.0) -> None:
         try:
             await self.objects.create(
                 MediaTagModel, media=media_id, tag=tag_id, confidence=confidence
@@ -105,9 +101,7 @@ class TagsApi(DbApi):
 
     async def delete_orphans(self) -> int:
         sub = MediaTagModel.select(MediaTagModel.tag).distinct()
-        return await self.objects.execute(
-            TagModel.delete().where(TagModel.id.not_in(sub))
-        )
+        return await self.objects.execute(TagModel.delete().where(TagModel.id.not_in(sub)))
 
     async def delete_orphan_links(self) -> int:
         valid = MediaModel.select(MediaModel.id)

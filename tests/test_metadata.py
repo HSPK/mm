@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mm.db.dto import Metadata
 from pydantic import ValidationError
 
+from mm.db.dto import Metadata
 from mm.extractor.metadata import (
     extract_audio_metadata,
     extract_metadata,

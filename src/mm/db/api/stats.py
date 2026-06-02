@@ -9,8 +9,8 @@ if TYPE_CHECKING:
 
 from peewee import SQL, fn
 
-from mm.db.dto import Media
 from mm.db.api._source import DbApi
+from mm.db.dto import Media
 from mm.db.helpers import to_media
 from mm.db.models import (
     AlbumModel,
@@ -35,9 +35,7 @@ class StatsApi(DbApi):
 
     async def type_distribution(self) -> dict[str, int]:
         rows = await self.objects.fetchall(
-            MediaModel.select(
-                MediaModel.media_type, fn.COUNT(MediaModel.id).alias("cnt")
-            )
+            MediaModel.select(MediaModel.media_type, fn.COUNT(MediaModel.id).alias("cnt"))
             .where(MediaModel.deleted_at.is_null())
             .group_by(MediaModel.media_type)
             .dicts()
@@ -160,10 +158,7 @@ class StatsApi(DbApi):
                 fn.SUM(MediaModel.file_size).alias("size"),
             )
             .join(MediaModel, on=(MetadataModel.media == MediaModel.id))
-            .where(
-                ((MetadataModel.camera_make != "") | (MetadataModel.camera_model != ""))
-                & alive
-            )
+            .where(((MetadataModel.camera_make != "") | (MetadataModel.camera_model != "")) & alive)
             .group_by(MetadataModel.camera_make, MetadataModel.camera_model)
             .order_by(fn.COUNT(MetadataModel.id).desc())
             .dicts()
@@ -193,9 +188,7 @@ class StatsApi(DbApi):
             .order_by(fn.COUNT(MediaModel.id).desc())
             .dicts()
         )
-        return [
-            {"ext": r["ext"], "count": r["cnt"], "size": r["size"] or 0} for r in rows
-        ]
+        return [{"ext": r["ext"], "count": r["cnt"], "size": r["size"] or 0} for r in rows]
 
     async def ratings(self) -> list[dict[str, int]]:
         """Rating distribution."""
@@ -226,9 +219,7 @@ class StatsApi(DbApi):
             MetadataModel.select()
             .join(MediaModel, on=(MetadataModel.media == MediaModel.id))
             .where(
-                MetadataModel.gps_lat.is_null(False)
-                & MetadataModel.gps_lon.is_null(False)
-                & alive
+                MetadataModel.gps_lat.is_null(False) & MetadataModel.gps_lon.is_null(False) & alive
             )
         )
         has_location_label = await self.objects.count(
@@ -243,10 +234,7 @@ class StatsApi(DbApi):
         has_camera = await self.objects.count(
             MetadataModel.select()
             .join(MediaModel, on=(MetadataModel.media == MediaModel.id))
-            .where(
-                ((MetadataModel.camera_make != "") | (MetadataModel.camera_model != ""))
-                & alive
-            )
+            .where(((MetadataModel.camera_make != "") | (MetadataModel.camera_model != "")) & alive)
         )
         has_tags = (
             await self.objects.fetchval(
@@ -285,9 +273,7 @@ class StatsApi(DbApi):
             .limit(limit)
             .dicts()
         )
-        return [
-            {"tag": r["name"], "source": r["source"], "count": r["cnt"]} for r in rows
-        ]
+        return [{"tag": r["name"], "source": r["source"], "count": r["cnt"]} for r in rows]
 
     async def cameras(self) -> list[dict[str, Any]]:
         rows = await self.objects.fetchall(
@@ -306,8 +292,7 @@ class StatsApi(DbApi):
             .dicts()
         )
         return [
-            {"make": r["camera_make"], "model": r["camera_model"], "count": r["cnt"]}
-            for r in rows
+            {"make": r["camera_make"], "model": r["camera_model"], "count": r["cnt"]} for r in rows
         ]
 
     async def timeline(self) -> list[dict[str, Any]]:
@@ -319,25 +304,19 @@ class StatsApi(DbApi):
                 fn.COUNT(MetadataModel.id).alias("cnt"),
             )
             .join(MediaModel, on=(MetadataModel.media == MediaModel.id))
-            .where(
-                MetadataModel.date_taken.is_null(False)
-                & MediaModel.deleted_at.is_null()
-            )
+            .where(MetadataModel.date_taken.is_null(False) & MediaModel.deleted_at.is_null())
             .group_by(SQL("dt"))
             .order_by(SQL("dt DESC"))
             .dicts()
         )
         return [{"date": str(r["dt"])[:10], "count": r["cnt"]} for r in rows if r["dt"]]
 
-    async def random(
-        self, count: int = 20, media_type: str | None = None
-    ) -> list[Media]:
+    async def random(self, count: int = 20, media_type: str | None = None) -> list[Media]:
         q = MediaModel.select().where(MediaModel.deleted_at.is_null())
         if media_type:
             q = q.where(MediaModel.media_type == media_type)
         return [
-            to_media(m)
-            for m in await self.objects.fetchall(q.order_by(fn.Random()).limit(count))
+            to_media(m) for m in await self.objects.fetchall(q.order_by(fn.Random()).limit(count))
         ]
 
     async def geo_media(self, limit: int = 2000) -> list[dict[str, Any]]:

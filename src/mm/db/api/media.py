@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 from peewee import fn
 
-from mm.db.dto import Media
 from mm.db.api._source import DbApi
+from mm.db.dto import Media
 from mm.db.helpers import to_media
 from mm.db.models import MediaModel, MediaTagModel, MetadataModel, TagModel
 
@@ -82,9 +82,7 @@ class MediaApi(DbApi):
             )
         ]
 
-    async def update_path(
-        self, media_id: int, path: str, filename: str, extension: str
-    ) -> int:
+    async def update_path(self, media_id: int, path: str, filename: str, extension: str) -> int:
         return await self.objects.execute(
             MediaModel.update(path=path, filename=filename, extension=extension).where(
                 MediaModel.id == media_id
@@ -128,9 +126,7 @@ class MediaApi(DbApi):
         return deleted
 
     async def count(self) -> int:
-        return await self.objects.count(
-            MediaModel.select().where(MediaModel.deleted_at.is_null())
-        )
+        return await self.objects.count(MediaModel.select().where(MediaModel.deleted_at.is_null()))
 
     async def get(self, media_id: int) -> Media | None:
         try:
@@ -140,9 +136,7 @@ class MediaApi(DbApi):
 
     async def delete(self, media_id: int) -> bool:
         return (
-            await self.objects.execute(
-                MediaModel.delete().where(MediaModel.id == media_id)
-            )
+            await self.objects.execute(MediaModel.delete().where(MediaModel.id == media_id))
         ) > 0
 
     async def soft_delete(self, media_id: int) -> bool:
@@ -230,9 +224,7 @@ class MediaApi(DbApi):
         )
 
         q = MediaModel.select().where(
-            MediaModel.deleted_at.is_null(False)
-            if deleted
-            else MediaModel.deleted_at.is_null()
+            MediaModel.deleted_at.is_null(False) if deleted else MediaModel.deleted_at.is_null()
         )
         if need_meta:
             q = q.join(
@@ -289,10 +281,7 @@ class MediaApi(DbApi):
             if cond is not None:
                 q = q.where(cond)
         if has_location:
-            q = q.where(
-                MetadataModel.gps_lat.is_null(False)
-                & MetadataModel.gps_lon.is_null(False)
-            )
+            q = q.where(MetadataModel.gps_lat.is_null(False) & MetadataModel.gps_lon.is_null(False))
         if lat is not None and lon is not None and radius is not None:
             d_lat = radius / 111.32
             clat = max(-89.9, min(89.9, lat))
@@ -315,9 +304,7 @@ class MediaApi(DbApi):
 
         # -- Sort --
         sort_map = {
-            "date_taken": MetadataModel.date_taken
-            if need_meta
-            else MediaModel.created_at,
+            "date_taken": MetadataModel.date_taken if need_meta else MediaModel.created_at,
             "filename": MediaModel.filename,
             "rating": MediaModel.rating,
             "size": MediaModel.file_size,

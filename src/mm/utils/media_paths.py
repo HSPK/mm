@@ -104,9 +104,7 @@ def plan_media_path_repairs(
     for media, stored_path, is_inside, path_exists in candidates:
         media_id = _media_id(media)
         if is_inside:
-            deletions.append(
-                MediaPathDeletion(media_id, media.path, stored_path, "missing-file")
-            )
+            deletions.append(MediaPathDeletion(media_id, media.path, stored_path, "missing-file"))
             continue
 
         metadata = metadata_by_id.get(media_id)
@@ -163,9 +161,7 @@ def apply_media_path_repairs(db: DBClient, updates: list[MediaPathUpdate]) -> in
     """Apply planned media path repairs to the database."""
     updated = 0
     for item in updates:
-        updated += db.media.update_path(
-            item.media_id, item.new_path, item.filename, item.extension
-        )
+        updated += db.media.update_path(item.media_id, item.new_path, item.filename, item.extension)
     return updated
 
 

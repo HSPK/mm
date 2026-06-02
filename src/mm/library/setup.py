@@ -31,11 +31,6 @@ def inspect_library_setup(directory: Path) -> LibrarySetupRequirements:
     destination = directory.resolve()
     local_storage.mkdir(destination)
     db_path = destination / DEFAULT_DB_NAME
-    config = LibraryConfig(
-        library_name=name,
-        import_template=import_template,
-        library_root=library_root,
-    )
     db = DBClient(db_path)
     try:
         needs_admin = db.user.count() == 0
@@ -57,6 +52,11 @@ def initialize_library(
     """Create or update a library database and register it as active."""
     local_storage.mkdir(destination)
     db_path = destination / DEFAULT_DB_NAME
+    config = LibraryConfig(
+        library_name=name,
+        import_template=import_template,
+        library_root=library_root,
+    )
     db = DBClient(db_path)
     created_admin: str | None = None
     seeded = 0

@@ -9,8 +9,8 @@ import peewee
 if TYPE_CHECKING:
     import peewee_aio
 
-from mm.db.models import AlbumMediaModel, AlbumModel
 from mm.db.api._source import DbApi
+from mm.db.models import AlbumMediaModel, AlbumModel
 
 
 class AlbumsApi(DbApi):
@@ -50,9 +50,7 @@ class AlbumsApi(DbApi):
 
     async def delete(self, album_id: int) -> bool:
         return (
-            await self.objects.execute(
-                AlbumModel.delete().where(AlbumModel.id == album_id)
-            )
+            await self.objects.execute(AlbumModel.delete().where(AlbumModel.id == album_id))
         ) > 0
 
     async def rename(self, album_id: int, name: str) -> bool:
@@ -74,9 +72,7 @@ class AlbumsApi(DbApi):
             a = await self.objects.get(AlbumModel, id=album_id)
             if not a.cover_media_id and media_ids:
                 await self.objects.execute(
-                    AlbumModel.update(cover_media=media_ids[0]).where(
-                        AlbumModel.id == album_id
-                    )
+                    AlbumModel.update(cover_media=media_ids[0]).where(AlbumModel.id == album_id)
                 )
         except AlbumModel.DoesNotExist:
             pass
@@ -85,15 +81,12 @@ class AlbumsApi(DbApi):
     async def remove_media(self, album_id: int, media_ids: list[int]) -> int:
         return await self.objects.execute(
             AlbumMediaModel.delete().where(
-                (AlbumMediaModel.album == album_id)
-                & AlbumMediaModel.media.in_(media_ids)
+                (AlbumMediaModel.album == album_id) & AlbumMediaModel.media.in_(media_ids)
             )
         )
 
     async def media_ids(self, album_id: int) -> list[int]:
         rows = await self.objects.fetchall(
-            AlbumMediaModel.select(AlbumMediaModel.media).where(
-                AlbumMediaModel.album == album_id
-            )
+            AlbumMediaModel.select(AlbumMediaModel.media).where(AlbumMediaModel.album == album_id)
         )
         return [r.media_id for r in rows]

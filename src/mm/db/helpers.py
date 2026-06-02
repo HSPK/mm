@@ -30,10 +30,7 @@ def verify_password(password: str, stored: str) -> bool:
         salt, h = stored.split(":")
     except ValueError:
         return False
-    return (
-        hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex()
-        == h
-    )
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000).hex() == h
 
 
 # ── ORM → DTO converters ────────────────────────────────

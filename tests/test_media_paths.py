@@ -3,10 +3,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from mm.media.scanner import ScanResult, save_media_metadata, scan_file
 from mm.db.dto import Metadata
 from mm.db.sync_client import DBClient
 from mm.library.settings import LibraryConfig
+from mm.media.scanner import ScanResult, save_media_metadata, scan_file
 from mm.utils.media_paths import (
     apply_media_path_repairs,
     delete_missing_media_rows,
@@ -24,9 +24,7 @@ def test_media_path_repair_resolves_template_destination(tmp_path: Path, db: DBC
     destination = library_root / "photo.jpg"
     shutil.copy2(source, destination)
 
-    db.library_config.set(
-        LibraryConfig(library_root=library_root, import_template="{type}{ext}")
-    )
+    db.library_config.set(LibraryConfig(library_root=library_root, import_template="{type}{ext}"))
     result = ScanResult(media=scan_file(source), metadata=Metadata())
     media_id = save_media_metadata(db, result.media, result.metadata, media_path=source)
 
@@ -54,9 +52,7 @@ def test_media_path_repair_deletes_missing_unresolved_source(tmp_path: Path, db:
 
     library_root = tmp_path / "library"
     library_root.mkdir()
-    db.library_config.set(
-        LibraryConfig(library_root=library_root, import_template="{type}{ext}")
-    )
+    db.library_config.set(LibraryConfig(library_root=library_root, import_template="{type}{ext}"))
     result = ScanResult(media=scan_file(source), metadata=Metadata())
     media_id = save_media_metadata(db, result.media, result.metadata, media_path=source)
     source.unlink()

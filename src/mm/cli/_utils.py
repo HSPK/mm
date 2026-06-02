@@ -123,9 +123,7 @@ def print_scan_summary(results: list[ScanResult], errors: int = 0) -> None:
             [ui.Column("Camera", max_width=48), ui.Column("Files", justify="right")],
             camera_rows,
             title="Top Cameras",
-            caption=(
-                f"... and {len(cameras) - 5} more" if len(cameras) > 5 else None
-            ),
+            caption=(f"... and {len(cameras) - 5} more" if len(cameras) > 5 else None),
         )
 
     # Errors

@@ -40,10 +40,22 @@ jobs:
           npm ci --prefix web
           npm --prefix web run build
 
+      - name: Verify frontend bundle
+        run: |
+          test -f web/dist/index.html
+          test -d web/dist/assets
+          test -n "$(find web/dist/assets -type f -name '*.js' -print -quit)"
+          test -n "$(find web/dist/assets -type f -name '*.css' -print -quit)"
+
       - name: Build distributions
         run: |
           python -m pip install --upgrade build
           python -m build
+
+      - name: Verify packaged web bundle
+        run: |
+          python -m zipfile --list dist/*.whl | grep -q 'mm/_web_dist/index.html'
+          tar -tf dist/*.tar.gz | grep -q 'web/dist/index.html'
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4

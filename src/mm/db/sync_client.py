@@ -9,9 +9,9 @@ from typing import Any, TypeVar
 
 from mm.db.api import (
     AlbumsApi,
+    LibraryConfigApi,
     MediaApi,
     MetadataApi,
-    LibraryConfigApi,
     SmartAlbumsApi,
     StatsApi,
     TagsApi,
@@ -259,9 +259,7 @@ class SyncMetadataApi(_SyncApi):
         country: str | None = None,
         city: str | None = None,
     ) -> None:
-        return self._run(
-            self._api.update_location(metadata_id, label, country=country, city=city)
-        )
+        return self._run(self._api.update_location(metadata_id, label, country=country, city=city))
 
 
 class SyncAlbumApi(_SyncApi):
@@ -379,7 +377,6 @@ class SyncLibraryConfigApi(_SyncApi):
 
     def set(self, config: LibraryConfig) -> None:
         return self._run(self._api.set(config))
-
 
 
 class DBClient:

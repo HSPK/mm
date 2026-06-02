@@ -10,6 +10,7 @@ import click
 
 from mm.cli import ui
 from mm.config import DEFAULT_IMPORT_TEMPLATE
+from mm.db.sync_client import DBClient
 from mm.errors import MMError
 from mm.io import local_storage
 from mm.utils.media_paths import (
@@ -18,7 +19,6 @@ from mm.utils.media_paths import (
     delete_missing_media_rows,
     plan_media_path_repairs,
 )
-from mm.db.sync_client import DBClient
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -140,11 +140,7 @@ def _print_plan(db_path: Path, plan: MediaPathRepairPlan) -> None:
                 for item in plan.updates[:10]
             ],
             title="Repair Preview",
-            caption=(
-                f"... and {len(plan.updates) - 10} more"
-                if len(plan.updates) > 10
-                else None
-            ),
+            caption=(f"... and {len(plan.updates) - 10} more" if len(plan.updates) > 10 else None),
         )
 
     if plan.deletions:
@@ -161,9 +157,7 @@ def _print_plan(db_path: Path, plan: MediaPathRepairPlan) -> None:
             ],
             title="Delete Preview",
             caption=(
-                f"... and {len(plan.deletions) - 10} more"
-                if len(plan.deletions) > 10
-                else None
+                f"... and {len(plan.deletions) - 10} more" if len(plan.deletions) > 10 else None
             ),
         )
 
@@ -177,9 +171,7 @@ def _print_plan(db_path: Path, plan: MediaPathRepairPlan) -> None:
             [[item.media_id, item.path, item.reason] for item in plan.unresolved[:10]],
             title="Unresolved Samples",
             caption=(
-                f"... and {len(plan.unresolved) - 10} more"
-                if len(plan.unresolved) > 10
-                else None
+                f"... and {len(plan.unresolved) - 10} more" if len(plan.unresolved) > 10 else None
             ),
         )
 
@@ -193,9 +185,7 @@ def _print_plan(db_path: Path, plan: MediaPathRepairPlan) -> None:
             [[item.media_id, item.path, item.owner_id] for item in plan.conflicts[:10]],
             title="Conflict Samples",
             caption=(
-                f"... and {len(plan.conflicts) - 10} more"
-                if len(plan.conflicts) > 10
-                else None
+                f"... and {len(plan.conflicts) - 10} more" if len(plan.conflicts) > 10 else None
             ),
         )
 

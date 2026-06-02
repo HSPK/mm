@@ -12,12 +12,11 @@ from fastapi.responses import FileResponse
 from mm.db.dto import User
 from mm.io import local_storage
 from mm.media.thumbnails import get_thumbnail
-from mm.utils.paths import resolve_media_path
 from mm.server.dependencies import (
     get_current_user,
+    get_db,
     get_library_config,
     get_media_path,
-    get_db,
 )
 from mm.server.schemas import (
     RatingBody,
@@ -27,6 +26,7 @@ from mm.server.schemas import (
     serialize_media_brief,
 )
 from mm.server.utils import stream_file
+from mm.utils.paths import resolve_media_path
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -36,9 +36,7 @@ _THUMB_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 def _make_etag(thumb_path: Path) -> str:
     st = local_storage.stat(thumb_path)
-    return (
-        f'W/"{hashlib.md5(f"{st.st_mtime_ns}-{st.st_size}".encode()).hexdigest()[:16]}"'
-    )
+    return f'W/"{hashlib.md5(f"{st.st_mtime_ns}-{st.st_size}".encode()).hexdigest()[:16]}"'
 
 
 def _check_not_modified(request: Request, etag: str) -> Response | None:

@@ -84,6 +84,7 @@ def get_metadata_extractor(path: Path) -> MetadataExtractor:
         raise RuntimeError("No default metadata extractor registered")
     return _DEFAULT_METADATA_EXTRACTOR
 
+
 # ---------------------------------------------------------------------------
 # exiftool-based extraction
 # ---------------------------------------------------------------------------
@@ -107,9 +108,7 @@ def extract_photo_metadata(path: Path, media_id: int) -> Metadata:
     return Metadata(
         media_id=media_id,
         date_taken=parse_datetime(
-            d.get("EXIF:DateTimeOriginal")
-            or d.get("EXIF:CreateDate")
-            or d.get("XMP:DateCreated")
+            d.get("EXIF:DateTimeOriginal") or d.get("EXIF:CreateDate") or d.get("XMP:DateCreated")
         ),
         camera_make=str(d.get("EXIF:Make", "") or ""),
         camera_model=str(d.get("EXIF:Model", "") or ""),

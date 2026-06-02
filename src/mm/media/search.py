@@ -60,11 +60,7 @@ def search_media(
     return MediaSearchResult(
         kind="tags",
         tag_candidates=len(filter_ids),
-        items=[
-            item
-            for media_id in ids
-            if (item := _build_item(db, media_id)) is not None
-        ],
+        items=[item for media_id in ids if (item := _build_item(db, media_id)) is not None],
     )
 
 
