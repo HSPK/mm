@@ -9,13 +9,8 @@ theme:
   nav_style: dark
   highlightjs: true
 
-extra_css:
-  - assets/stylesheets/extra.css
-
 markdown_extensions:
   - admonition
-  - attr_list
-  - md_in_html
   - toc:
       permalink: true
 
