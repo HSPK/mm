@@ -12,7 +12,6 @@ def db_stats() -> None:
     from mm.cli import active_library
 
     active = active_library()
-    db_path = active.db_path
     db = active.db
 
     ov = db.stats.overview()
@@ -28,7 +27,7 @@ def db_stats() -> None:
     ui.key_values(
         "Library Overview",
         [
-            ("Database", ui.path(db_path.resolve())),
+            ("Database", ui.path(active.database)),
             ("Date Range", f"{ov['earliest'] or '?'} → {ov['latest'] or '?'}"),
             ("Total Files", f"{ov['total']:,}"),
             ("Photos", f"{ov['photos']:,}"),

@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from mm.db.backend import DatabaseTarget
 from mm.io import local_storage
 
 # ---------------------------------------------------------------------------
@@ -113,7 +114,7 @@ class RegisteredDatabase(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    path: Path
+    path: str
     name: str = ""
 
 
@@ -158,28 +159,28 @@ def save_cli_config(cfg: CliConfig) -> None:
         )
 
 
-def get_active_db() -> Path | None:
-    """Return the path of the currently active database, or None."""
+def get_active_db() -> str | None:
+    """Return the active database target, or None."""
     cfg = load_cli_config()
     active = cfg.active_database
     return active.path if active else None
 
 
-def add_database(db_path: Path, name: str | None = None) -> int:
+def add_database(db_path: str | Path, name: str | None = None) -> int:
     """Add a database to the config.  Returns its index."""
     cfg = load_cli_config()
-    resolved = db_path.resolve()
+    target = DatabaseTarget.from_value(db_path)
     for i, entry in enumerate(cfg.databases):
-        if entry.path.resolve() == resolved:
+        if DatabaseTarget.from_value(entry.path).identity == target.identity:
             return i
-    cfg.databases.append(RegisteredDatabase(path=resolved, name=name or ""))
+    cfg.databases.append(RegisteredDatabase(path=target.display, name=name or ""))
     if len(cfg.databases) == 1:
         cfg.active = 0
     save_cli_config(cfg)
     return len(cfg.databases) - 1
 
 
-def set_active_database(index: int) -> Path:
+def set_active_database(index: int) -> str:
     """Set the active database by index (1-based from user, 0-based internal).
 
     Raises ValueError if the index is out of range.
@@ -192,7 +193,7 @@ def set_active_database(index: int) -> Path:
     return cfg.databases[index].path
 
 
-def remove_database(index: int) -> Path:
+def remove_database(index: int) -> str:
     """Remove a database from the config by 0-based index.
 
     Adjusts the active index accordingly.  Raises ValueError if out of range.

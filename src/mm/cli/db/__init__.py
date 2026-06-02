@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import click
 
 from mm.cli import ui
@@ -62,10 +60,10 @@ def db_list() -> None:
 
 
 @db.command("add")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.argument("path")
 @click.option("-n", "--name", default=None, help="A friendly name for this library.")
-def db_add(path: Path, name: str | None) -> None:
-    """Register an existing database file."""
+def db_add(path: str, name: str | None) -> None:
+    """Register an existing SQLite database file/directory or PostgreSQL URL."""
     from mm.library.registry import register_database
 
     try:
@@ -109,7 +107,10 @@ def db_rm(number: int, delete_data: bool) -> None:
 
     ui.success(f"Removed #{number}: {removed}")
 
-    if delete_data and local_storage.exists(removed):
+    from mm.db.backend import DatabaseTarget
+
+    removed_target = DatabaseTarget.from_value(removed)
+    if delete_data and removed_target.is_local_file and local_storage.exists(removed):
         if ui.confirm(f"Delete {removed} from disk?"):
             if delete_database_file(removed):
                 ui.success("Database file deleted.")

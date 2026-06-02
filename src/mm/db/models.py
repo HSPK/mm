@@ -1,4 +1,4 @@
-"""Peewee ORM models for MM's SQLite database."""
+"""Peewee ORM models for MM's database."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from peewee import (
     AutoField,
     CharField,
     CompositeKey,
+    DatabaseProxy,
     DateTimeField,
     FloatField,
     ForeignKeyField,
     IntegerField,
     Model,
     SmallIntegerField,
-    SqliteDatabase,
     TextField,
 )
 
@@ -38,11 +38,10 @@ class TagSource(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# Database proxy — bound at runtime by Database client
+# Database proxy — bound at runtime by DB clients
 # ---------------------------------------------------------------------------
 
-# Use standard SqliteDatabase.
-database = SqliteDatabase(None)
+database = DatabaseProxy()
 
 
 class BaseModel(Model):

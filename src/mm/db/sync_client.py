@@ -391,10 +391,12 @@ class DBClient:
     stats: SyncStatsApi
     library_config: SyncLibraryConfigApi
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, database_target: str | Path) -> None:
         self._loop = asyncio.new_event_loop()
-        self._client = AsyncDBClient(db_path)
+        self._client = AsyncDBClient(database_target)
+        self.database = self._client.database
         self.db_path = self._client.db_path
+        self.default_library_root = self._client.default_library_root
         self._run(self._client.connect())
         self._run(self._client.init_db())
 

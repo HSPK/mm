@@ -28,15 +28,15 @@ Scan, tag, search, import safely, and browse your media collection with a beauti
 
 ### Why MM?
 
-> Most open-source media managers (Immich, PhotoPrism, LibrePhotos) are designed as heavy, multi-container services that require PostgreSQL, Redis, and dedicated ML micro-services. **MM takes the opposite approach** — a single Python process with SQLite, installable via `pip`, runnable on a Raspberry Pi, and fully functional without a GPU.
+> Most open-source media managers (Immich, PhotoPrism, LibrePhotos) are designed as heavy, multi-container services that require PostgreSQL, Redis, and dedicated ML micro-services. **MM takes the opposite approach** — a single Python process with SQLite by default, installable via `pip`, runnable on a Raspberry Pi, and fully functional without a GPU.
 
 <table>
 <tr>
 <td width="50%">
 
 ### 🪶 Lightweight & Zero-Config
-- **Single process** — no Docker orchestration, no PostgreSQL, no Redis
-- **SQLite-backed** — zero config, portable, just one `.db` file
+- **Single process** — no Docker orchestration or Redis
+- **SQLite-backed by default** — zero config, portable, just one `.db` file; PostgreSQL URLs are supported when you want a server DB
 - `pipx install litemm` and you're ready to go
 - Runs comfortably on a **Raspberry Pi 4** (4 GB)
 
@@ -97,7 +97,7 @@ Scan, tag, search, import safely, and browse your media collection with a beauti
 |---|---|---|---|---|
 | Install | `pip install` | 6+ Docker containers | Docker + MariaDB | Docker + PostgreSQL |
 | Min RAM | ~300 MB | ~4 GB | ~2 GB | ~4 GB |
-| Database | SQLite | PostgreSQL | MariaDB | PostgreSQL |
+| Database | SQLite / PostgreSQL | PostgreSQL | MariaDB | PostgreSQL |
 | Auto-tagging | CLIP (optional) | CLIP (separate service) | TensorFlow | CLIP |
 | Chinese localization | Province/city/festivals | ✗ | ✗ | ✗ |
 | CLI tooling | Full | Minimal | Minimal | ✗ |
@@ -124,7 +124,7 @@ Scan, tag, search, import safely, and browse your media collection with a beauti
 └──────────────────┬───────────────────────────────────────────┘
                    │
 ┌──────────────────▼───────────────────────────────────────────┐
-│               SQLite (Peewee ORM / aiosqlite)                │
+│          SQLite or PostgreSQL (Peewee ORM / peewee-aio)       │
 │              Media · Metadata · Tags · Albums                │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -191,7 +191,7 @@ cd ..
 | `mm geo update` | Offline reverse geocode GPS-tagged media |
 | `mm db list` | List all registered databases |
 | `mm db set <n>` | Switch the active database |
-| `mm db add <path>` | Register an existing database file |
+| `mm db add <path-or-url>` | Register an existing SQLite database file/directory or PostgreSQL URL |
 | `mm db rm <n>` | Unregister a database (optionally delete) |
 | `mm db stats` | Show detailed library statistics |
 | `mm db clean` | Remove entries for files no longer on disk |
@@ -283,7 +283,7 @@ Interactive API docs available at **`/docs`** (Swagger UI) when the server is ru
 
 | Component | Technology |
 |---|---|
-| **Backend** | Python 3.10+, FastAPI, Peewee ORM, SQLite |
+| **Backend** | Python 3.10+, FastAPI, Peewee ORM, SQLite/PostgreSQL |
 | **AI/ML** | OpenCLIP (ViT-B-32), PyTorch |
 | **Frontend** | React 19, TypeScript, TailwindCSS, Vite |
 | **State** | Zustand |

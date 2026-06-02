@@ -25,7 +25,7 @@ def server(port: int, host: str, do_reload: bool) -> None:
         [
             ("URL", f"http://{host}:{port}"),
             ("Library", ui.path(runtime.library_dir)),
-            ("Database", ui.path(runtime.db_path)),
+            ("Database", ui.path(runtime.database)),
         ],
     )
     ui.info("Press Ctrl+C to stop.")

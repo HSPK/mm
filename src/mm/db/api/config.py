@@ -20,7 +20,7 @@ class LibraryConfigApi(DbApi):
         """Return the validated library config."""
         rows = await self.objects.fetchall(LibraryConfigModel.select())
         values = {row.key: row.value for row in rows}
-        values.setdefault("library_root", str(self.source.db_path.parent))
+        values.setdefault("library_root", str(self.source.default_library_root))
         return LibraryConfig.model_validate(values)
 
     async def set(self, config: LibraryConfig) -> None:

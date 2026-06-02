@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from mm.config import DEFAULT_DB_NAME
+from mm.db.backend import DatabaseTarget
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
 from mm.io import local_storage
@@ -31,9 +31,12 @@ async def get_current_library(
 ) -> dict[str, Any]:
     """Return info about the currently active library."""
     db_path = str(getattr(request.app.state, "db_path", ""))
+    if not db_path:
+        return {"db_path": "", "name": "default"}
+    target = DatabaseTarget.from_value(db_path)
     return {
-        "db_path": db_path,
-        "name": Path(db_path).parent.name if "/" in db_path or "\\" in db_path else "default",
+        "db_path": target.display,
+        "name": target.local_path.parent.name if target.local_path else "postgres",
     }
 
 
@@ -50,12 +53,14 @@ async def list_recent_libraries(
 
     result = []
     for p in paths:
-        pp = Path(p)
-        if local_storage.exists(pp):
+        target = DatabaseTarget.from_value(p)
+        if not target.is_local_file or local_storage.exists(target.local_path):
             result.append(
                 {
-                    "db_path": str(pp.resolve()),
-                    "name": pp.parent.name if pp.parent != pp else "default",
+                    "db_path": target.display,
+                    "name": target.local_path.parent.name
+                    if target.local_path and target.local_path.parent != target.local_path
+                    else "postgres",
                 }
             )
     return result
@@ -73,19 +78,19 @@ async def switch_library(
     - A direct path to a .db file
     - A directory path (will look for mm.db inside it)
     """
-    target = Path(body.db_path)
+    target = DatabaseTarget.from_value(body.db_path)
 
     # If a directory is given, look for mm.db inside
-    if local_storage.is_dir(target):
-        target = target / DEFAULT_DB_NAME
+    if target.is_local_file and target.local_path and local_storage.is_dir(target.local_path):
+        target = DatabaseTarget.from_value(target.local_path / DEFAULT_DB_NAME)
 
-    if not local_storage.exists(target):
-        raise HTTPException(status_code=404, detail=f"Database not found: {target}")
+    if target.is_local_file and target.local_path and not local_storage.exists(target.local_path):
+        raise HTTPException(status_code=404, detail=f"Database not found: {target.display}")
 
-    if not local_storage.is_file(target):
-        raise HTTPException(status_code=400, detail=f"Not a file: {target}")
+    if target.is_local_file and target.local_path and not local_storage.is_file(target.local_path):
+        raise HTTPException(status_code=400, detail=f"Not a file: {target.display}")
 
-    resolved = str(target.resolve())
+    resolved = target.display
 
     # Swap the database client on the app
     new_db = AsyncDBClient(resolved)
@@ -103,7 +108,7 @@ async def switch_library(
 
     return {
         "db_path": resolved,
-        "name": target.parent.name,
+        "name": target.local_path.parent.name if target.local_path else "postgres",
         "message": "Library switched successfully",
     }
 

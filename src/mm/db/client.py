@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
 
 import peewee_aio
+from peewee import SQL
 
 from mm.db.api import (
     AlbumsApi,
@@ -18,6 +20,7 @@ from mm.db.api import (
     TagsApi,
     UsersApi,
 )
+from mm.db.backend import DatabaseTarget
 from mm.db.models import (
     ALL_TABLES,
     database,
@@ -41,22 +44,21 @@ class AsyncDBClient:
     smart_album: SmartAlbumsApi
     library_config: LibraryConfigApi
 
-    def __init__(self, db_path: str | Path) -> None:
-        self.db_path = Path(db_path).resolve()
-        self._db_path = str(self.db_path)
-        if database.database is None:
-            database.init(self._db_path)
-            database.allow_sync = True
-        # The async backend (aiosqlite) strips one leading slash from the URL
-        # path, so "aiosqlite:///" + "/abs/path" (4 slashes total) yields the
-        # correct absolute path.  However peewee_aio's sync pw_database strips
-        # TWO slashes, so we re-init it with the real path afterwards.
-        self.manager = peewee_aio.Manager(f"aiosqlite:///{self._db_path}")
-        self.manager.pw_database.init(self._db_path)
+    def __init__(self, database_target: str | Path) -> None:
+        self.target = DatabaseTarget.from_value(database_target)
+        self.database = self.target.display
+        self.db_path = self.target.local_path
+        self.default_library_root = self.target.default_library_root
+        self.manager = peewee_aio.Manager(self.target.manager_url)
+        if self.target.local_path is not None:
+            # Ensure Peewee's sync database has the real path. The async URL parser
+            # and Peewee sync parser normalize absolute sqlite paths differently.
+            self.manager.pw_database.init(str(self.target.local_path))
+        database.initialize(self.manager.pw_database)
         for model in ALL_TABLES:
             self.manager.register(model)
         self.objects = self.manager
-        self.source = DbSource(self.manager, self.db_path)
+        self.source = DbSource(self.manager, self.default_library_root)
 
         self.user = UsersApi(self.source)
         self.media = MediaApi(self.source)
@@ -74,11 +76,9 @@ class AsyncDBClient:
             pass
 
     async def init_db(self) -> None:
-        with self.manager.allow_sync():
-            self.manager.pw_database.create_tables(ALL_TABLES)
-            try:
-                self.manager.pw_database.execute_sql(
-                    "ALTER TABLE media ADD COLUMN deleted_at DATETIME DEFAULT NULL"
+        await self.manager.create_tables(*ALL_TABLES, safe=True)
+        if self.target.backend == "sqlite":
+            with suppress(Exception):
+                await self.manager.execute(
+                    SQL("ALTER TABLE media ADD COLUMN deleted_at DATETIME DEFAULT NULL")
                 )
-            except Exception:
-                pass

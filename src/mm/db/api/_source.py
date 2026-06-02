@@ -12,9 +12,9 @@ if TYPE_CHECKING:
 class DbSource:
     """Database source shared by API namespaces."""
 
-    def __init__(self, objects: peewee_aio.Manager, db_path: Path) -> None:
+    def __init__(self, objects: peewee_aio.Manager, default_library_root: Path) -> None:
         self.objects = objects
-        self.db_path = db_path
+        self.default_library_root = default_library_root
 
 
 class DbApi:

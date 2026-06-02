@@ -7,20 +7,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mm.config import get_active_db
-from mm.io import local_storage
+from mm.db.backend import DatabaseTarget
 
 
 @dataclass(frozen=True)
 class ServerRuntime:
-    db_path: Path
+    database: str
     library_dir: Path
 
 
 def prepare_server_runtime() -> ServerRuntime | None:
     """Resolve active database and export it for the server app."""
     active = get_active_db()
-    if not active or not local_storage.exists(active):
+    if not active:
         return None
+    target = DatabaseTarget.from_value(active)
+    if target.is_local_file:
+        from mm.io import local_storage
 
-    os.environ["MM_DB"] = str(active)
-    return ServerRuntime(db_path=active, library_dir=active.parent)
+        assert target.local_path is not None
+        if not local_storage.exists(target.local_path):
+            return None
+
+    os.environ["MM_DB"] = target.display
+    return ServerRuntime(database=target.display, library_dir=target.default_library_root)

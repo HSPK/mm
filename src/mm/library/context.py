@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from mm.config import get_active_db
+from mm.db.backend import DatabaseTarget
 from mm.db.sync_client import DBClient
-from mm.io import local_storage
 from mm.library.settings import LibraryConfig
 
 
@@ -19,7 +18,7 @@ class NoActiveDatabaseError(RuntimeError):
 class ActiveLibrary:
     """Validated active library context."""
 
-    db_path: Path
+    database: str
     db: DBClient
     config: LibraryConfig
 
@@ -29,8 +28,15 @@ class ActiveLibrary:
 
 def load_active_library() -> ActiveLibrary:
     """Open the active library and load its validated config."""
-    db_path = get_active_db()
-    if db_path is None or not local_storage.exists(db_path):
+    database = get_active_db()
+    if database is None:
         raise NoActiveDatabaseError
-    db = DBClient(db_path)
-    return ActiveLibrary(db_path=db_path, db=db, config=db.library_config.get())
+    target = DatabaseTarget.from_value(database)
+    if target.is_local_file:
+        from mm.io import local_storage
+
+        assert target.local_path is not None
+        if not local_storage.exists(target.local_path):
+            raise NoActiveDatabaseError
+    db = DBClient(database)
+    return ActiveLibrary(database=target.display, db=db, config=db.library_config.get())
