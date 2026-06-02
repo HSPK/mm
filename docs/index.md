@@ -1,9 +1,3 @@
----
-hide:
-  - navigation
-  - toc
----
-
 <section class="mm-hero">
   <div class="mm-hero__copy">
     <p class="mm-eyebrow">Local-first media library</p>

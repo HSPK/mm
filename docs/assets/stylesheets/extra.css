@@ -8,16 +8,29 @@
   --mm-amber: #b66a1d;
 }
 
-.md-main {
+body {
   background:
     linear-gradient(rgba(23, 23, 23, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(23, 23, 23, 0.035) 1px, transparent 1px),
     radial-gradient(circle at 82% 4rem, rgba(47, 85, 255, 0.1), transparent 28rem),
     var(--mm-paper);
   background-size: 44px 44px, 44px 44px, auto, auto;
+  color: var(--mm-ink);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
 }
 
-.md-content__inner {
+.navbar {
+  border: 0;
+  box-shadow: 0 1px 0 rgba(23, 23, 23, 0.1);
+}
+
+.container {
+  max-width: 1160px;
+}
+
+.col-md-9 {
   padding-bottom: 4rem;
 }
 

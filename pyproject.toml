@@ -68,4 +68,4 @@ strict = true
 
 [dependency-groups]
 dev = ["pre-commit>=4.0", "pytest>=9.0.2"]
-docs = ["mkdocs-material>=9.6"]
+docs = ["mkdocs>=1.6"]

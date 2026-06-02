@@ -8,17 +8,17 @@ open it in the MM web UI.
 MM can index files without these tools, but they are recommended for complete
 metadata and thumbnails.
 
-=== "macOS"
+macOS:
 
-    ```bash
-    brew install exiftool ffmpeg
-    ```
+```bash
+brew install exiftool ffmpeg
+```
 
-=== "Ubuntu / Debian"
+Ubuntu / Debian:
 
-    ```bash
-    sudo apt install libimage-exiftool-perl ffmpeg
-    ```
+```bash
+sudo apt install libimage-exiftool-perl ffmpeg
+```
 
 ## 2. Install MM
 
