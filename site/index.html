@@ -6,13 +6,13 @@
     <title>MM - Universal Organizer for Media</title>
     <meta
       name="description"
-      content="MM is a self-hosted media library manager for scanning, importing, tagging, searching, and browsing photos, videos, and audio."
+      content="MM is a lightweight, self-hosted media library manager for indexing, importing, tagging, and browsing photos, videos, and audio."
     />
-    <meta name="theme-color" content="#101828" />
+    <meta name="theme-color" content="#f4efe6" />
     <meta property="og:title" content="MM - Universal Organizer for Media" />
     <meta
       property="og:description"
-      content="A lightweight, self-hosted media manager with CLI automation, a FastAPI backend, and a beautiful web UI."
+      content="A local-first media manager with safe imports, smart organization, CLI automation, and a bundled web UI."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://hspk.github.io/mm/" />
@@ -26,9 +26,9 @@
         <span>Media Manager</span>
       </a>
       <nav class="nav" aria-label="Primary navigation">
+        <a href="#workflow">Workflow</a>
         <a href="#features">Features</a>
         <a href="#install">Install</a>
-        <a href="#stack">Stack</a>
         <a href="https://github.com/HSPK/mm">GitHub</a>
       </nav>
     </header>
@@ -36,126 +36,145 @@
     <main id="top">
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Self-hosted media library</p>
-          <h1>MM - Universal Organizer for Media</h1>
+          <p class="eyebrow">Local-first media library</p>
+          <h1>Your photos and videos, indexed without drama.</h1>
           <p class="lead">
-            Scan, import, tag, search, and browse photos, videos, and audio from
-            one lightweight Python package.
+            MM gives you a fast CLI, a bundled web UI, safe imports, smart albums,
+            and optional local AI tagging in one self-hosted Python package.
           </p>
           <div class="hero-actions" aria-label="Project links">
-            <a class="button primary" href="https://github.com/HSPK/mm">View on GitHub</a>
-            <a class="button secondary" href="https://pypi.org/project/litemm/">Install from PyPI</a>
+            <a class="button primary" href="https://github.com/HSPK/mm">View source</a>
+            <a class="button secondary" href="https://pypi.org/project/litemm/">Install litemm</a>
+          </div>
+          <div class="trust-row" aria-label="Highlights">
+            <span>SQLite by default</span>
+            <span>PostgreSQL ready</span>
+            <span>No sidecar writes</span>
           </div>
         </div>
 
-        <div class="terminal-card" aria-label="Quick start command preview">
-          <div class="terminal-bar">
+        <div class="product-card" aria-label="MM web UI preview">
+          <div class="browser-bar">
             <span></span>
             <span></span>
             <span></span>
+            <strong>Library</strong>
           </div>
+          <div class="product-preview">
+            <aside class="preview-sidebar">
+              <div class="sidebar-title"></div>
+              <div class="sidebar-line active"></div>
+              <div class="sidebar-line"></div>
+              <div class="sidebar-line short"></div>
+              <div class="sidebar-spacer"></div>
+              <div class="sidebar-chip"></div>
+            </aside>
+            <section class="preview-main">
+              <div class="preview-toolbar">
+                <div>
+                  <span class="preview-kicker"></span>
+                  <span class="preview-title"></span>
+                </div>
+                <span class="preview-search"></span>
+              </div>
+              <div class="media-grid" aria-hidden="true">
+                <span class="tile tall"></span>
+                <span class="tile warm"></span>
+                <span class="tile cool"></span>
+                <span class="tile dark"></span>
+                <span class="tile cool"></span>
+                <span class="tile tall warm"></span>
+                <span class="tile dark"></span>
+                <span class="tile"></span>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section id="workflow" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Workflow</p>
+          <h2>From folder to browsable library in four steps.</h2>
+        </div>
+        <div class="workflow-grid">
+          <article>
+            <span>01</span>
+            <h3>Index</h3>
+            <p>Scan existing folders without changing original files.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Import</h3>
+            <p>Copy or move new media into template-based destinations.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Enrich</h3>
+            <p>Extract metadata, thumbnails, places, tags, and ratings.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <h3>Browse</h3>
+            <p>Use the web UI, CLI, or REST API to explore the library.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="features" class="section feature-section">
+        <div class="section-heading">
+          <p class="eyebrow">Features</p>
+          <h2>Small enough for a laptop. Structured enough for a server.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <h3>Safe by default</h3>
+            <p>Read-only indexing, duplicate checks, and deterministic import paths.</p>
+          </article>
+          <article>
+            <h3>Real database options</h3>
+            <p>Start with a portable SQLite file, or register a PostgreSQL URL later.</p>
+          </article>
+          <article>
+            <h3>Smart organization</h3>
+            <p>Tags, albums, cameras, years, places, ratings, and generated collections.</p>
+          </article>
+          <article>
+            <h3>Local intelligence</h3>
+            <p>Optional OpenCLIP auto-tagging and offline reverse geocoding.</p>
+          </article>
+          <article>
+            <h3>Bundled web UI</h3>
+            <p>FastAPI serves the React app, thumbnails, streaming, auth, and APIs.</p>
+          </article>
+          <article>
+            <h3>Scriptable CLI</h3>
+            <p>Automate scanning, imports, config, cleanup, sync, and search.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="install" class="section install-section">
+        <div>
+          <p class="eyebrow">Install</p>
+          <h2>One package, no mandatory Docker stack.</h2>
+          <p>
+            Install <code>litemm</code>, initialize a library, and start the
+            server. The web UI is bundled with the Python package.
+          </p>
+        </div>
+        <div class="code-card" aria-label="Installation commands">
           <pre><code>pipx install litemm
 mm init ~/Photos
 mm import ~/Downloads/Camera
 mm server</code></pre>
         </div>
       </section>
-
-      <section class="stats" aria-label="Project highlights">
-        <div>
-          <strong>SQLite first</strong>
-          <span>Portable by default, PostgreSQL when you want a server DB.</span>
-        </div>
-        <div>
-          <strong>No sidecars</strong>
-          <span>Indexes media without modifying original files.</span>
-        </div>
-        <div>
-          <strong>CLI + Web UI</strong>
-          <span>Automate imports or browse from a responsive gallery.</span>
-        </div>
-      </section>
-
-      <section id="features" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">Why MM</p>
-          <h2>Built for lightweight, local media workflows.</h2>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card">
-            <h3>Safe importing</h3>
-            <p>
-              Template-based imports, file hashing, duplicate detection, and
-              read-only indexing keep your library predictable.
-            </p>
-          </article>
-          <article class="feature-card">
-            <h3>Smart discovery</h3>
-            <p>
-              Browse by tags, cameras, years, places, ratings, and generated
-              smart albums.
-            </p>
-          </article>
-          <article class="feature-card">
-            <h3>Local intelligence</h3>
-            <p>
-              Optional OpenCLIP auto-tagging and offline reverse geocoding avoid
-              mandatory cloud services.
-            </p>
-          </article>
-          <article class="feature-card">
-            <h3>One deployable package</h3>
-            <p>
-              FastAPI serves the bundled React UI, thumbnails, media streaming,
-              auth, and library APIs from one Python process.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section id="install" class="section split">
-        <div>
-          <p class="eyebrow">Install</p>
-          <h2>Start with a local database, move to PostgreSQL later.</h2>
-          <p>
-            MM is distributed as <code>litemm</code>. The default SQLite setup is
-            zero-config, while registered PostgreSQL URLs are supported for
-            server-backed libraries.
-          </p>
-        </div>
-        <div class="code-card">
-          <pre><code># Install
-pipx install litemm
-
-# Create or open a library
-mm init ~/Photos
-
-# Register PostgreSQL if needed
-mm db add postgresql://user:pass@host:5432/mm</code></pre>
-        </div>
-      </section>
-
-      <section id="stack" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">Stack</p>
-          <h2>Modern internals without a heavyweight deployment model.</h2>
-        </div>
-        <div class="stack-list">
-          <span>Python 3.10+</span>
-          <span>FastAPI</span>
-          <span>Peewee ORM</span>
-          <span>SQLite</span>
-          <span>PostgreSQL</span>
-          <span>React</span>
-          <span>TypeScript</span>
-          <span>OpenCLIP optional</span>
-        </div>
-      </section>
     </main>
 
     <footer class="footer">
       <span>MM is open source.</span>
-      <a href="https://github.com/HSPK/mm">Source</a>
+      <a href="https://github.com/HSPK/mm">GitHub</a>
       <a href="https://github.com/HSPK/mm/issues">Issues</a>
       <a href="https://pypi.org/project/litemm/">PyPI</a>
     </footer>

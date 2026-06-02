@@ -1,135 +1,39 @@
-<div align="center">
+# MM
 
-# 📸 MM — Universal Organizer for Media
+Local-first media library management for photos, videos, and audio.
 
-**A self-hosted, AI-powered media library manager for photos, videos, and audio.**
+[Homepage](https://hspk.github.io/mm/) · [PyPI](https://pypi.org/project/litemm/) · [Source](https://github.com/HSPK/mm) · [Issues](https://github.com/HSPK/mm/issues)
 
-Scan, tag, search, import safely, and browse your media collection with a beautiful web UI.
+[![PyPI](https://img.shields.io/pypi/v/litemm)](https://pypi.org/project/litemm/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://python.org)
+[![License](https://img.shields.io/github/license/HSPK/mm)](LICENSE)
 
-[![GitHub Stars](https://img.shields.io/github/stars/HSPK/mm?style=for-the-badge&logo=github&color=f4c542)](https://github.com/HSPK/mm/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/HSPK/mm?style=for-the-badge&logo=github&color=blue)](https://github.com/HSPK/mm/network/members)
-[![GitHub Issues](https://img.shields.io/github/issues/HSPK/mm?style=for-the-badge&logo=github&color=orange)](https://github.com/HSPK/mm/issues)
-[![GitHub Last Commit](https://img.shields.io/github/last-commit/HSPK/mm?style=for-the-badge&logo=github)](https://github.com/HSPK/mm/commits)
-[![GitHub License](https://img.shields.io/github/license/HSPK/mm?style=for-the-badge)](https://github.com/HSPK/mm/blob/main/LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+MM indexes existing folders, imports new media safely, extracts metadata, creates thumbnails, organizes smart albums, and serves a bundled web UI from one Python package.
 
----
+It is designed for people who want a scriptable, self-hosted media library without starting from a multi-container stack. SQLite works out of the box; PostgreSQL is supported when you want a server database.
 
-[Homepage](https://hspk.github.io/mm/) · [Features](#-features) · [Quick Start](#-quick-start) · [Installation](#-installation) · [Usage](#-usage) · [Web UI](#-web-ui) · [API](#-api) · [Contributing](#-contributing)
+## Features
 
-</div>
+- **Safe imports**: template-based destinations, hashing, duplicate checks, and copy/move plans.
+- **Non-destructive indexing**: original files are not modified, and paths remain portable.
+- **CLI and web UI**: automate with `mm`, then browse from a responsive gallery.
+- **Smart organization**: tags, albums, cameras, years, places, ratings, and generated collections.
+- **Local intelligence**: optional OpenCLIP auto-tagging and offline reverse geocoding.
+- **Flexible database backend**: SQLite by default, PostgreSQL URL support for server deployments.
 
----
+## Architecture
 
-## ✨ Features
-
-### Why MM?
-
-> Most open-source media managers (Immich, PhotoPrism, LibrePhotos) are designed as heavy, multi-container services that require PostgreSQL, Redis, and dedicated ML micro-services. **MM takes the opposite approach** — a single Python process with SQLite by default, installable via `pip`, runnable on a Raspberry Pi, and fully functional without a GPU.
-
-<table>
-<tr>
-<td width="50%">
-
-### 🪶 Lightweight & Zero-Config
-- **Single process** — no Docker orchestration or Redis
-- **SQLite-backed by default** — zero config, portable, just one `.db` file; PostgreSQL URLs are supported when you want a server DB
-- `pipx install litemm` and you're ready to go
-- Runs comfortably on a **Raspberry Pi 4** (4 GB)
-
-</td>
-<td width="50%">
-
-### 🤖 Built-in AI — No External Services
-- Zero-shot auto-tagging (~36 categories)
-- Optional OpenCLIP install for local auto-tagging
-
-</td>
-</tr>
-<tr>
-<td>
-
-### 🌍 First-Class CJK & Chinese Support
-- Offline reverse geocoding (GeoNames, no API keys)
-- **Chinese province & city name translation** (全国省市中文映射)
-- **170+ Chinese festival detection** (春节、清明、中秋…)
-- Auto-generated **festival albums** — unique to MM
-
-</td>
-<td>
-
-### 📁 Non-Destructive & Coexists with Others
-- **Read-only indexing** — never modifies your original files
-- Works alongside **Lightroom / Apple Photos** on the same folder
-- Relative path storage — entire library is **portable & movable**
-- SHA-256 duplicate detection prevents duplicate imports
-
-</td>
-</tr>
-<tr>
-<td>
-
-### 🖥️ Full CLI + Web UI
-- Complete **command-line toolkit** for automation & scripting
-- Template-based import (`{year}/{camera}/{hour:02d}{minute:02d}{second:02d}{ext}`)
-- Beautiful responsive gallery with justified layout & infinite scroll
-- Smart albums auto-generated by tag, camera, year, festival, place
-
-</td>
-<td>
-
-### ⚡ Production-Ready
-- Async API server (FastAPI + Uvicorn)
-- WebP thumbnail caching (4 sizes) with ETag / HTTP 304
-- Multi-library support with runtime switching
-- Frontend bundled in pip package — **no Node.js needed to deploy**
-
-</td>
-</tr>
-</table>
-
-### MM vs. Others
-
-| | **MM** | Immich | PhotoPrism | LibrePhotos |
-|---|---|---|---|---|
-| Install | `pip install` | 6+ Docker containers | Docker + MariaDB | Docker + PostgreSQL |
-| Min RAM | ~300 MB | ~4 GB | ~2 GB | ~4 GB |
-| Database | SQLite / PostgreSQL | PostgreSQL | MariaDB | PostgreSQL |
-| Auto-tagging | CLIP (optional) | CLIP (separate service) | TensorFlow | CLIP |
-| Chinese localization | Province/city/festivals | ✗ | ✗ | ✗ |
-| CLI tooling | Full | Minimal | Minimal | ✗ |
-| Modifies originals | Never | Never | Sidecar writes | Never |
-| Mobile app | — | iOS + Android | PWA | — |
-| Face recognition | — | ✓ | ✓ | ✓ |
-
-## 🏗️ Architecture
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                        Web UI (React)                        │
-│         React 19 · TailwindCSS · Zustand · Vite              │
-└──────────────────┬───────────────────────────────────────────┘
-                   │ REST API
-┌──────────────────▼───────────────────────────────────────────┐
-│                    FastAPI Server                             │
-│     Auth · Media · Albums · Smart Albums · Tags · Stats      │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-┌──────────────────▼───────────────────────────────────────────┐
-│                    Core Engines                               │
-│       Scanner · Metadata · Tagger · Geocoding · ...          │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-┌──────────────────▼───────────────────────────────────────────┐
-│          SQLite or PostgreSQL (Peewee ORM / peewee-aio)       │
-│              Media · Metadata · Tags · Albums                │
-└──────────────────────────────────────────────────────────────┘
+```text
+React web UI
+    |
+FastAPI server
+    |
+Scanner · importer · metadata · thumbnails · tags · geocoding
+    |
+SQLite or PostgreSQL via Peewee / peewee-aio
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Install with pipx (recommended)
@@ -143,7 +47,7 @@ mm server
 # → Open http://localhost:8000
 ```
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
@@ -176,7 +80,7 @@ npm run build
 cd ..
 ```
 
-## 📖 Usage
+## Usage
 
 ### CLI Commands
 
@@ -249,19 +153,19 @@ mm server -h 0.0.0.0 -p 9000
 mm server --reload
 ```
 
-## 🌐 Web UI
+## Web UI
 
 The web interface provides a full-featured media browser:
 
 - **Library** — Browse all media with infinite scroll, date grouping, and adjustable thumbnail sizes
 - **Albums** — Smart albums auto-generated by tag, camera, year, festival, and location
-- **Search** — Quick filtering and semantic search
+- **Search** — Quick tag and metadata filtering
 - **Detail View** — Full metadata, EXIF info, location, tags, and star ratings
 - **Batch Operations** — Multi-select for bulk tagging, rating, and deletion
 - **Settings** — Theme switching (light/dark), library management
 - **Auth** — User accounts with token-based authentication
 
-## 🔌 API
+## API
 
 mm exposes a comprehensive REST API at `/api/`:
 
@@ -279,7 +183,7 @@ mm exposes a comprehensive REST API at `/api/`:
 
 Interactive API docs available at **`/docs`** (Swagger UI) when the server is running.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Technology |
 |---|---|
@@ -291,7 +195,7 @@ Interactive API docs available at **`/docs`** (Swagger UI) when the server is ru
 | **Media** | Pillow, pillow-heif, rawpy, exiftool, ffmpeg |
 | **Geocoding** | GeoNames (offline), lunar-python |
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Here's how to get started:
 
@@ -300,7 +204,6 @@ Contributions are welcome! Here's how to get started:
 git clone https://github.com/HSPK/mm.git
 cd mm
 uv sync
-```
 
 # Run tests
 pytest
@@ -311,16 +214,6 @@ cd web && npm install && npm run dev
 
 Please open an issue first to discuss what you would like to change.
 
-## 📄 License
+## License
 
 This project is open source. See the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-
-**If you find mm useful, please consider giving it a ⭐!**
-
-[![Star History Chart](https://api.star-history.com/svg?repos=HSPK/mm&type=Date)](https://star-history.com/#HSPK/mm&Date)
-
-</div>
