@@ -8,7 +8,7 @@ albums, and browse everything from a web UI.
 
 [![PyPI](https://img.shields.io/pypi/v/litemm)](https://pypi.org/project/litemm/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://python.org)
-[![License](https://img.shields.io/github/license/HSPK/mm)](LICENSE)
+[![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
 
 ## What you can do with MM
 
@@ -82,4 +82,5 @@ The full documentation site includes:
 
 ## License
 
-This project is open source. See [LICENSE](LICENSE) for details.
+MM is available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Commercial use requires separate permission.

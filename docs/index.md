@@ -47,6 +47,7 @@ hide:
   <span>SQLite by default</span>
   <span>PostgreSQL when needed</span>
   <span>No sidecar writes</span>
+  <span>Noncommercial license</span>
   <span>CLI + Web UI</span>
 </section>
 
