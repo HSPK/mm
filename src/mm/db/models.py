@@ -7,7 +7,6 @@ from enum import Enum
 
 from peewee import (
     AutoField,
-    BlobField,
     CharField,
     CompositeKey,
     DateTimeField,
@@ -39,7 +38,7 @@ class TagSource(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# Database proxy — bound at runtime by Repository
+# Database proxy — bound at runtime by Database client
 # ---------------------------------------------------------------------------
 
 # Use standard SqliteDatabase.
@@ -127,17 +126,6 @@ class MediaTagModel(BaseModel):
         primary_key = CompositeKey("media", "tag")
 
 
-class EmbeddingModel(BaseModel):
-    id = AutoField()
-    media = ForeignKeyField(MediaModel, backref="embeddings", unique=True, on_delete="CASCADE")
-    vector = BlobField()
-    model = CharField(max_length=64, default="")
-    created_at = DateTimeField(default=dt.datetime.now)
-
-    class Meta:
-        table_name = "embeddings"
-
-
 class UserModel(BaseModel):
     id = AutoField()
     username = CharField(max_length=64, unique=True)
@@ -219,7 +207,6 @@ ALL_TABLES = [
     MetadataModel,
     TagModel,
     MediaTagModel,
-    EmbeddingModel,
     UserModel,
     AlbumModel,
     AlbumMediaModel,

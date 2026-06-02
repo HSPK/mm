@@ -32,7 +32,19 @@ export function StarRating({
                             filled ? "fill-yellow-400 text-yellow-400" : half ? "fill-yellow-400/50 text-yellow-400" : "text-muted-foreground/30",
                             interactive && "cursor-pointer hover:text-yellow-400",
                         )}
-                        onClick={interactive && onChange ? () => onChange(i + 1) : undefined}
+                        role={interactive ? "button" : undefined}
+                        aria-label={interactive ? `Set rating to ${value === i + 1 ? 0 : i + 1}` : undefined}
+                        tabIndex={interactive ? 0 : undefined}
+                        onClick={interactive && onChange ? () => onChange(value === i + 1 ? 0 : i + 1) : undefined}
+                        onKeyDown={interactive && onChange
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault()
+                                    if (e.repeat) return
+                                    onChange(value === i + 1 ? 0 : i + 1)
+                                }
+                            }
+                            : undefined}
                     />
                 )
             })}

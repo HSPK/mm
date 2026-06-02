@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from mm.cli import ui
-from mm.config import DEFAULT_DB_NAME, DEFAULT_IMPORT_TEMPLATE, add_database
+from mm.config import DEFAULT_IMPORT_TEMPLATE
 
 
 @click.command()
@@ -33,35 +33,32 @@ def init(directory: Path | None) -> None:
         click.prompt("Library root (where media files are stored)", default=str(dest))
     ).resolve()
 
-    dest.mkdir(parents=True, exist_ok=True)
-    db_path = dest / DEFAULT_DB_NAME
+    from mm.library.setup import initialize_library, inspect_library_setup
 
-    # Create / upgrade the database
-    from mm.db.sync_repo import SyncRepo
-
-    repo = SyncRepo(db_path)
-
-    # Store config in DB
-    repo.set_config("import_template", template)
-    repo.set_config("library_name", name)
-    repo.set_config("library_root", str(lib_root))
-
-    # Seed default user and smart albums
-    if repo.count_users() == 0:
+    requirements = inspect_library_setup(dest)
+    admin_name = None
+    admin_pass = None
+    if requirements.needs_admin_user:
         admin_name = click.prompt("Admin username", default="admin")
         admin_pass = click.prompt("Admin password", hide_input=True, confirmation_prompt=True)
-        repo.create_user(admin_name, password=admin_pass, display_name=admin_name, is_admin=True)
-        ui.success(f"Created admin user: {admin_name}")
-    if ui.confirm("Seed default smart albums?", default=True):
-        seeded = repo.seed_smart_albums()
-        if seeded:
-            ui.success(f"Seeded {seeded:,} default smart album definitions.")
 
-    ui.success(f"Database ready: {db_path}")
+    seed_smart_albums = ui.confirm("Seed default smart albums?", default=True)
+    result = initialize_library(
+        destination=dest,
+        name=name,
+        import_template=template,
+        library_root=lib_root,
+        admin_username=admin_name,
+        admin_password=admin_pass,
+        seed_smart_albums=seed_smart_albums,
+    )
+    if result.created_admin_user:
+        ui.success(f"Created admin user: {result.created_admin_user}")
+    if result.seeded_smart_albums:
+        ui.success(f"Seeded {result.seeded_smart_albums:,} default smart album definitions.")
 
-    idx = add_database(db_path, name=name)
-    # Ensure it's the active one
-    from mm.config import set_active_database
-
-    set_active_database(idx)
-    ui.key_values("Active Library", [("Path", ui.path(dest)), ("Number", f"#{idx + 1}")])
+    ui.success(f"Database ready: {result.db_path}")
+    ui.key_values(
+        "Active Library",
+        [("Path", ui.path(dest)), ("Number", f"#{result.active_index + 1}")],
+    )

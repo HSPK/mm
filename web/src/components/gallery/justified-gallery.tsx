@@ -56,7 +56,7 @@ export const JustifiedGallery = memo(function JustifiedGallery({
                 // Finalize current row - scale to fill
                 const gapsWidth = (currentRow.length - 1) * gap
                 const availableWidth = containerWidth - gapsWidth
-                const scale = availableWidth / (rowWidth - gap)
+                const scale = availableWidth / rowWidth
                 const scaledRow = currentRow.map(r => ({
                     ...r,
                     width: Math.floor(r.width * scale),

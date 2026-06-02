@@ -28,9 +28,11 @@ export const MediaTile = memo(function MediaTile({
 }) {
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const didLongPress = useRef(false)
+    const pressStartRef = useRef<{ x: number; y: number } | null>(null)
 
-    const startPress = useCallback(() => {
+    const startPress = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         didLongPress.current = false
+        pressStartRef.current = { x: e.clientX, y: e.clientY }
         timerRef.current = setTimeout(() => {
             didLongPress.current = true
             navigator?.vibrate?.(30)
@@ -40,7 +42,15 @@ export const MediaTile = memo(function MediaTile({
 
     const cancelPress = useCallback(() => {
         if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+        pressStartRef.current = null
     }, [])
+
+    const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+        if (!timerRef.current || !pressStartRef.current) return
+        const dx = Math.abs(e.clientX - pressStartRef.current.x)
+        const dy = Math.abs(e.clientY - pressStartRef.current.y)
+        if (dx > 8 || dy > 8) cancelPress()
+    }, [cancelPress])
 
     const handleClick = useCallback(() => {
         if (didLongPress.current) return
@@ -51,19 +61,35 @@ export const MediaTile = memo(function MediaTile({
         }
     }, [selectionMode, item.id, onSelect, onToggleSelect])
 
+    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        if (e.repeat) return
+        handleClick()
+    }, [handleClick])
+
     return (
         <div
-            className={cn("group relative overflow-hidden bg-muted cursor-pointer", className)}
+            className={cn("group relative overflow-hidden bg-muted cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background", className)}
             style={style}
+            role="button"
+            tabIndex={0}
+            aria-label={selectionMode
+                ? `${selected ? "Deselect" : "Select"} ${item.filename}`
+                : `Open ${item.filename}`}
+            aria-pressed={selectionMode ? selected : undefined}
             onClick={handleClick}
+            onKeyDown={handleKeyDown}
             onPointerDown={startPress}
+            onPointerMove={handlePointerMove}
             onPointerUp={cancelPress}
             onPointerLeave={cancelPress}
+            onPointerCancel={cancelPress}
             onContextMenu={(e) => { e.preventDefault(); onLongPress(item.id) }}
         >
             <AuthImage
                 apiSrc={`/media/${item.id}/thumbnail`}
-                alt=""
+                alt={item.filename}
                 loading="lazy"
                 className={cn(
                     "h-full w-full object-cover transition-all duration-200 will-change-transform",

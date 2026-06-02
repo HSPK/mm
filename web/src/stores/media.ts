@@ -1,25 +1,15 @@
 import { create } from "zustand"
+import axios from "axios"
 import { api } from "@/api/client"
 import type { Media, PaginatedMedia } from "@/api/types"
+import {
+    mediaMatchesFilters,
+    needsServerFilterRecheck,
+    sortMediaItems,
+    type Filters,
+} from "@/lib/media-filter"
 
-export interface Filters {
-    type: string | null
-    tag: string | null
-    camera: string | null
-    date_from: string | null
-    date_to: string | null
-    date_ranges: string[][] | null
-    sort: string
-    order: string
-    search: string | null
-    min_rating: number | null
-    favorites_only: boolean
-    lat: number | null
-    lon: number | null
-    radius: number | null
-    no_date: boolean
-    deleted: boolean
-}
+export type { Filters } from "@/lib/media-filter"
 
 export type ViewMode = "justified" | "grid"
 export type DateGroupMode = "day" | "month"
@@ -46,9 +36,10 @@ interface MediaState {
     setThumbSize: (size: number) => void
     fetchMedia: (reset?: boolean) => Promise<void>
     setFilter: <K extends keyof Filters>(key: K, value: Filters[K]) => void
-    setFilters: (updates: Partial<Filters>) => void
+    setFilters: (updates: Partial<Filters>, options?: { replace?: boolean }) => void
     resetFilters: () => void
     removeItem: (id: number) => void
+    updateItem: (id: number, patch: Partial<Media>) => void
     setActiveLabel: (label: string | null, lockedKeys?: string[]) => void
     enterSelectionMode: (initialId?: number) => void
     exitSelectionMode: () => void
@@ -75,6 +66,9 @@ const defaultFilters: Filters = {
     no_date: false,
     deleted: false,
 }
+
+let mediaFetchSeq = 0
+let mediaFetchController: AbortController | null = null
 
 export const useMediaStore = create<MediaState>((set, get) => ({
     items: [],
@@ -112,12 +106,16 @@ export const useMediaStore = create<MediaState>((set, get) => ({
         if (state.loading && !reset) return
 
         if (reset) {
+            mediaFetchController?.abort()
             set({ items: [], page: 1, hasMore: true })
         }
 
         const currentState = get()
         if (!currentState.hasMore && !reset) return
 
+        const requestSeq = ++mediaFetchSeq
+        const controller = new AbortController()
+        mediaFetchController = controller
         set({ loading: true, error: null })
 
         try {
@@ -134,7 +132,8 @@ export const useMediaStore = create<MediaState>((set, get) => ({
                 }
             }
 
-            const res = await api.get<PaginatedMedia>("/media", { params })
+            const res = await api.get<PaginatedMedia>("/media", { params, signal: controller.signal })
+            if (requestSeq !== mediaFetchSeq) return
             const { items, total, pages } = res.data
             const nextPage = reset ? 2 : currentState.page + 1
 
@@ -145,8 +144,14 @@ export const useMediaStore = create<MediaState>((set, get) => ({
                 page: nextPage,
                 loading: false,
             }))
-        } catch (err: any) {
-            set({ error: err.message || "Failed to fetch media", loading: false })
+        } catch (err: unknown) {
+            if (axios.isCancel(err) || requestSeq !== mediaFetchSeq) return
+            const message = err instanceof Error ? err.message : "Failed to fetch media"
+            set({ error: message, loading: false })
+        } finally {
+            if (mediaFetchController === controller) {
+                mediaFetchController = null
+            }
         }
     },
 
@@ -157,9 +162,11 @@ export const useMediaStore = create<MediaState>((set, get) => ({
         get().fetchMedia(true)
     },
 
-    setFilters: (updates) => {
+    setFilters: (updates, options) => {
         set((s) => ({
-            filters: { ...s.filters, ...updates },
+            filters: { ...(options?.replace ? defaultFilters : s.filters), ...updates },
+            activeLabel: options?.replace ? null : s.activeLabel,
+            albumFilterKeys: options?.replace ? new Set<string>() : s.albumFilterKeys,
         }))
         get().fetchMedia(true)
     },
@@ -174,6 +181,22 @@ export const useMediaStore = create<MediaState>((set, get) => ({
             items: s.items.filter((i) => i.id !== id),
             total: Math.max(0, s.total - 1),
         }))
+    },
+
+    updateItem: (id, patch) => {
+        const shouldRefetch = needsServerFilterRecheck(get().filters)
+        set((s) => {
+            const wasPresent = s.items.some((item) => item.id === id)
+            const nextItems = s.items
+                .map((item) => (item.id === id ? { ...item, ...patch } : item))
+                .filter((item) => mediaMatchesFilters(item, s.filters))
+            const stillPresent = nextItems.some((item) => item.id === id)
+            return {
+                items: sortMediaItems(nextItems, s.filters),
+                total: wasPresent && !stillPresent ? Math.max(0, s.total - 1) : s.total,
+            }
+        })
+        if (shouldRefetch) void get().fetchMedia(true)
     },
 
     setActiveLabel: (label, lockedKeys) => {

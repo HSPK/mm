@@ -5,9 +5,10 @@ import time
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from mm.config import resolve_media_path
-from mm.db.async_repository import AsyncRepository
+from mm.db.client import AsyncDBClient
 from mm.db.dto import User
+from mm.library.settings import LibraryConfig
+from mm.utils.paths import resolve_media_path
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -49,14 +50,14 @@ def invalidate_media_path_cache(media_id: int | None = None) -> None:
         _MEDIA_PATH_CACHE.clear()
 
 
-def get_repo(request: Request) -> AsyncRepository:
-    """Dependency: gets the async repository instance attached to app state."""
-    return request.app.state.repo  # type: ignore[no-any-return]
+def get_db(request: Request) -> AsyncDBClient:
+    """Dependency: gets the async database client instance attached to app state."""
+    return request.app.state.db  # type: ignore[no-any-return]
 
 
-def get_library_root(request: Request) -> str:
-    """Return the library root directory (parent of the DB file)."""
-    return request.app.state.library_root  # type: ignore[no-any-return]
+def get_library_config(request: Request) -> LibraryConfig:
+    """Return the validated library config attached to app state."""
+    return request.app.state.config  # type: ignore[no-any-return]
 
 
 async def get_current_user(
@@ -64,10 +65,10 @@ async def get_current_user(
     cred: HTTPAuthorizationCredentials | None = Security(_bearer),
 ) -> User | None:
     """Auth dependency — returns User or None (when no users are configured)."""
-    repo: AsyncRepository = get_repo(request)
+    db: AsyncDBClient = get_db(request)
 
     # 1. Check if ANY user exists (setup mode check)
-    user_count = await repo.count_users()
+    user_count = await db.user.count()
     if user_count == 0:
         return None
 
@@ -92,7 +93,7 @@ async def get_current_user(
             _TOKEN_CACHE.pop(token, None)
 
     # 4. Validate token via DB
-    user = await repo.get_user_by_token(token)
+    user = await db.user.get_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
@@ -127,13 +128,13 @@ async def get_media_path(request: Request, media_id: int) -> str:
         else:
             _MEDIA_PATH_CACHE.pop(media_id, None)
 
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
+    db = get_db(request)
+    m = await db.media.get(media_id)
     if not m:
         raise HTTPException(404, "Media not found")
 
-    library_root = get_library_root(request)
-    abs_path = resolve_media_path(m.path, library_root)
+    config = get_library_config(request)
+    abs_path = resolve_media_path(m.path, config.library_root)
 
     _MEDIA_PATH_CACHE[media_id] = (abs_path, now + _MEDIA_PATH_TTL)
     _evict_cache(_MEDIA_PATH_CACHE, _MEDIA_PATH_MAX)

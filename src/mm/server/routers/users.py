@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from mm.db.dto import User
-from mm.server.dependencies import get_repo, require_admin
+from mm.server.dependencies import get_db, require_admin
 from mm.server.schemas import CreateUserBody
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -16,7 +16,7 @@ async def list_users(
     request: Request,
     _admin: User | None = Depends(require_admin),
 ) -> list[dict[str, Any]]:
-    users = await get_repo(request).list_users()
+    users = await get_db(request).user.list()
     return [
         {
             "id": u.id,
@@ -35,7 +35,7 @@ async def create_user(
     body: CreateUserBody,
     _admin: User | None = Depends(require_admin),
 ) -> dict[str, Any]:
-    user = await get_repo(request).create_user(
+    user = await get_db(request).user.create(
         body.username,
         body.password,
         body.display_name,
@@ -55,5 +55,5 @@ async def delete_user(
     user_id: int,
     _admin: User | None = Depends(require_admin),
 ) -> dict[str, str]:
-    await get_repo(request).delete_user(user_id)
+    await get_db(request).user.delete(user_id)
     return {"status": "ok"}

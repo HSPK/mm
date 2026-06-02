@@ -5,10 +5,17 @@ import LoginPage from "@/pages/login"
 import DashboardPage from "@/pages/dashboard"
 import SettingsPage from "@/pages/settings"
 import ProfilePage from "@/pages/profile"
+import { useEffect } from "react"
 import type { ReactNode } from "react"
 
 function RequireAuth({ children }: { children: ReactNode }) {
     const token = useAuthStore((s) => s.token)
+    const user = useAuthStore((s) => s.user)
+    const fetchUser = useAuthStore((s) => s.fetchUser)
+    useEffect(() => {
+        if (token && !user) void fetchUser()
+    }, [fetchUser, token, user])
+
     if (!token) return <Navigate to="/login" replace />
     return <>{children}</>
 }

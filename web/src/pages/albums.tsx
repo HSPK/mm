@@ -1,161 +1,19 @@
-import { useEffect, useState, useMemo, useCallback, useRef, memo } from "react"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { api } from "@/api/client"
 import { useMediaStore, type Filters } from "@/stores/media"
 import { useAlbumSectionStore } from "@/stores/album-section"
-import { useNavigate } from "react-router-dom"
-import { AuthImage } from "@/components/auth-image"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { AlbumCard } from "@/components/album-card"
+import { buildAlbumItems } from "@/lib/albums"
+import type { SectionDef, SectionId, SmartAlbumsResponse } from "@/api/types"
 import {
     Images,
-    Camera,
-    MapPin,
-    Calendar,
-    HelpCircle,
-    Trash2,
-    Star,
-    Film,
-    Image,
     ImageOff,
     Loader2,
+    AlertTriangle,
     ChevronRight,
-    Tag,
-    Sparkles,
     type LucideIcon,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-// ─── Icon registry ────────────────────────────────────────
-
-const ICON_MAP: Record<string, LucideIcon> = {
-    images: Images,
-    image: Image,
-    film: Film,
-    star: Star,
-    "trash-2": Trash2,
-    tag: Tag,
-    camera: Camera,
-    sparkles: Sparkles,
-    calendar: Calendar,
-    "help-circle": HelpCircle,
-    "map-pin": MapPin,
-}
-
-function resolveIcon(name?: string): LucideIcon {
-    return (name && ICON_MAP[name]) || Images
-}
-
-// ─── Types from backend ───────────────────────────────────
-
-interface SmartAlbum {
-    key: string
-    title: string
-    subtitle?: string
-    count?: number
-    cover_id?: number | null
-    icon?: string
-    color?: string
-    filters: Record<string, unknown>
-    search_text?: string
-    festival_id?: string
-}
-
-interface SmartAlbumsResponse {
-    library: SmartAlbum[]
-    tags: SmartAlbum[]
-    cameras: SmartAlbum[]
-    festivals: SmartAlbum[]
-    years: SmartAlbum[]
-    places: SmartAlbum[]
-}
-
-type SectionId = "tags" | "cameras" | "festivals" | "years" | "places"
-
-// ─── UI item (adds onClick from filters) ──────────────────
-
-interface AlbumItem {
-    key: string
-    icon: LucideIcon
-    title: string
-    subtitle?: string
-    count?: number
-    coverId?: number | null
-    onClick: () => void
-    color?: string
-    searchText: string
-}
-
-interface SectionDef {
-    id: SectionId
-    icon: LucideIcon
-    title: string
-    items: AlbumItem[]
-    previewItems?: AlbumItem[]
-    previewCount: number
-}
-
-// ─── Album card ───────────────────────────────────────────
-
-interface AlbumCardProps {
-    icon: LucideIcon
-    title: string
-    subtitle?: string
-    count?: number
-    coverId?: number | null
-    onClick: () => void
-    color?: string
-}
-
-const AlbumCard = memo(function AlbumCard({
-    icon: Icon,
-    title,
-    subtitle,
-    count,
-    coverId,
-    onClick,
-    color,
-}: AlbumCardProps) {
-    return (
-        <button
-            onClick={onClick}
-            className="group relative overflow-hidden rounded-2xl bg-secondary/30 border border-border/60 hover:border-border/80 hover:shadow-lg hover:shadow-black/20 transition-all duration-300 text-left w-full"
-        >
-            <div className="aspect-[4/3] relative overflow-hidden bg-muted">
-                {coverId ? (
-                    <AuthImage
-                        apiSrc={`/media/${coverId}/thumbnail?size=lg`}
-                        alt=""
-                        loading="lazy"
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                ) : (
-                    <div
-                        className={cn(
-                            "h-full w-full flex items-center justify-center",
-                            color || "bg-secondary/50",
-                        )}
-                    >
-                        <Icon className="h-12 w-12 text-muted-foreground/15" />
-                    </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                {count != null && (
-                    <span className="absolute top-2.5 right-2.5 inline-flex items-center rounded-full bg-black/50 backdrop-blur-sm px-2.5 py-0.5 text-xs text-white/90 font-medium border border-white/10">
-                        {count.toLocaleString()}
-                    </span>
-                )}
-                <div className="absolute bottom-0 left-0 right-0 p-3.5">
-                    <h3 className="text-base font-semibold text-white truncate leading-tight">
-                        {title}
-                    </h3>
-                    {subtitle && (
-                        <p className="text-xs text-white/55 mt-1 truncate">
-                            {subtitle}
-                        </p>
-                    )}
-                </div>
-            </div>
-        </button>
-    )
-})
 
 // ─── Section header ───────────────────────────────────────
 
@@ -253,47 +111,19 @@ function SectionDetailView({ section }: { section: SectionDef }) {
     )
 }
 
-// ─── Convert backend album → UI item ──────────────────────
-
-function toAlbumItem(
-    album: SmartAlbum,
-    goLibraryWith: (filters: Record<string, unknown>, label?: string) => void,
-): AlbumItem {
-    return {
-        key: album.key,
-        icon: resolveIcon(album.icon),
-        title: album.title,
-        subtitle: album.subtitle,
-        count: album.count,
-        coverId: album.cover_id,
-        onClick: () => goLibraryWith(album.filters, album.title),
-        color: album.color,
-        searchText: album.search_text || album.title,
-    }
-}
-
 // ─── Main Albums Page ─────────────────────────────────────
 
 export default function AlbumsPage() {
     const navigate = useNavigate()
+    const [searchParams, setSearchParams] = useSearchParams()
     const { setFilters, setActiveLabel } = useMediaStore()
-    const { sectionId, enter: enterSection } = useAlbumSectionStore()
+    const { sectionId, enter: enterSection, exit: exitSection } = useAlbumSectionStore()
 
     const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const [retryTick, setRetryTick] = useState(0)
     const [data, setData] = useState<SmartAlbumsResponse | null>(null)
     const rootRef = useRef<HTMLDivElement>(null)
-
-    // Track return animation (detail → list)
-    const prevSectionRef = useRef<string | null>(null)
-    const [returning, setReturning] = useState(false)
-    useEffect(() => {
-        if (prevSectionRef.current && !sectionId) {
-            setReturning(true)
-            const t = setTimeout(() => setReturning(false), 250)
-            return () => clearTimeout(t)
-        }
-        prevSectionRef.current = sectionId
-    }, [sectionId])
 
     // Scroll parent container to top when switching views
     useEffect(() => {
@@ -310,16 +140,21 @@ export default function AlbumsPage() {
             .then((res) => {
                 if (mounted) {
                     setData(res.data)
+                    setLoadError(null)
                     setLoading(false)
                 }
             })
             .catch(() => {
-                if (mounted) setLoading(false)
+                if (mounted) {
+                    setData(null)
+                    setLoadError("Could not load albums")
+                    setLoading(false)
+                }
             })
         return () => {
             mounted = false
         }
-    }, [])
+    }, [retryTick])
 
     // Navigation helper — apply filters and switch to library tab
     const goLibraryWith = useCallback(
@@ -352,55 +187,38 @@ export default function AlbumsPage() {
         [navigate, setFilters, setActiveLabel],
     )
 
-    // Convert backend data → UI items
-    const libraryItems = useMemo(
-        () => (data?.library ?? []).map((a) => toAlbumItem(a, goLibraryWith)),
-        [data?.library, goLibraryWith],
+    const { libraryItems, sections } = useMemo(
+        () => buildAlbumItems(data, goLibraryWith),
+        [data, goLibraryWith],
     )
 
-    const tagItems = useMemo(
-        () => (data?.tags ?? []).map((a) => toAlbumItem(a, goLibraryWith)),
-        [data?.tags, goLibraryWith],
-    )
+    useEffect(() => {
+        if (!data) return
+        const sectionParam = searchParams.get("section")
+        if (!sectionParam) {
+            if (sectionId) exitSection()
+            return
+        }
 
-    const cameraItems = useMemo(
-        () => (data?.cameras ?? []).map((a) => toAlbumItem(a, goLibraryWith)),
-        [data?.cameras, goLibraryWith],
-    )
+        const sec = sections.find((s) => s.id === sectionParam)
+        if (!sec) {
+            const next = new URLSearchParams(searchParams)
+            next.delete("section")
+            setSearchParams(next, { replace: true })
+            return
+        }
+        if (sectionId !== sec.id) enterSection(sec.id, sec.title)
+    }, [data, enterSection, exitSection, searchParams, sectionId, sections, setSearchParams])
 
-    const festivalItems = useMemo(
-        () => (data?.festivals ?? []).map((a) => toAlbumItem(a, goLibraryWith)),
-        [data?.festivals, goLibraryWith],
-    )
-
-    const yearItems = useMemo(
-        () => (data?.years ?? []).map((a) => toAlbumItem(a, goLibraryWith)),
-        [data?.years, goLibraryWith],
-    )
-
-    const placeItems = useMemo(
-        () => (data?.places ?? []).map((a) => toAlbumItem(a, goLibraryWith)),
-        [data?.places, goLibraryWith],
-    )
-
-    // Section definitions
-    const sections: SectionDef[] = useMemo(
-        () =>
-            [
-                { id: "tags" as SectionId, icon: Tag, title: "Tags", items: tagItems, previewCount: 8 },
-                { id: "cameras" as SectionId, icon: Camera, title: "Cameras", items: cameraItems, previewCount: 6 },
-                { id: "festivals" as SectionId, icon: Sparkles, title: "Festivals", items: festivalItems, previewCount: 8 },
-                { id: "years" as SectionId, icon: Calendar, title: "Years", items: yearItems, previewCount: 9 },
-                { id: "places" as SectionId, icon: MapPin, title: "Places", items: placeItems, previewCount: 6 },
-            ].filter((s) => s.items.length > 0),
-        [tagItems, cameraItems, festivalItems, yearItems, placeItems],
-    )
-
-    // Detail navigation — via album-section store (must be after sections)
+    // Detail navigation — route search params are the source of truth
     const openDetail = useCallback((id: SectionId) => {
         const sec = sections.find((s) => s.id === id)
-        if (sec) enterSection(id, sec.title)
-    }, [sections, enterSection])
+        if (!sec) return
+        const next = new URLSearchParams(searchParams)
+        next.set("section", id)
+        setSearchParams(next)
+        enterSection(id, sec.title)
+    }, [searchParams, sections, enterSection, setSearchParams])
 
     const activeDetail = useMemo(
         () => (sectionId ? sections.find((s) => s.id === sectionId) ?? null : null),
@@ -416,6 +234,29 @@ export default function AlbumsPage() {
         )
     }
 
+    if (loadError) {
+        return (
+            <div ref={rootRef} className="flex h-full flex-col items-center justify-center px-8 pb-24 text-center text-muted-foreground">
+                <AlertTriangle className="mb-3 h-8 w-8 text-destructive/60" />
+                <p className="mb-1 text-sm font-semibold text-foreground/80">{loadError}</p>
+                <p className="mb-5 max-w-xs text-xs text-muted-foreground/60">
+                    Check the server connection and try loading the album sections again.
+                </p>
+                <button
+                    type="button"
+                    onClick={() => {
+                        setLoading(true)
+                        setLoadError(null)
+                        setRetryTick((tick) => tick + 1)
+                    }}
+                    className="rounded-full bg-secondary px-4 py-2 text-xs font-semibold text-foreground/80 transition-colors hover:bg-secondary/80"
+                >
+                    Retry
+                </button>
+            </div>
+        )
+    }
+
     // ── Detail view ───────────────────────────────────────
     if (activeDetail) {
         return (
@@ -427,7 +268,7 @@ export default function AlbumsPage() {
 
     // ── Main album list ───────────────────────────────────
     return (
-        <div ref={rootRef} className={cn("pb-24", returning && "animate-[fade-in-up_200ms_ease-out]")}>
+        <div ref={rootRef} className="pb-24">
             <div className="px-4 pt-1 space-y-10">
                 {/* ── Library ── */}
                 {libraryItems.length > 0 && (

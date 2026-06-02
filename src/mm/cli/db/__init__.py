@@ -5,12 +5,7 @@ from pathlib import Path
 import click
 
 from mm.cli import ui
-from mm.config import (
-    add_database,
-    load_config,
-    remove_database,
-    set_active_database,
-)
+from mm.io import local_storage
 
 
 @click.group(invoke_without_command=True)
@@ -35,26 +30,22 @@ def db(ctx: click.Context) -> None:
 @db.command("list")
 def db_list() -> None:
     """List all registered databases."""
-    cfg = load_config()
-    dbs = cfg.get("databases", [])
-    active = cfg.get("active", -1)
+    from mm.library.registry import list_registered_databases
 
+    dbs = list_registered_databases()
     if not dbs:
         ui.warning("No databases registered. Run `mm init <directory>` to create one.")
         return
 
     rows: list[list[object]] = []
-    for i, entry in enumerate(dbs):
-        name = entry.get("name", "")
-        path = entry["path"]
-        exists = Path(path).exists()
+    for entry in dbs:
         rows.append(
             [
-                "●" if i == active else "",
-                str(i + 1),
-                name or "-",
-                ui.path(path),
-                "ok" if exists else "missing",
+                "●" if entry.active else "",
+                str(entry.index + 1),
+                entry.name or "-",
+                ui.path(entry.path),
+                "ok" if entry.exists else "missing",
             ]
         )
     ui.print_table(
@@ -75,24 +66,24 @@ def db_list() -> None:
 @click.option("-n", "--name", default=None, help="A friendly name for this library.")
 def db_add(path: Path, name: str | None) -> None:
     """Register an existing database file."""
-    resolved = path.resolve()
-    if resolved.is_dir():
-        from mm.config import DEFAULT_DB_NAME
+    from mm.library.registry import register_database
 
-        resolved = resolved / DEFAULT_DB_NAME
-    if not resolved.exists():
-        ui.error(f"File not found: {resolved}")
+    try:
+        registered = register_database(path, name=name)
+    except FileNotFoundError as exc:
+        ui.error(f"File not found: {exc.filename}")
         raise SystemExit(1)
-    idx = add_database(resolved, name=name)
-    ui.success(f"Added database #{idx + 1}: {resolved}")
+    ui.success(f"Added database #{registered.index + 1}: {registered.path}")
 
 
 @db.command("set")
 @click.argument("number", type=int)
 def db_set(number: int) -> None:
     """Set the active database by its number (from `db list`)."""
+    from mm.library.registry import activate_database
+
     try:
-        path = set_active_database(number - 1)  # user sees 1-based
+        path = activate_database(number)
         ui.success(f"Active database set to #{number}: {path}")
     except ValueError as e:
         ui.error(str(e))
@@ -108,18 +99,20 @@ def db_rm(number: int, delete_data: bool) -> None:
     By default only unregisters the database.  Use --delete-data to also
     delete the .db file from disk.
     """
+    from mm.library.registry import delete_database_file, unregister_database
+
     try:
-        removed = remove_database(number - 1)
+        removed = unregister_database(number)
     except ValueError as e:
         ui.error(str(e))
         raise SystemExit(1)
 
     ui.success(f"Removed #{number}: {removed}")
 
-    if delete_data and removed.exists():
+    if delete_data and local_storage.exists(removed):
         if ui.confirm(f"Delete {removed} from disk?"):
-            removed.unlink()
-            ui.success("Database file deleted.")
+            if delete_database_file(removed):
+                ui.success("Database file deleted.")
         else:
             ui.info("File kept on disk.")
 

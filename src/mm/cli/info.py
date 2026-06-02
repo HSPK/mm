@@ -5,16 +5,16 @@ from pathlib import Path
 import click
 
 from mm.cli import ui
-from mm.cli._utils import fmt_size as _fmt_size
 from mm.db.dto import Metadata
+from mm.utils.formatting import fmt_size
 
 
 @click.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def info(file: Path) -> None:
     """Show metadata for a single media file."""
-    from mm.core.metadata import check_tools
-    from mm.core.scanner import scan_and_extract
+    from mm.extractor.metadata import check_tools
+    from mm.media.scanner import scan_and_extract
 
     missing = check_tools()
     if missing:
@@ -36,7 +36,7 @@ def info(file: Path) -> None:
         [
             ("Path", ui.path(m.path)),
             ("Type", m.media_type.value),
-            ("Size", _fmt_size(m.file_size)),
+            ("Size", fmt_size(m.file_size)),
             ("Hash", m.file_hash),
             ("Modified", m.modified_at),
         ],

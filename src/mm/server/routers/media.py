@@ -9,14 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from mm.config import resolve_media_path
-from mm.core.thumbnail import get_thumbnail
 from mm.db.dto import User
+from mm.io import local_storage
+from mm.media.thumbnails import get_thumbnail
+from mm.utils.paths import resolve_media_path
 from mm.server.dependencies import (
     get_current_user,
-    get_library_root,
+    get_library_config,
     get_media_path,
-    get_repo,
+    get_db,
 )
 from mm.server.schemas import (
     RatingBody,
@@ -34,7 +35,7 @@ _THUMB_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 def _make_etag(thumb_path: Path) -> str:
-    st = thumb_path.stat()
+    st = local_storage.stat(thumb_path)
     return (
         f'W/"{hashlib.md5(f"{st.st_mtime_ns}-{st.st_size}".encode()).hexdigest()[:16]}"'
     )
@@ -91,7 +92,7 @@ async def list_media(
     deleted: bool = False,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
+    db = get_db(request)
     tag_list = [t.strip() for t in tag.split(",") if t.strip()] if tag else None
 
     # Parse date_ranges from JSON string
@@ -102,7 +103,7 @@ async def list_media(
         except (json.JSONDecodeError, TypeError):
             parsed_date_ranges = None
 
-    items, total = await repo.query_media(
+    items, total = await db.media.query(
         page=page,
         per_page=per_page,
         media_type=type,
@@ -127,7 +128,7 @@ async def list_media(
     meta_map: dict[int, Any] = {}
     media_ids = [m.id for m in items if m.id]
     if media_ids:
-        meta_map = await repo.get_metadata_for_ids(media_ids)
+        meta_map = await db.metadata.get_for_ids(media_ids)
     return {
         "items": [serialize_media_brief(m, meta_map.get(m.id)) for m in items],
         "total": total,
@@ -142,8 +143,8 @@ async def list_trash(
     request: Request,
     _u: User | None = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    repo = get_repo(request)
-    items = await repo.list_trash()
+    db = get_db(request)
+    items = await db.media.list_trash()
     return [serialize_media_brief(m) for m in items]
 
 
@@ -152,8 +153,8 @@ async def empty_trash(
     request: Request,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
-    deleted = await repo.empty_trash()
+    db = get_db(request)
+    deleted = await db.media.empty_trash()
     return {"status": "ok", "deleted": deleted}
 
 
@@ -163,11 +164,11 @@ async def get_media_detail(
     media_id: int,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
+    db = get_db(request)
+    m = await db.media.get(media_id)
     if not m:
         raise HTTPException(404, "Media not found")
-    return await serialize_media(m, repo)
+    return await serialize_media(m, db)
 
 
 @router.get("/{media_id}/thumbnail")
@@ -195,14 +196,14 @@ async def get_media_file(
     media_id: int,
     _u: User | None = Depends(get_current_user),
 ):
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
+    db = get_db(request)
+    m = await db.media.get(media_id)
     if not m:
         raise HTTPException(404, "Media not found")
 
-    library_root = get_library_root(request)
-    fpath = Path(resolve_media_path(m.path, library_root))
-    if not fpath.exists():
+    config = get_library_config(request)
+    fpath = Path(resolve_media_path(m.path, config.library_root))
+    if not local_storage.exists(fpath):
         raise HTTPException(404, "File not found on disk")
 
     return stream_file(fpath, request)
@@ -215,11 +216,11 @@ async def set_media_rating(
     body: RatingBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
+    db = get_db(request)
+    m = await db.media.get(media_id)
     if not m:
         raise HTTPException(404, "Media not found")
-    await repo.set_rating(media_id, body.rating)
+    await db.media.set_rating(media_id, body.rating)
     return {"status": "ok", "rating": max(0, min(5, body.rating))}
 
 
@@ -230,15 +231,15 @@ async def add_media_tags(
     body: TagsBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
+    db = get_db(request)
+    m = await db.media.get(media_id)
     if not m:
         raise HTTPException(404, "Media not found")
     if not body.tags:
         raise HTTPException(400, "No tags provided")
     for name in body.tags:
-        tag = await repo.get_or_create_tag(name)
-        await repo.add_media_tag(media_id, tag.id)  # type: ignore[arg-type]
+        tag = await db.tag.get_or_create(name)
+        await db.tag.add_media(media_id, tag.id)  # type: ignore[arg-type]
     return {"status": "ok"}
 
 
@@ -249,11 +250,11 @@ async def remove_media_tag(
     tag_name: str,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    tag = await repo.get_tag_by_name(tag_name)
+    db = get_db(request)
+    tag = await db.tag.get_by_name(tag_name)
     if not tag or not tag.id:
         raise HTTPException(404, "Tag not found")
-    await repo.remove_media_tag(media_id, tag.id)
+    await db.tag.remove_media(media_id, tag.id)
     return {"status": "ok"}
 
 
@@ -264,19 +265,19 @@ async def update_media_metadata(
     body: UpdateMetadataBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
+    db = get_db(request)
+    m = await db.media.get(media_id)
     if not m:
         raise HTTPException(404, "Media not found")
 
     # Filter out None values from body
     updates = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
 
-    md = await repo.update_metadata(media_id, **updates)
+    md = await db.metadata.update(media_id, **updates)
     if not md:
         raise HTTPException(500, "Failed to update metadata")
 
-    return await serialize_media(m, repo)
+    return await serialize_media(m, db)
 
 
 @router.delete("/{media_id}")
@@ -287,20 +288,20 @@ async def delete_media(
     delete_file: bool = Query(False, description="Also delete the file from disk"),
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    m = await repo.get_media_by_id(media_id)
+    db = get_db(request)
+    m = await db.media.get(media_id)
     if not m:
         raise HTTPException(404, "Media not found")
 
     if permanent:
         if delete_file:
-            library_root = get_library_root(request)
-            fpath = Path(resolve_media_path(m.path, library_root))
-            if fpath.exists():
-                fpath.unlink()
-        await repo.delete_media(media_id)
+            config = get_library_config(request)
+            fpath = Path(resolve_media_path(m.path, config.library_root))
+            if local_storage.exists(fpath):
+                local_storage.delete_file(fpath)
+        await db.media.delete(media_id)
     else:
-        await repo.soft_delete_media(media_id)
+        await db.media.soft_delete(media_id)
 
     return {"status": "ok"}
 
@@ -311,8 +312,8 @@ async def restore_media(
     media_id: int,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    ok = await repo.restore_media(media_id)
+    db = get_db(request)
+    ok = await db.media.restore(media_id)
     if not ok:
         raise HTTPException(404, "Media not found in trash")
     return {"status": "ok"}

@@ -151,10 +151,10 @@ def serialize_media_brief(m: Any, md: Any = None) -> dict[str, Any]:
     return result
 
 
-async def serialize_media(m: Any, repo: Any) -> dict[str, Any]:
+async def serialize_media(m: Any, db: Any) -> dict[str, Any]:
     """Convert a Media DTO + metadata/tags to JSON-safe dict."""
-    md = await repo.get_metadata(m.id) if m.id else None
-    tags_info = await repo.tags_for_media(m.id) if m.id else []
+    md = await db.metadata.get(m.id) if m.id else None
+    tags_info = await db.tag.for_media(m.id) if m.id else []
 
     result: dict[str, Any] = {
         "id": m.id,

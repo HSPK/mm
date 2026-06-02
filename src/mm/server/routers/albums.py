@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from mm.db.dto import User
-from mm.server.dependencies import get_current_user, get_repo
+from mm.server.dependencies import get_current_user, get_db
 from mm.server.schemas import AlbumMediaBody, CreateAlbumBody
 
 router = APIRouter(prefix="/api/albums", tags=["albums"])
@@ -16,8 +16,8 @@ async def list_albums(
     request: Request,
     _u: User | None = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    repo = get_repo(request)
-    return await repo.list_albums()
+    db = get_db(request)
+    return await db.album.list()
 
 
 @router.post("")
@@ -26,8 +26,8 @@ async def create_album(
     body: CreateAlbumBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
-    return await repo.create_album(body.name, body.description)
+    db = get_db(request)
+    return await db.album.create(body.name, body.description)
 
 
 @router.delete("/{album_id}")
@@ -36,8 +36,8 @@ async def delete_album(
     album_id: int,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    ok = await repo.delete_album(album_id)
+    db = get_db(request)
+    ok = await db.album.delete(album_id)
     if not ok:
         raise HTTPException(404, "Album not found")
     return {"status": "ok"}
@@ -50,8 +50,8 @@ async def rename_album(
     body: CreateAlbumBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    ok = await repo.rename_album(album_id, body.name)
+    db = get_db(request)
+    ok = await db.album.rename(album_id, body.name)
     if not ok:
         raise HTTPException(404, "Album not found")
     return {"status": "ok"}
@@ -64,8 +64,8 @@ async def add_media_to_album(
     body: AlbumMediaBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
-    count = await repo.add_media_to_album(album_id, body.media_ids)
+    db = get_db(request)
+    count = await db.album.add_media(album_id, body.media_ids)
     return {"status": "ok", "added": count}
 
 
@@ -76,6 +76,6 @@ async def remove_media_from_album(
     body: AlbumMediaBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
-    count = await repo.remove_media_from_album(album_id, body.media_ids)
+    db = get_db(request)
+    count = await db.album.remove_media(album_id, body.media_ids)
     return {"status": "ok", "removed": count}

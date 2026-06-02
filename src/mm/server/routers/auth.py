@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from mm.db.dto import User
-from mm.server.dependencies import get_current_user, get_repo, invalidate_token_cache
+from mm.server.dependencies import get_current_user, get_db, invalidate_token_cache
 from mm.server.schemas import ChangePasswordBody, LoginBody, SetupBody
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -15,21 +15,21 @@ _bearer = HTTPBearer(auto_error=False)
 
 @router.get("/status")
 async def auth_status(request: Request) -> dict[str, Any]:
-    return {"setup_required": await get_repo(request).user_count() == 0}
+    return {"setup_required": await get_db(request).user.count() == 0}
 
 
 @router.post("/setup")
 async def auth_setup(request: Request, body: SetupBody) -> dict[str, Any]:
-    repo = get_repo(request)
-    if await repo.user_count() > 0:
+    db = get_db(request)
+    if await db.user.count() > 0:
         raise HTTPException(400, "Setup already completed")
-    user = await repo.create_user(
+    user = await db.user.create(
         body.username,
         password=body.password,
         display_name=body.display_name,
         is_admin=True,
     )
-    token = await repo.generate_token(user.id)  # type: ignore[arg-type]
+    token = await db.user.generate_token(user.id)  # type: ignore[arg-type]
     return {
         "token": token,
         "user": {
@@ -43,11 +43,11 @@ async def auth_setup(request: Request, body: SetupBody) -> dict[str, Any]:
 
 @router.post("/login")
 async def auth_login(request: Request, body: LoginBody) -> dict[str, Any]:
-    repo = get_repo(request)
-    user = await repo.verify_user(body.username, body.password)
+    db = get_db(request)
+    user = await db.user.verify(body.username, body.password)
     if not user:
         raise HTTPException(401, "Invalid username or password")
-    token = await repo.generate_token(user.id)  # type: ignore[arg-type]
+    token = await db.user.generate_token(user.id)  # type: ignore[arg-type]
     return {
         "token": token,
         "user": {
@@ -66,7 +66,7 @@ async def auth_logout(
 ) -> dict[str, str]:
     token = cred.credentials if cred else request.cookies.get("mm_token")
     if token:
-        await get_repo(request).invalidate_token(token)
+        await get_db(request).user.invalidate(token)
         invalidate_token_cache(token)
     return {"status": "ok"}
 
@@ -91,8 +91,8 @@ async def auth_change_password(
 ) -> dict[str, str]:
     if user is None:
         raise HTTPException(400, "No users configured")
-    repo = get_repo(request)
-    if not await repo.verify_user(user.username, body.old_password):
+    db = get_db(request)
+    if not await db.user.verify(user.username, body.old_password):
         raise HTTPException(400, "Current password is incorrect")
-    await repo.change_password(user.id, body.new_password)  # type: ignore[arg-type]
+    await db.user.change_password(user.id, body.new_password)  # type: ignore[arg-type]
     return {"status": "ok"}

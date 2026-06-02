@@ -13,6 +13,11 @@ export const RAW_EXTS_UPPER = new Set([
     "CR2", "CR3", "ARW", "NEF", "DNG", "RAF", "ORF", "RW2", "PEF", "SRW", "NRW", "3FR", "IIQ", "ERF", "MEF", "MOS",
 ])
 
+/** Image extensions that browsers can reliably render from the original file. */
+export const NATIVE_IMAGE_EXTENSIONS = new Set([
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif",
+])
+
 export function getMediaSrc(id: number) {
     return `${API_BASE}/media/${id}/file`
 }
@@ -21,13 +26,15 @@ export function getPreviewSrc(id: number) {
     return `${API_BASE}/media/${id}/preview`
 }
 
-export function getThumbnailSrc(id: number) {
-    return `${API_BASE}/media/${id}/thumbnail?size=xl`
+export function getThumbnailSrc(id: number, size?: "sm" | "md" | "lg" | "xl") {
+    return `${API_BASE}/media/${id}/thumbnail${size ? `?size=${size}` : ""}`
 }
 
-/** For images: use preview (WebP) for RAW/HEIC, original file for browser-native formats */
+/** Display images through the cached preview endpoint for fast, consistent opening. */
 export function getImageSrc(item: { id: number; extension: string }) {
-    return RAW_EXTENSIONS.has(item.extension.toLowerCase())
-        ? getPreviewSrc(item.id)
-        : getMediaSrc(item.id)
+    return getPreviewSrc(item.id)
+}
+
+export function canDisplayOriginalImage(item: { extension: string }) {
+    return NATIVE_IMAGE_EXTENSIONS.has(item.extension.toLowerCase())
 }

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 import click
 
 from mm.cli import ui
@@ -15,28 +13,23 @@ def server(port: int, host: str, do_reload: bool) -> None:
     """Start the MM web UI server."""
     import uvicorn
 
-    from mm.config import get_active_db
+    from mm.server.runtime import prepare_server_runtime
 
-    active = get_active_db()
-    if not active or not active.exists():
+    runtime = prepare_server_runtime()
+    if runtime is None:
         ui.error("No active database. Run `mm init <directory>` first.")
         raise SystemExit(1)
-
-    db_path = active
-    lib_dir = db_path.parent
 
     ui.key_values(
         "MM Server",
         [
             ("URL", f"http://{host}:{port}"),
-            ("Library", ui.path(lib_dir)),
-            ("Database", ui.path(db_path)),
+            ("Library", ui.path(runtime.library_dir)),
+            ("Database", ui.path(runtime.db_path)),
         ],
     )
     ui.info("Press Ctrl+C to stop.")
     ui.blank()
-
-    os.environ["MM_DB"] = str(db_path)
 
     uvicorn.run(
         "mm.server.app:app",

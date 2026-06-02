@@ -8,7 +8,7 @@ A "smart album" is a named set of ``query_media`` filters stored in the
   automatic expansion into *N* child albums based on live data (tags,
   cameras, years, festivals, geo-clusters).
 
-``build_smart_albums(repo)`` is the single entry-point consumed by the API.
+``build_smart_albums(db)`` is the single entry-point consumed by the API.
 It reads definitions from the DB, gathers the data needed by generators in
 one parallel batch, expands generators, resolves a cover image for every
 album, and returns structured section data ready for the frontend.
@@ -22,7 +22,7 @@ from typing import Any
 
 from lunar_python import Lunar
 
-from mm.db.async_repository import AsyncRepository
+from mm.db.client import AsyncDBClient
 
 # ═══════════════════════════════════════════════════════════
 # Festival date helpers
@@ -96,10 +96,10 @@ def _filters_to_query_kwargs(filters: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _fetch_cover_and_count(
-    repo: AsyncRepository, filters: dict[str, Any]
+    db: AsyncDBClient, filters: dict[str, Any]
 ) -> tuple[int | None, int]:
     """Query the first matching media id **and** total count for *filters*."""
-    items, total = await repo.query_media(
+    items, total = await db.media.query(
         page=1, per_page=1, **_filters_to_query_kwargs(filters)
     )
     return (items[0].id if items else None), total
@@ -326,7 +326,7 @@ def _build_static_album(
 # ═══════════════════════════════════════════════════════════
 
 
-async def build_smart_albums(repo: AsyncRepository) -> dict[str, Any]:
+async def build_smart_albums(db: AsyncDBClient) -> dict[str, Any]:
     """Build all smart album sections in one call.
 
     1. Load definitions from the ``smart_albums`` DB table.
@@ -338,7 +338,7 @@ async def build_smart_albums(repo: AsyncRepository) -> dict[str, Any]:
     """
 
     # ── 1. Load definitions ──
-    definitions = await repo.list_smart_album_definitions()
+    definitions = await db.smart_album.list()
 
     # ── 2. Gather base data ──
     (
@@ -350,13 +350,13 @@ async def build_smart_albums(repo: AsyncRepository) -> dict[str, Any]:
         timeline,
         geo_data,
     ) = await asyncio.gather(
-        repo.get_total_media_count(),
-        repo.total_size(),
-        repo.type_distribution(),
-        repo.cameras(),
-        repo.tag_stats(),
-        repo.timeline(),
-        repo.geo_media(limit=5000),
+        db.media.count(),
+        db.stats.total_size(),
+        db.stats.type_distribution(),
+        db.stats.cameras(),
+        db.tag.stats(),
+        db.stats.timeline(),
+        db.stats.geo_media(limit=5000),
     )
 
     # Process timeline → year_map + timeline_dates
@@ -374,7 +374,7 @@ async def build_smart_albums(repo: AsyncRepository) -> dict[str, Any]:
     tag_stats = [(n, c) for n, c in tag_stats_raw if c > 0]
 
     # Trash count (fast single query)
-    _, trash_count = await repo.query_media(page=1, per_page=1, deleted=True)
+    _, trash_count = await db.media.query(page=1, per_page=1, deleted=True)
 
     stats = {
         "total": stats_total,
@@ -425,7 +425,7 @@ async def build_smart_albums(repo: AsyncRepository) -> dict[str, Any]:
 
     if needs_cover:
         results = await asyncio.gather(
-            *(_fetch_cover_and_count(repo, a["filters"]) for _, a in needs_cover)
+            *(_fetch_cover_and_count(db, a["filters"]) for _, a in needs_cover)
         )
         for (section_key, album), (cover_id, total) in zip(needs_cover, results):
             album["cover_id"] = cover_id

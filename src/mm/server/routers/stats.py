@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 
 from mm.db.dto import User
-from mm.server.dependencies import get_current_user, get_repo
+from mm.server.dependencies import get_current_user, get_db
 from mm.server.schemas import serialize_media_brief
 
 router = APIRouter(prefix="/api", tags=["stats"])
@@ -17,13 +17,13 @@ async def get_stats(
     request: Request,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    repo = get_repo(request)
+    db = get_db(request)
     total_files, total_size, type_dist, tag_stats, cameras = await asyncio.gather(
-        repo.get_total_media_count(),
-        repo.total_size(),
-        repo.type_distribution(),
-        repo.tag_stats(),
-        repo.cameras(),
+        db.media.count(),
+        db.stats.total_size(),
+        db.stats.type_distribution(),
+        db.tag.stats(),
+        db.stats.cameras(),
     )
     return {
         "total_files": total_files,
@@ -39,8 +39,8 @@ async def get_timeline(
     request: Request,
     _u: User | None = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    # Sync repo returned list of dicts. Async repo does too.
-    return await get_repo(request).timeline()
+    # Sync db returned list of dicts. Async db does too.
+    return await get_db(request).stats.timeline()
 
 
 @router.get("/cameras")
@@ -48,7 +48,7 @@ async def get_cameras(
     request: Request,
     _u: User | None = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    return await get_repo(request).cameras()
+    return await get_db(request).stats.cameras()
 
 
 @router.get("/random")
@@ -58,6 +58,6 @@ async def get_random_media(
     type: str | None = None,
     _u: User | None = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    repo = get_repo(request)
-    items = await repo.get_random(count, type)
+    db = get_db(request)
+    items = await db.stats.random(count, type)
     return [serialize_media_brief(m) for m in items]

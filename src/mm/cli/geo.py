@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import time
-
 import click
 
 from mm.cli import ui
-from mm.core.geocoding import reverse_geocode_batch
 
 
 @click.group()
@@ -21,53 +18,35 @@ def geo() -> None:
 )
 def update(reparse: bool) -> None:
     """Update location for media files with GPS data (offline, no network needed)."""
-    from mm.cli import get_repo
+    from mm.cli import active_library
+    from mm.geo.updater import update_location_labels
 
-    repo = get_repo()
+    db = active_library().db
 
-    items = repo.get_metadata_needing_geo_update(force_reparse=reparse)
-    if not items:
+    candidates = db.metadata.needing_geo(force_reparse=reparse)
+    if not candidates:
         ui.success("No items found needing location update.")
         return
 
-    # Filter items with valid GPS coordinates
-    valid = [(md, md.gps_lat, md.gps_lon) for md in items if md.gps_lat and md.gps_lon]
-    if not valid:
+    valid_count = sum(1 for md in candidates if md.gps_lat and md.gps_lon)
+    if not valid_count:
         ui.warning("No items with valid GPS coordinates.")
         return
 
-    ui.info(f"Geocoding {len(valid):,} items (offline)...")
-    t0 = time.perf_counter()
+    ui.info(f"Geocoding {valid_count:,} items (offline)...")
 
-    # Batch geocode — single KD-tree query for all coordinates
-    coords = [(lat, lon) for _, lat, lon in valid]
     with ui.status("Resolving coordinates..."):
-        results = reverse_geocode_batch(coords)
+        with ui.progress("Updating locations", valid_count) as bar:
+            result = update_location_labels(
+                db,
+                reparse=reparse,
+                on_progress=lambda _row: bar.advance(),
+            )
 
-    elapsed = time.perf_counter() - t0
     ui.key_values(
         "Geocoding",
-        [("Coordinates", f"{len(results):,}"), ("Elapsed", f"{elapsed:.2f}s")],
+        [("Coordinates", f"{result.valid:,}"), ("Elapsed", f"{result.elapsed:.2f}s")],
     )
-
-    # Write results to DB
-    count = 0
-    rows: list[list[object]] = []
-    with ui.progress("Updating locations", len(valid)) as bar:
-        for (md, lat, lon), (label, country, city) in zip(valid, results):
-            coords_label = f"{lat:.4f},{lon:.4f}"
-            if not label:
-                rows.append([str(md.id), coords_label, "No result", "-", "-"])
-                bar.advance()
-                continue
-            try:
-                repo.update_location_label(md.id, label, country=country, city=city)
-                rows.append([str(md.id), coords_label, label, country, city])
-                count += 1
-            except Exception as e:
-                rows.append([str(md.id), coords_label, f"Error: {e}", "-", "-"])
-            finally:
-                bar.advance()
 
     ui.print_table(
         [
@@ -77,7 +56,10 @@ def update(reparse: bool) -> None:
             ui.Column("Country"),
             ui.Column("City"),
         ],
-        rows,
+        [
+            [str(row.metadata_id), row.gps, row.location, row.country, row.city]
+            for row in result.rows
+        ],
         title="Location Updates",
     )
-    ui.success(f"Updated {count:,} / {len(valid):,} items.")
+    ui.success(f"Updated {result.updated:,} / {result.valid:,} items.")

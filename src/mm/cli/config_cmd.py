@@ -1,4 +1,4 @@
-"""mm config — get/set library config values."""
+"""mm config — get/set active library config values."""
 
 from __future__ import annotations
 
@@ -10,48 +10,39 @@ from mm.cli import ui
 @click.command("config")
 @click.argument("key", required=False)
 @click.argument("value", required=False)
-@click.option("--unset", is_flag=True, help="Remove a config key.")
-def config(key: str | None, value: str | None, unset: bool) -> None:
-    """Get or set library config values.
+def config(key: str | None, value: str | None) -> None:
+    """Get or set active library config values.
 
     \b
     Examples:
       mm config                       # list all config
       mm config import_template       # get a value
-      mm config import_template "{year}/{original_name}{ext}"  # set a value
-      mm config --unset import_template  # remove a key
+      mm config import_template "{year}/{month:02d}/{day:02d}/{type}{ext}"
     """
-    from mm.cli import get_repo
+    from mm.cli import active_library
+    from mm.library.settings import LibraryConfig
 
-    repo = get_repo()
+    active = active_library()
+    current = active.config
+    values = current.model_dump(mode="json")
 
     if key is None:
-        # List all config
-        all_cfg = repo.get_all_config()
-        if not all_cfg:
-            ui.warning("No config values set.")
-            return
         ui.print_table(
             [ui.Column("Key"), ui.Column("Value", max_width=96)],
-            [[k, v] for k, v in sorted(all_cfg.items())],
+            [[k, v] for k, v in sorted(values.items())],
             title="Config",
         )
         return
 
-    if unset:
-        repo.set_config(key, "")
-        ui.success(f"Unset: {key}")
-        return
-
     if value is None:
-        # Get
-        result = repo.get_config(key)
-        if result:
-            ui.plain(result)
-        else:
+        if key not in values:
             ui.warning(f"Key not found: {key}", stderr=True)
             raise SystemExit(1)
+        ui.plain(values[key])
     else:
-        # Set
-        repo.set_config(key, value)
+        if key not in values:
+            ui.warning(f"Key not found: {key}", stderr=True)
+            raise SystemExit(1)
+        new_config = LibraryConfig.model_validate({**values, key: value})
+        active.db.library_config.set(new_config)
         ui.success(f"{key} = {value}")

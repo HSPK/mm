@@ -59,15 +59,6 @@ class Tag:
 
 
 @dataclass
-class Embedding:
-    id: int | None = None
-    media_id: int = 0
-    vector: bytes = b""
-    model: str = ""
-    created_at: dt.datetime | None = None
-
-
-@dataclass
 class User:
     id: int | None = None
     username: str = ""

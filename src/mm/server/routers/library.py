@@ -9,11 +9,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from mm.config import DEFAULT_DB_NAME
-from mm.db.async_repository import AsyncRepository
+from mm.db.client import AsyncDBClient
 from mm.db.dto import User
+from mm.io import local_storage
+from mm.library.settings import LibraryConfig
 from mm.server.dependencies import (
     get_current_user,
-    get_repo,
+    get_db,
     invalidate_media_path_cache,
     invalidate_token_cache,
 )
@@ -49,7 +51,7 @@ async def list_recent_libraries(
     result = []
     for p in paths:
         pp = Path(p)
-        if pp.exists():
+        if local_storage.exists(pp):
             result.append(
                 {
                     "db_path": str(pp.resolve()),
@@ -74,25 +76,25 @@ async def switch_library(
     target = Path(body.db_path)
 
     # If a directory is given, look for mm.db inside
-    if target.is_dir():
+    if local_storage.is_dir(target):
         target = target / DEFAULT_DB_NAME
 
-    if not target.exists():
+    if not local_storage.exists(target):
         raise HTTPException(status_code=404, detail=f"Database not found: {target}")
 
-    if not target.is_file():
+    if not local_storage.is_file(target):
         raise HTTPException(status_code=400, detail=f"Not a file: {target}")
 
     resolved = str(target.resolve())
 
-    # Swap the repository on the app
-    new_repo = AsyncRepository(resolved)
-    await new_repo.connect()
-    await new_repo.init_db()
+    # Swap the database client on the app
+    new_db = AsyncDBClient(resolved)
+    await new_db.connect()
+    await new_db.init_db()
 
-    request.app.state.repo = new_repo
+    request.app.state.db = new_db
     request.app.state.db_path = resolved
-    request.app.state.library_root = str(Path(resolved).parent)
+    request.app.state.config = await new_db.library_config.get()
     os.environ["MM_DB"] = resolved
 
     # Invalidate caches
@@ -111,26 +113,21 @@ async def switch_library(
 
 @router.get("/config")
 async def get_library_config(
-    repo: AsyncRepository = Depends(get_repo),
+    db: AsyncDBClient = Depends(get_db),
     user: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
     """Return all library config key-value pairs."""
-    cfg = await repo.get_all_config()
-    # Always include import_template even if not yet stored
-    if "import_template" not in cfg:
-        from mm.config import DEFAULT_IMPORT_TEMPLATE
-
-        cfg["import_template"] = DEFAULT_IMPORT_TEMPLATE
-    return cfg
+    return (await db.library_config.get()).model_dump(mode="json")
 
 
 @router.put("/config")
 async def update_library_config(
     body: dict[str, str],
-    repo: AsyncRepository = Depends(get_repo),
+    db: AsyncDBClient = Depends(get_db),
     user: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
     """Update one or more library config keys."""
-    for key, value in body.items():
-        await repo.set_config(key, value)
-    return await repo.get_all_config()
+    current = (await db.library_config.get()).model_dump(mode="json")
+    config = LibraryConfig.model_validate({**current, **body})
+    await db.library_config.set(config)
+    return config.model_dump(mode="json")

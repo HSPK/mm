@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
-import { useAuthStore } from "@/stores/auth"
 import { useMediaStore } from "@/stores/media"
 import { useAlbumSectionStore } from "@/stores/album-section"
 import { api } from "@/api/client"
 import { Input } from "@/components/ui/input"
 import { StarRating } from "@/components/ui/star-rating"
+import { useLogoutRedirect } from "@/hooks/use-logout-redirect"
 
 import {
     Search,
@@ -43,7 +43,7 @@ import { cn } from "@/lib/utils"
 export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLElement | null }) {
     const navigate = useNavigate()
     const location = useLocation()
-    const logout = useAuthStore((s) => s.logout)
+    const handleLogout = useLogoutRedirect()
     const {
         filters, setFilter, setFilters,
         viewMode, setViewMode,
@@ -69,22 +69,34 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     const showFilters = isOnLibrary && !isDeletedView  // hide media filters when viewing trash
 
     // Album section detail state (二级页面)
-    const { label: albumSectionLabel, search: albumSectionSearch, setSearch: setAlbumSectionSearch, exit: exitAlbumSection } = useAlbumSectionStore()
+    const {
+        label: albumSectionLabel,
+        search: albumSectionSearch,
+        setSearch: setAlbumSectionSearch,
+        exit: exitAlbumSectionState,
+    } = useAlbumSectionStore()
     const isInAlbumSection = isOnAlbums && !!albumSectionLabel
+    const albumsRootSearchDisabled = isOnAlbums && !isInAlbumSection
 
-    // Sync searchInput when store filter changes externally (during render)
-    const [prevFilterSearch, setPrevFilterSearch] = useState(filters.search)
-    if (filters.search !== prevFilterSearch) {
-        setPrevFilterSearch(filters.search)
-        setSearchInput(filters.search ?? "")
-    }
+    const exitAlbumSection = useCallback(() => {
+        const next = new URLSearchParams(location.search)
+        next.delete("section")
+        exitAlbumSectionState()
+        navigate(
+            { pathname: "/albums", search: next.toString() ? `?${next.toString()}` : "" },
+            { replace: true },
+        )
+    }, [exitAlbumSectionState, location.search, navigate])
 
-    // Reset visibility when scrollContainer changes (during render)
-    const [prevScrollContainer, setPrevScrollContainer] = useState(scrollContainer)
-    if (scrollContainer !== prevScrollContainer) {
-        setPrevScrollContainer(scrollContainer)
+    useEffect(() => {
+        if (!isInAlbumSection) setSearchInput(filters.search ?? "")
+    }, [filters.search, isInAlbumSection])
+
+    useEffect(() => {
         setVisible(true)
-    }
+        setMenuOpen(false)
+        lastScrollY.current = scrollContainer?.scrollTop ?? 0
+    }, [scrollContainer])
 
     // Fetch camera list for filter
     const [cameras, setCameras] = useState<{ make: string; model: string; count: number }[]>([])
@@ -235,12 +247,8 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
     }, [])
 
     const submitSearch = () => {
+        if (albumsRootSearchDisabled) return
         setFilter("search", searchInput || null)
-    }
-
-    const handleLogout = () => {
-        logout()
-        navigate("/login", { replace: true })
     }
 
     // ─── Filter definitions (only used on Library page) ──
@@ -257,7 +265,7 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
         { key: "date_taken:desc", label: "Newest", icon: ArrowDownWideNarrow },
         { key: "date_taken:asc", label: "Oldest", icon: ArrowUpWideNarrow },
         { key: "rating:desc", label: "Top Rated", icon: Star },
-        { key: "file_size:desc", label: "Largest", icon: HardDrive },
+        { key: "size:desc", label: "Largest", icon: HardDrive },
     ] as const
 
     const groupTabs = [
@@ -276,6 +284,8 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                 "fixed top-0 left-0 right-0 z-40 transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
                 visible ? "translate-y-0" : "-translate-y-full",
             )}
+            aria-hidden={!visible}
+            inert={visible ? undefined : true}
             style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
             <div className="px-4 pt-2.5 pb-1 mx-auto max-w-2xl">
@@ -309,14 +319,19 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                         )} />
 
                         <Input
-                            value={isInAlbumSection ? albumSectionSearch : searchInput}
-                            onChange={(e) => isInAlbumSection ? setAlbumSectionSearch(e.target.value) : setSearchInput(e.target.value)}
-                            onKeyDown={(e) => !isInAlbumSection && e.key === "Enter" && submitSearch()}
+                            value={isInAlbumSection ? albumSectionSearch : albumsRootSearchDisabled ? "" : searchInput}
+                            onChange={(e) => {
+                                if (isInAlbumSection) setAlbumSectionSearch(e.target.value)
+                                else if (!albumsRootSearchDisabled) setSearchInput(e.target.value)
+                            }}
+                            onKeyDown={(e) => !isInAlbumSection && !albumsRootSearchDisabled && e.key === "Enter" && submitSearch()}
+                            disabled={albumsRootSearchDisabled}
+                            aria-label={isInAlbumSection ? `Search ${albumSectionLabel}` : albumsRootSearchDisabled ? "Albums search unavailable" : "Search media"}
                             placeholder={
                                 isInAlbumSection ? `Search ${albumSectionLabel}…`
                                     : isDeletedView ? "Search deleted…"
                                         : isInAlbumView ? `Search in ${activeLabel}…`
-                                            : isOnAlbums ? "Search albums…"
+                                            : albumsRootSearchDisabled ? "Open a section to search…"
                                                 : "Search photos…"
                             }
                             className={cn(
@@ -330,6 +345,9 @@ export function FloatingSearchBar({ scrollContainer }: { scrollContainer?: HTMLE
                     <div className="relative" ref={menuRef}>
                         <button
                             onClick={() => setMenuOpen(!menuOpen)}
+                            aria-label={menuOpen ? "Close menu" : "Open menu"}
+                            aria-expanded={menuOpen}
+                            aria-haspopup="menu"
                             className={cn(
                                 "flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-xl border shadow-lg shadow-black/10 transition-all duration-200",
                                 menuOpen

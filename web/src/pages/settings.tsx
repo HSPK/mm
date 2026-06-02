@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import axios from "axios"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
@@ -9,6 +10,8 @@ import { useAuthStore } from "@/stores/auth"
 import { useMediaStore } from "@/stores/media"
 import { api } from "@/api/client"
 import { cn } from "@/lib/utils"
+import { useLogoutRedirect } from "@/hooks/use-logout-redirect"
+import { getUserDisplayName, getUserInitial } from "@/lib/user"
 
 interface LibraryInfo {
     db_path: string
@@ -20,10 +23,10 @@ export default function SettingsPage() {
 
     const { themeId, setTheme } = useThemeStore()
     const user = useAuthStore((s) => s.user)
-    const logout = useAuthStore((s) => s.logout)
     const fetchMedia = useMediaStore((s) => s.fetchMedia)
+    const handleLogout = useLogoutRedirect()
 
-    const initial = (user?.display_name ?? user?.username ?? "U")[0].toUpperCase()
+    const initial = getUserInitial(user)
 
     // ── Library switching state ──
     const [currentLibrary, setCurrentLibrary] = useState<LibraryInfo | null>(null)
@@ -49,8 +52,10 @@ export default function SettingsPage() {
             api.get<LibraryInfo[]>("/library/recent").then((r) => setRecentLibraries(r.data)).catch(() => { })
             // Reload media with new library
             fetchMedia(true)
-        } catch (err: any) {
-            setSwitchError(err.response?.data?.detail || err.message || "Failed to switch library")
+        } catch (err: unknown) {
+            const detail = axios.isAxiosError<{ detail?: string }>(err) ? err.response?.data?.detail : null
+            const message = err instanceof Error ? err.message : null
+            setSwitchError(detail || message || "Failed to switch library")
         } finally {
             setSwitching(false)
         }
@@ -83,11 +88,6 @@ export default function SettingsPage() {
         }
     }
 
-    const handleLogout = () => {
-        logout()
-        navigate("/login", { replace: true })
-    }
-
     const lightThemes = themes.filter((t) => t.mode === "light")
     const darkThemes = themes.filter((t) => t.mode === "dark")
 
@@ -117,7 +117,7 @@ export default function SettingsPage() {
                                 {initial}
                             </div>
                             <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold truncate">{user?.display_name || user?.username}</p>
+                                <p className="text-sm font-semibold truncate">{getUserDisplayName(user)}</p>
                                 {user?.display_name && user?.username && (
                                     <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
                                 )}

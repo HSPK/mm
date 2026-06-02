@@ -1,13 +1,16 @@
-"""Tests for the database repository."""
+"""Tests for the database database client."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from mm.db.dto import Media
 from mm.db.models import MediaType, TagSource
-from mm.db.sync_repo import SyncRepo
+from mm.db.sync_client import DBClient
+from mm.library.settings import LibraryConfig
 
 
-def test_upsert_and_get_media(repo: SyncRepo):
+def test_upsert_and_get_media(db: DBClient):
     m = Media(
         path="/tmp/test.jpg",
         filename="test.jpg",
@@ -16,15 +19,46 @@ def test_upsert_and_get_media(repo: SyncRepo):
         file_size=1024,
         file_hash="abc123",
     )
-    mid = repo.upsert_media(m)
+    mid = db.media.upsert(m)
     assert mid > 0
 
-    got = repo.get_media_by_path("/tmp/test.jpg")
+    got = db.media.by_path("/tmp/test.jpg")
     assert got is not None
     assert got.file_hash == "abc123"
 
 
-def test_tag_operations(repo: SyncRepo):
+def test_namespaced_api_works(db: DBClient):
+    media = Media(
+        path="/tmp/ns.jpg",
+        filename="ns.jpg",
+        extension=".jpg",
+        media_type=MediaType.PHOTO,
+        file_size=256,
+        file_hash="ns123",
+    )
+
+    media_id = db.media.upsert(media)
+
+    assert db.media.get(media_id) is not None
+    assert db.media.by_path("/tmp/ns.jpg") is not None
+    db.library_config.set(LibraryConfig(library_root="/tmp"))
+    assert db.library_config.get().library_root == Path("/tmp").resolve()
+
+
+def test_short_namespaced_api_names(db: DBClient):
+    assert db.user.count() == 0
+    user = db.user.create("admin", "secret")
+    assert user.username == "admin"
+    assert db.user.verify("admin", "secret") is not None
+
+    album = db.album.create("Trip")
+    assert album["name"] == "Trip"
+    assert db.album.list()[0]["id"] == album["id"]
+    assert db.album.rename(album["id"], "Trip 2")
+    assert db.album.delete(album["id"])
+
+
+def test_tag_operations(db: DBClient):
     # Create media first
     m = Media(
         path="/tmp/tag_test.jpg",
@@ -34,33 +68,33 @@ def test_tag_operations(repo: SyncRepo):
         file_size=512,
         file_hash="def456",
     )
-    mid = repo.upsert_media(m)
+    mid = db.media.upsert(m)
 
-    tag = repo.get_or_create_tag("beach", source=TagSource.MANUAL)
+    tag = db.tag.get_or_create("beach", source=TagSource.MANUAL)
     assert tag.id is not None
     assert tag.name == "beach"
 
     # Re-get should return same
-    tag2 = repo.get_or_create_tag("Beach")  # test normalisation
+    tag2 = db.tag.get_or_create("Beach")  # test normalisation
     assert tag2.id == tag.id
 
-    repo.add_media_tag(mid, tag.id)
-    tags = repo.tags_for_media(mid)
+    db.tag.add_media(mid, tag.id)
+    tags = db.tag.for_media(mid)
     assert len(tags) == 1
     assert tags[0][0].name == "beach"
 
     # Search by tag
-    ids = repo.media_ids_by_tags(["beach"])
+    ids = db.tag.media_ids(["beach"])
     assert mid in ids
 
     # Remove
-    repo.remove_media_tag(mid, tag.id)
-    tags = repo.tags_for_media(mid)
+    db.tag.remove_media(mid, tag.id)
+    tags = db.tag.for_media(mid)
     assert len(tags) == 0
 
 
-def test_count_and_stats(repo: SyncRepo):
-    assert repo.count_media() == 0
+def test_count_and_stats(db: DBClient):
+    assert db.media.count() == 0
     m = Media(
         path="/tmp/stats.mp4",
         filename="stats.mp4",
@@ -69,9 +103,9 @@ def test_count_and_stats(repo: SyncRepo):
         file_size=2048,
         file_hash="ghi789",
     )
-    repo.upsert_media(m)
-    assert repo.count_media() == 1
-    assert repo.total_size() == 2048
+    db.media.upsert(m)
+    assert db.media.count() == 1
+    assert db.stats.total_size() == 2048
 
-    dist = repo.type_distribution()
+    dist = db.stats.type_distribution()
     assert dist["video"] == 1

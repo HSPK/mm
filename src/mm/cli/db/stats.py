@@ -1,26 +1,27 @@
 from __future__ import annotations
 
 from mm.cli import ui
-from mm.cli._utils import fmt_duration as _dur
-from mm.cli._utils import fmt_size as _sz
 from mm.cli.db import db
+from mm.utils.formatting import fmt_duration as _dur
+from mm.utils.formatting import fmt_size as _sz
 
 
 @db.command("stats")
 def db_stats() -> None:
     """Show detailed database statistics."""
-    from mm.cli import get_db_path, get_repo
+    from mm.cli import active_library
 
-    db_path = get_db_path()
-    repo = get_repo()
+    active = active_library()
+    db_path = active.db_path
+    db = active.db
 
-    ov = repo.stats_overview()
-    comp = repo.stats_completeness()
-    years = repo.stats_by_year()
-    cams = repo.stats_by_camera()
-    exts = repo.stats_by_extension()
-    ratings = repo.stats_ratings()
-    tags = repo.stats_top_tags(15)
+    ov = db.stats.overview()
+    comp = db.stats.completeness()
+    years = db.stats.by_year()
+    cams = db.stats.by_camera()
+    exts = db.stats.by_extension()
+    ratings = db.stats.ratings()
+    tags = db.stats.top_tags(15)
     total = comp["total"]
 
     ui.section("Library Statistics")
@@ -38,7 +39,6 @@ def db_stats() -> None:
             ("Video Duration", _dur(ov["video_duration"]) if ov["video_duration"] else "-"),
             ("Tags", f"{ov['tags']:,}"),
             ("Albums", f"{ov['albums']:,}"),
-            ("Embeddings", f"{ov['embeddings']:,}"),
         ],
     )
 
@@ -78,13 +78,6 @@ def db_stats() -> None:
                 f"{comp['missing_camera']:,}",
                 ui.percent(comp["has_camera"], total),
                 ui.ratio_bar(comp["has_camera"], total),
-            ],
-            [
-                "Embeddings",
-                f"{comp['has_embeddings']:,}",
-                f"{comp['missing_embeddings']:,}",
-                ui.percent(comp["has_embeddings"], total),
-                ui.ratio_bar(comp["has_embeddings"], total),
             ],
             [
                 "Tags",

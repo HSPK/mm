@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mm.db.sync_repo import SyncRepo
+from mm.db.sync_client import DBClient
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def tmp_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> SyncRepo:
-    """In-memory repository for tests."""
+def db(tmp_path: Path) -> DBClient:
+    """In-memory database client for tests."""
     db_path = tmp_path / "test.db"
-    return SyncRepo(db_path)
+    return DBClient(db_path)

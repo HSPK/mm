@@ -1,5 +1,5 @@
-"""Database package — SQLite storage for media metadata, tags, and embeddings."""
+"""Database package — SQLite storage for media metadata, tags, and albums."""
 
-from mm.db.async_repository import AsyncRepository  # noqa: F401
-from mm.db.dto import Embedding, Media, Metadata, Tag, User  # noqa: F401
-from mm.db.sync_repo import SyncRepo  # noqa: F401
+from mm.db.client import AsyncDBClient  # noqa: F401
+from mm.db.dto import Media, Metadata, Tag, User  # noqa: F401
+from mm.db.sync_client import DBClient  # noqa: F401

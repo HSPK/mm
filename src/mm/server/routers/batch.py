@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from mm.db.dto import User
-from mm.server.dependencies import get_current_user, get_repo
+from mm.server.dependencies import get_current_user, get_db
 from mm.server.schemas import (
     BatchDeleteBody,
     BatchRatingBody,
@@ -22,7 +22,7 @@ async def batch_add_tags(
     body: BatchTagBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    count = await get_repo(request).bulk_add_tags(body.media_ids, body.tags)
+    count = await get_db(request).tag.bulk_add(body.media_ids, body.tags)
     return {"status": "ok", "affected": count}
 
 
@@ -32,7 +32,7 @@ async def batch_remove_tags(
     body: BatchTagRemoveBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    count = await get_repo(request).bulk_remove_tags(body.media_ids, body.tags)
+    count = await get_db(request).tag.bulk_remove(body.media_ids, body.tags)
     return {"status": "ok", "affected": count}
 
 
@@ -42,7 +42,7 @@ async def batch_set_rating(
     body: BatchRatingBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    count = await get_repo(request).bulk_set_rating(body.media_ids, body.rating)
+    count = await get_db(request).media.bulk_set_rating(body.media_ids, body.rating)
     return {"status": "ok", "affected": count}
 
 
@@ -52,5 +52,5 @@ async def batch_delete(
     body: BatchDeleteBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
-    count = await get_repo(request).batch_soft_delete(body.media_ids)
+    count = await get_db(request).media.batch_soft_delete(body.media_ids)
     return {"status": "ok", "affected": count}

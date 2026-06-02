@@ -7,13 +7,20 @@ from pathlib import Path
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
+from mm.io import FileStorage, local_storage
+
 _RANGE_RE = re.compile(r"bytes=(\d+)-(\d*)")
 
 
-def stream_file(file_path: Path, request: Request) -> StreamingResponse | FileResponse:
+def stream_file(
+    file_path: Path,
+    request: Request,
+    *,
+    storage: FileStorage = local_storage,
+) -> StreamingResponse | FileResponse:
     """Stream a file with HTTP Range request support for video seeking."""
     content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-    file_size = file_path.stat().st_size
+    file_size = storage.get_size(file_path)
 
     range_header = request.headers.get("range")
 
@@ -27,7 +34,7 @@ def stream_file(file_path: Path, request: Request) -> StreamingResponse | FileRe
             chunk_size = 2 * 1024 * 1024  # 2 MB chunks
 
             def full_file_iterator():
-                with open(file_path, "rb") as f:
+                with storage.open(file_path, "rb") as f:
                     while True:
                         data = f.read(chunk_size)
                         if not data:
@@ -69,7 +76,7 @@ def stream_file(file_path: Path, request: Request) -> StreamingResponse | FileRe
     chunk_size = 2 * 1024 * 1024  # 2 MB chunks for smoother streaming
 
     def file_iterator():
-        with open(file_path, "rb") as f:
+        with storage.open(file_path, "rb") as f:
             f.seek(start)
             remaining = length
             while remaining > 0:

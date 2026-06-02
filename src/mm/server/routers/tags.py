@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from mm.db.dto import User
-from mm.server.dependencies import get_current_user, get_repo
+from mm.server.dependencies import get_current_user, get_db
 from mm.server.schemas import RenameTagBody
 
 router = APIRouter(prefix="/api/tags", tags=["tags"])
@@ -16,8 +16,8 @@ async def list_tags(
     request: Request,
     _u: User | None = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    repo = get_repo(request)
-    stats = await repo.tag_stats()
+    db = get_db(request)
+    stats = await db.tag.stats()
     return [{"name": n, "count": c} for n, c in stats]
 
 
@@ -28,8 +28,8 @@ async def rename_tag(
     body: RenameTagBody,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    await repo.rename_tag(tag_id, body.name)
+    db = get_db(request)
+    await db.tag.rename(tag_id, body.name)
     return {"status": "ok"}
 
 
@@ -39,6 +39,6 @@ async def delete_tag(
     tag_id: int,
     _u: User | None = Depends(get_current_user),
 ) -> dict[str, str]:
-    repo = get_repo(request)
-    await repo.delete_tag(tag_id)
+    db = get_db(request)
+    await db.tag.delete(tag_id)
     return {"status": "ok"}

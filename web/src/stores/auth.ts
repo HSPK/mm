@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import axios from "axios"
 import { api } from "@/api/client"
 import type { User } from "@/api/types"
 
@@ -38,8 +39,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             set({ token, loading: false })
             await get().fetchUser()
             return true
-        } catch (err: any) {
-            const msg = err.response?.data?.detail || "Login failed"
+        } catch (err: unknown) {
+            const msg = axios.isAxiosError<{ detail?: string }>(err)
+                ? err.response?.data?.detail || "Login failed"
+                : "Login failed"
             set({ error: msg, loading: false })
             return false
         }

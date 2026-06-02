@@ -1,18 +1,12 @@
-import { useNavigate } from "react-router-dom"
 import { useAuthStore } from "@/stores/auth"
+import { useLogoutRedirect } from "@/hooks/use-logout-redirect"
+import { getUserDisplayName, getUserInitial } from "@/lib/user"
 import { LogOut } from "lucide-react"
 
 export default function ProfilePage() {
-    const navigate = useNavigate()
-    const logout = useAuthStore((s) => s.logout)
     const user = useAuthStore((s) => s.user)
-
-    const handleLogout = () => {
-        logout()
-        navigate("/login", { replace: true })
-    }
-
-    const initial = (user?.display_name ?? user?.username ?? "U")[0].toUpperCase()
+    const handleLogout = useLogoutRedirect()
+    const initial = getUserInitial(user)
 
     return (
         <div className="flex flex-col items-center px-6 pt-16 pb-32 space-y-8">
@@ -24,7 +18,7 @@ export default function ProfilePage() {
             {/* User info */}
             <div className="text-center space-y-1">
                 <h1 className="text-xl font-semibold">
-                    {user?.display_name || user?.username}
+                    {getUserDisplayName(user)}
                 </h1>
                 {user?.display_name && user?.username && (
                     <p className="text-sm text-muted-foreground">@{user.username}</p>
