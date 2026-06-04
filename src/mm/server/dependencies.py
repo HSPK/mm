@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from mm.db.backend import DatabaseTarget
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
 from mm.library.settings import LibraryConfig
+from mm.media.thumbnails import cache_dir_for_library
 from mm.utils.paths import resolve_media_path
 
 _bearer = HTTPBearer(auto_error=False)
@@ -58,6 +61,19 @@ def get_db(request: Request) -> AsyncDBClient:
 def get_library_config(request: Request) -> LibraryConfig:
     """Return the validated library config attached to app state."""
     return request.app.state.config  # type: ignore[no-any-return]
+
+
+def get_thumb_cache_dir(request: Request) -> Path:
+    """Return the per-library thumbnail cache directory.
+
+    Thumbnails are keyed by ``media_id``, which is only unique within a single
+    library database. Namespacing the cache directory by the active database
+    identity prevents thumbnails from different libraries (which reuse the same
+    ``media_id`` values) from colliding in the shared on-disk cache.
+    """
+    db_path = getattr(request.app.state, "db_path", None)
+    key = DatabaseTarget.from_value(db_path).identity if db_path else None
+    return cache_dir_for_library(key)
 
 
 async def get_current_user(

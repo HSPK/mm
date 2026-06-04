@@ -17,6 +17,7 @@ from mm.server.dependencies import (
     get_db,
     get_library_config,
     get_media_path,
+    get_thumb_cache_dir,
 )
 from mm.server.schemas import (
     RatingBody,
@@ -52,7 +53,8 @@ def _check_not_modified(request: Request, etag: str) -> Response | None:
 async def _serve_thumb(request: Request, media_id: int, size: str) -> Response:
     """Generate and serve a thumbnail/preview with ETag + 304 support."""
     media_path = await get_media_path(request, media_id)
-    thumb = await run_in_threadpool(get_thumbnail, media_path, media_id, size)
+    cache_dir = get_thumb_cache_dir(request)
+    thumb = await run_in_threadpool(get_thumbnail, media_path, media_id, size, cache_dir)
     if not thumb:
         raise HTTPException(404, "Thumbnail generation failed")
     etag = _make_etag(thumb)

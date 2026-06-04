@@ -10,6 +10,7 @@ Strategy:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -39,6 +40,25 @@ _FFMPEG: str | None = shutil.which("ffmpeg")
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def cache_dir_for_library(library_key: str | None, base: Path | None = None) -> Path:
+    """Return a per-library thumbnail cache directory.
+
+    Thumbnails are keyed by ``media_id``, which is only unique within a single
+    library database (each library uses its own auto-increment ids starting at
+    1). Namespacing the cache directory by a stable per-library key prevents
+    thumbnails from different libraries reusing the same ``media_id`` values
+    from colliding in the shared on-disk cache.
+
+    ``library_key`` is typically the database identity (path or URL). When it is
+    falsy, the shared base directory is returned for backwards compatibility.
+    """
+    base = base or DEFAULT_CACHE_DIR
+    if not library_key:
+        return base
+    digest = hashlib.sha256(library_key.encode("utf-8")).hexdigest()[:16]
+    return base / digest
 
 
 def get_thumbnail(
