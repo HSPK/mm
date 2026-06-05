@@ -54,7 +54,9 @@ async def _serve_thumb(request: Request, media_id: int, size: str) -> Response:
     """Generate and serve a thumbnail/preview with ETag + 304 support."""
     media_path = await get_media_path(request, media_id)
     cache_dir = get_thumb_cache_dir(request)
-    thumb = await run_in_threadpool(get_thumbnail, media_path, media_id, size, cache_dir)
+    thumb = await run_in_threadpool(
+        get_thumbnail, media_path, media_id, size, cache_dir, storage=local_storage
+    )
     if not thumb:
         raise HTTPException(404, "Thumbnail generation failed")
     etag = _make_etag(thumb)
