@@ -150,3 +150,19 @@ def test_library_id_preserved_after_config_update(db: DBClient):
     db.library_config.set(LibraryConfig(library_name="Updated", library_root=current.library_root))
 
     assert db.library_config.get().library_id == original_id
+
+
+def test_library_id_race_returns_existing_value(db: DBClient):
+    """Concurrent first-readers must agree on the same library_id (no IntegrityError)."""
+
+    # Call _ensure_library_id twice. The second call hits the
+    # IntegrityError path (PK collision on key='library_id') and must
+    # swallow it and return the value the first call inserted.
+    async def both():
+        a = await db._client.library_config._ensure_library_id()
+        b = await db._client.library_config._ensure_library_id()
+        return a, b
+
+    first, second = db._run(both())
+    assert first == second
+    assert db.library_config.get().library_id == first

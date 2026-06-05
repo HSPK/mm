@@ -6,6 +6,8 @@ import datetime as dt
 import uuid
 from typing import TYPE_CHECKING
 
+import peewee
+
 if TYPE_CHECKING:
     import peewee_aio
 
@@ -28,19 +30,24 @@ class LibraryConfigApi(DbApi):
         values = {row.key: row.value for row in rows}
         values.setdefault("library_root", str(self.source.default_library_root))
 
-        # Auto-generate a stable library_id if not yet stored.
         if not values.get("library_id"):
-            new_id = str(uuid.uuid4())
-            now = dt.datetime.now()
+            values["library_id"] = await self._ensure_library_id()
+
+        return LibraryConfig.model_validate(values)
+
+    async def _ensure_library_id(self) -> str:
+        """Create the library_id row, or return the value a racing writer wrote."""
+        try:
             await self.objects.create(
                 LibraryConfigModel,
                 key="library_id",
-                value=new_id,
-                updated_at=now,
+                value=str(uuid.uuid4()),
+                updated_at=dt.datetime.now(),
             )
-            values["library_id"] = new_id
-
-        return LibraryConfig.model_validate(values)
+        except peewee.IntegrityError:
+            pass  # another writer raced us — fall through to the read
+        row = await self.objects.get(LibraryConfigModel, key="library_id")
+        return str(row.value)
 
     async def set(self, config: LibraryConfig) -> None:
         """Persist the validated library config.
@@ -52,7 +59,6 @@ class LibraryConfigApi(DbApi):
         now = dt.datetime.now()
         for key, value in config.model_dump(mode="json").items():
             if key == "library_id":
-                # Immutable once created — only get() is allowed to write it.
                 continue
             try:
                 await self.objects.get(LibraryConfigModel, key=key)
