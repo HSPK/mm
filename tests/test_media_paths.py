@@ -5,6 +5,7 @@ from pathlib import Path
 
 from mm.db.dto import Metadata
 from mm.db.sync_client import DBClient
+from mm.io import local_storage
 from mm.library.settings import LibraryConfig
 from mm.media.scanner import ScanResult, save_media_metadata, scan_file
 from mm.utils.media_paths import (
@@ -25,10 +26,10 @@ def test_media_path_repair_resolves_template_destination(tmp_path: Path, db: DBC
     shutil.copy2(source, destination)
 
     db.library_config.set(LibraryConfig(library_root=library_root, import_template="{type}{ext}"))
-    result = ScanResult(media=scan_file(source), metadata=Metadata())
+    result = ScanResult(media=scan_file(source, storage=local_storage), metadata=Metadata())
     media_id = save_media_metadata(db, result.media, result.metadata, media_path=source)
 
-    plan = plan_media_path_repairs(db, library_root, "{type}{ext}")
+    plan = plan_media_path_repairs(db, library_root, "{type}{ext}", storage=local_storage)
 
     assert plan.bad_paths == 1
     assert len(plan.updates) == 1
@@ -53,11 +54,11 @@ def test_media_path_repair_deletes_missing_unresolved_source(tmp_path: Path, db:
     library_root = tmp_path / "library"
     library_root.mkdir()
     db.library_config.set(LibraryConfig(library_root=library_root, import_template="{type}{ext}"))
-    result = ScanResult(media=scan_file(source), metadata=Metadata())
+    result = ScanResult(media=scan_file(source, storage=local_storage), metadata=Metadata())
     media_id = save_media_metadata(db, result.media, result.metadata, media_path=source)
     source.unlink()
 
-    plan = plan_media_path_repairs(db, library_root, "{type}{ext}")
+    plan = plan_media_path_repairs(db, library_root, "{type}{ext}", storage=local_storage)
 
     assert plan.updates == []
     assert len(plan.deletions) == 1

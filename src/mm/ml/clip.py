@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from mm.config import CLIP_MODEL_NAME, CLIP_PRETRAINED
-from mm.io import FileStorage, local_storage
+from mm.io import FileStorage
 
 # ---------------------------------------------------------------------------
 # Model loading (cached singleton)
@@ -47,7 +47,7 @@ def encode_image_from_path(
     preprocess: Any | None = None,
     device: str | None = None,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> np.ndarray | None:
     """Encode one image file and return a normalised (1, D) float32 feature array."""
     import torch

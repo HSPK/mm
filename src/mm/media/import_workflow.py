@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mm.db.sync_client import DBClient
-from mm.io import FileStorage, local_storage
+from mm.io import FileStorage
 from mm.media.importer import ImportPlanItem, execute_import, plan_import
 from mm.media.scanner import ScanResult, save_media_metadata
 from mm.utils.hashing import file_hash
@@ -31,7 +31,7 @@ def hash_and_dedup_files(
     db: DBClient,
     files: list[Path],
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
     backend: MapBackend = "thread",
     on_file_hashed: Callable[[Path], None] | None = None,
 ) -> HashDedupResult:
@@ -60,7 +60,7 @@ def build_import_plan(
     library_root: Path,
     template: str,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> list[ImportPlanItem]:
     """Build file operation actions from scanned media results."""
     media_items = [(result.media, result.metadata) for result in results]
@@ -72,7 +72,7 @@ def execute_import_plan(
     plan: list[ImportPlanItem],
     *,
     move: bool = False,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> int:
     """Execute an import plan and store imported destination paths in the DB."""

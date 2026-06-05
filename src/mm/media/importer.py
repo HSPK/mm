@@ -9,7 +9,7 @@ from pathlib import Path
 
 from mm.db.dto import Media, Metadata
 from mm.errors import ImportTemplateError
-from mm.io import FileStorage, local_storage
+from mm.io import FileStorage
 
 
 @dataclass
@@ -59,7 +59,7 @@ def plan_import(
     dest_root: Path,
     template: str,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> list[ImportPlanItem]:
     """Build a list of planned file operations without executing them."""
     plan: list[ImportPlanItem] = []
@@ -123,7 +123,7 @@ def execute_import(
     move: bool = False,
     on_progress: Callable[[int, int], None] | None = None,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> int:
     """Execute planned file operations.  Returns count of files moved/copied."""
     pending = [item for item in plan if not item.skipped]

@@ -6,6 +6,7 @@ import click
 
 from mm.cli import ui
 from mm.db.dto import Metadata
+from mm.io import local_storage
 from mm.utils.formatting import fmt_size
 
 
@@ -24,7 +25,7 @@ def info(file: Path) -> None:
             stderr=True,
         )
 
-    res = scan_and_extract(file, compute_hash=True)
+    res = scan_and_extract(file, compute_hash=True, storage=local_storage)
 
     if res.error:
         ui.error(f"Error scanning file: {res.error}")

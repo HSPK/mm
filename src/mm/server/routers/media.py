@@ -208,7 +208,7 @@ async def get_media_file(
     if not local_storage.exists(fpath):
         raise HTTPException(404, "File not found on disk")
 
-    return stream_file(fpath, request)
+    return stream_file(fpath, request, storage=local_storage)
 
 
 @router.put("/{media_id}/rating")

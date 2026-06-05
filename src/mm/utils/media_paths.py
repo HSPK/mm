@@ -9,7 +9,7 @@ from pathlib import Path
 from mm.config import DEFAULT_IMPORT_TEMPLATE
 from mm.db.dto import Media, Metadata
 from mm.db.sync_client import DBClient
-from mm.io import FileStorage, local_storage
+from mm.io import FileStorage
 from mm.media.importer import build_dest_path
 from mm.media.scanner import discover_media
 from mm.utils.hashing import file_hash
@@ -66,7 +66,7 @@ def plan_media_path_repairs(
     library_root: Path,
     template: str = DEFAULT_IMPORT_TEMPLATE,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> MediaPathRepairPlan:
     """Plan safe media path repairs without writing to the database."""
     root = library_root.resolve()
@@ -180,7 +180,7 @@ def find_media_destination(
     size_index: dict[int, list[Path]],
     hash_cache: dict[Path, str],
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> tuple[Path | None, str]:
     """Find the copied destination for a media row whose stored path is wrong."""
     expected = build_dest_path(
@@ -224,7 +224,7 @@ def find_media_destination(
 def _build_size_index(
     library_root: Path,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> dict[int, list[Path]]:
     index: defaultdict[int, list[Path]] = defaultdict(list)
     for path in discover_media(library_root, storage=storage):
@@ -240,7 +240,7 @@ def _path_matches(
     path: Path,
     hash_cache: dict[Path, str],
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> bool:
     try:
         stat = storage.stat(path)
