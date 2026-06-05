@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from mm.config import DEFAULT_IMPORT_TEMPLATE
+from mm.config import get_config
 
 
 class LibraryConfig(BaseModel):
@@ -14,8 +14,9 @@ class LibraryConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    library_id: str = ""  # Stable UUID4, generated once on first access
     library_name: str = ""
-    import_template: str = DEFAULT_IMPORT_TEMPLATE
+    import_template: str = Field(default_factory=lambda: get_config().import_.template)
     library_root: Path
 
     @field_validator("import_template")

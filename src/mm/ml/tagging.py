@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from mm.db.dto import Media, Metadata
 from mm.db.models import TagSource
+from mm.io import local_storage
 from mm.utils.text import normalise_tag
 
 if TYPE_CHECKING:
@@ -112,7 +113,7 @@ def apply_clip_tags(
     Returns list of (tag_name, confidence) pairs that were added.
     Imports torch/open_clip lazily so the rest of MM works without them.
     """
-    from mm.config import DEFAULT_CLIP_LABELS
+    from mm.config import get_config
     from mm.ml.clip import (
         encode_image_from_path,
         encode_texts,
@@ -120,10 +121,12 @@ def apply_clip_tags(
     )
 
     if labels is None:
-        labels = DEFAULT_CLIP_LABELS
+        labels = get_config().clip.labels
 
     model, preprocess, tokenizer, device = get_clip_model()
-    img_feat = encode_image_from_path(Path(media.path), model, preprocess, device)
+    img_feat = encode_image_from_path(
+        Path(media.path), model, preprocess, device, storage=local_storage
+    )
     if img_feat is None:
         return []
 

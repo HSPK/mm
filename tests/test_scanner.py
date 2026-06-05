@@ -6,6 +6,7 @@ from pathlib import Path
 
 from mm.db.models import MediaType
 from mm.db.sync_client import DBClient
+from mm.io import local_storage
 from mm.library.settings import LibraryConfig
 from mm.media.scanner import (
     classify_extension,
@@ -31,7 +32,7 @@ def test_discover_media_skips_hidden(tmp_path: Path):
     hidden_dir.mkdir()
     (hidden_dir / "nested.jpg").write_bytes(b"\xff\xd8" + b"\x00" * 100)
 
-    found = list(discover_media(tmp_path))
+    found = list(discover_media(tmp_path, storage=local_storage))
     names = [p.name for p in found]
     assert "photo.jpg" in names
     assert ".hidden.jpg" not in names
@@ -41,7 +42,7 @@ def test_discover_media_skips_hidden(tmp_path: Path):
 def test_scan_file(tmp_path: Path):
     f = tmp_path / "test.png"
     f.write_bytes(b"\x89PNG" + b"\x00" * 100)
-    media = scan_file(f)
+    media = scan_file(f, storage=local_storage)
     assert media.extension == ".png"
     assert media.media_type == MediaType.PHOTO
     assert media.file_size == 104
@@ -57,7 +58,7 @@ def test_save_media_metadata_can_store_destination_path(tmp_path: Path, db: DBCl
     destination = library_root / "2026" / "renamed.jpg"
     db.library_config.set(LibraryConfig(library_root=library_root, import_template="{type}{ext}"))
 
-    result = scan_and_extract(source)
+    result = scan_and_extract(source, storage=local_storage)
     media_id = save_media_metadata(db, result.media, result.metadata, media_path=destination)
 
     media = db.media.get(media_id)

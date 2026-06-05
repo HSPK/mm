@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 
 from mm.cli import ui
-from mm.config import DEFAULT_IMPORT_TEMPLATE
+from mm.config import get_config
 from mm.db.sync_client import DBClient
 from mm.errors import MMError
 from mm.io import local_storage
@@ -67,7 +67,7 @@ def main(
             plan = plan_media_path_repairs(
                 db,
                 library_root,
-                config.import_template or DEFAULT_IMPORT_TEMPLATE,
+                config.import_template or get_config().import_.template,
                 storage=local_storage,
             )
         except MMError as error:

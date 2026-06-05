@@ -1,12 +1,4 @@
-"""Thumbnail generation with disk cache.
-
-Strategy:
-- Photo thumbnails: Pillow (LANCZOS) → WebP with disk cache.
-- Video thumbnails: ffmpeg frame extraction → Pillow resize → WebP.
-- Cache keyed by media_id + size, invalidated when source mtime changes.
-- Concurrent-safe via atomic write (tempfile + os.replace).
-- HEIC/HEIF support via pillow-heif plugin.
-"""
+"""Thumbnail generation with disk cache."""
 
 from __future__ import annotations
 
@@ -18,27 +10,16 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from mm.config import VIDEO_EXTENSIONS
-from mm.io import FileStorage, local_storage
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-THUMB_SIZES = {
-    "sm": (200, 200),
-    "md": (400, 400),
-    "lg": (800, 800),
-    "xl": (1920, 1080),  # Full HD preview
-}
-
-DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mm" / "thumbs"
+from mm.config import VIDEO_EXTENSIONS, get_config
+from mm.io import FileStorage
 
 _FFMPEG: str | None = shutil.which("ffmpeg")
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+
+def cache_dir_for_library(library_id: str | None, base: Path | None = None) -> Path:
+    """Return ``base/<library_id>``; falls back to ``base`` when id is empty."""
+    base = base or get_config().paths.thumbs_dir
+    return base / library_id if library_id else base
 
 
 def get_thumbnail(
@@ -47,19 +28,16 @@ def get_thumbnail(
     size: str = "md",
     cache_dir: Path | None = None,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> Path | None:
-    """Return path to a cached thumbnail, generating if needed.
-
-    Returns None if the source can't be decoded or doesn't exist.
-    """
-    cache_dir = cache_dir or DEFAULT_CACHE_DIR
-    if size not in THUMB_SIZES:
+    """Return path to a cached thumbnail, generating if needed."""
+    cfg = get_config().thumbnails
+    cache_dir = cache_dir or get_config().paths.thumbs_dir
+    if size not in cfg.sizes:
         size = "md"
 
-    dest = _cache_path(cache_dir, media_id, size)
+    dest = cache_dir / size / f"{media_id}.webp"
 
-    # Fast path: already cached and not stale
     if storage.exists(dest):
         try:
             if storage.get_mtime(source_path) <= storage.get_mtime(dest):
@@ -69,17 +47,17 @@ def get_thumbnail(
 
     ext = Path(source_path).suffix.lower()
     if ext in VIDEO_EXTENSIONS:
-        return _generate_video(source_path, dest, THUMB_SIZES[size], storage=storage)
-    return _generate_image(source_path, dest, THUMB_SIZES[size], storage=storage)
+        return _generate_video(source_path, dest, cfg.sizes[size], storage=storage)
+    return _generate_image(source_path, dest, cfg.sizes[size], storage=storage)
 
 
 def clear_cache(
     cache_dir: Path | None = None,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> int:
     """Remove all cached thumbnails. Returns count deleted."""
-    cache_dir = cache_dir or DEFAULT_CACHE_DIR
+    cache_dir = cache_dir or get_config().paths.thumbs_dir
     count = 0
     if storage.exists(cache_dir):
         for path in storage.rglob_files(cache_dir):
@@ -88,84 +66,58 @@ def clear_cache(
     return count
 
 
-# ---------------------------------------------------------------------------
-# Cache path
-# ---------------------------------------------------------------------------
-
-
-def _cache_path(cache_dir: Path, media_id: int, size: str, ext: str = ".webp") -> Path:
-    """Deterministic cache path for a thumbnail."""
-    return cache_dir / size / f"{media_id}{ext}"
-
-
-# ---------------------------------------------------------------------------
-# Image thumbnail
-# ---------------------------------------------------------------------------
-
-
 def _generate_image(
     source_path: str,
     dest: Path,
     max_size: tuple[int, int],
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> Path | None:
-    """Generate a thumbnail from an image file."""
     _try_register_heif()
     img = None
 
-    # Try rawpy for raw files first as it produces better results/compatibility
+    # Prefer rawpy for camera raw formats (better quality than Pillow fallback).
     lower_ext = Path(source_path).suffix.lower()
     if lower_ext in (".cr2", ".nef", ".arw", ".dng", ".raf", ".orf"):
         try:
             import rawpy
 
             with rawpy.imread(source_path) as raw:
-                # Use embedded preview if available for speed, otherwise postprocess
                 try:
                     thumb = raw.extract_thumb()
                 except rawpy.LibRawNoThumbnailError:
                     thumb = None
 
                 if thumb and thumb.format == rawpy.ThumbFormat.JPEG:
-                    # Load JPEG bytes into Pillow
                     import io
 
                     img = Image.open(io.BytesIO(thumb.data))
                 else:
-                    # Fallback to full conversion (slower but high quality)
                     rgb = raw.postprocess(use_camera_wb=True)
                     img = Image.fromarray(rgb)
         except (ImportError, Exception):
-            pass  # Fallback to Pillow
+            pass
 
     if img is None:
         try:
             with storage.open(source_path, "rb") as f:
                 img = Image.open(f)
                 img.load()
-            # Handle HEIF/AVIF specifically via pillow_heif if needed,
-            # but Image.open usually handles it if registered.
         except Exception:
             return None
 
     try:
         img = ImageOps.exif_transpose(img)
-        # Ensure we have a compatible mode for WebP (RGB, RGBA)
         if img.mode not in ("RGB", "RGBA", "L"):
             img = img.convert("RGB")
 
-        # Resize maintaining aspect ratio
         img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
-        # Ensure destination directory exists
         storage.mkdir(dest.parent)
 
-        # Write to temp file then move (atomic)
         fd, tmp_path = tempfile.mkstemp(suffix=".webp", dir=dest.parent)
         os.close(fd)
 
-        # Save as optimized WebP
         img.save(tmp_path, "WEBP", quality=80, method=4)
         storage.replace(tmp_path, dest)
 
@@ -179,33 +131,23 @@ def _generate_image(
             img.close()
 
 
-# ---------------------------------------------------------------------------
-# Video thumbnail (via ffmpeg)
-# ---------------------------------------------------------------------------
-
-
 def _generate_video(
     source_path: str,
     dest: Path,
     max_size: tuple[int, int],
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> Path | None:
-    """Extract a frame from a video and generate a thumbnail.
-
-    Tries to grab a frame at 1 second; if that fails, tries the first frame.
-    """
+    """Extract a frame via ffmpeg (1s seek, fall back to first frame)."""
     if _FFMPEG is None:
         return None
 
     storage.mkdir(dest.parent)
 
-    # Extract frame to a temp PNG
     fd, tmp_png = tempfile.mkstemp(suffix=".png", dir=dest.parent)
     os.close(fd)
 
     try:
-        # Try at 1 second mark first (better representative frame)
         extracted = False
         for seek_args in [["-ss", "1"], ["-ss", "0"]]:
             result = subprocess.run(
@@ -233,7 +175,6 @@ def _generate_video(
         if not extracted:
             return None
 
-        # Resize with Pillow
         try:
             img = Image.open(tmp_png)
             if img.mode not in ("RGB", "L"):
@@ -253,18 +194,12 @@ def _generate_video(
             pass
 
 
-# ---------------------------------------------------------------------------
-# Atomic write helper
-# ---------------------------------------------------------------------------
-
-
 def _write_atomic(
     img: Image.Image,
     dest: Path,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> None:
-    """Write an image to *dest* atomically via temp + rename."""
     storage.mkdir(dest.parent)
     fd, tmp = tempfile.mkstemp(suffix=".webp", dir=dest.parent)
     try:
@@ -279,15 +214,10 @@ def _write_atomic(
         raise
 
 
-# ---------------------------------------------------------------------------
-# HEIF registration
-# ---------------------------------------------------------------------------
-
 _heif_registered = False
 
 
 def _try_register_heif() -> None:
-    """Register pillow-heif if available (called once)."""
     global _heif_registered
     if _heif_registered:
         return

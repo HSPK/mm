@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
+from mm.config import get_config
 from mm.db.dto import User
 from mm.io import local_storage
 from mm.media.thumbnails import get_thumbnail
@@ -17,6 +18,7 @@ from mm.server.dependencies import (
     get_db,
     get_library_config,
     get_media_path,
+    get_thumb_cache_dir,
 )
 from mm.server.schemas import (
     RatingBody,
@@ -30,9 +32,6 @@ from mm.utils.paths import resolve_media_path
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
-# ── Cache headers ──
-_THUMB_CACHE_CONTROL = "public, max-age=31536000, immutable"
-
 
 def _make_etag(thumb_path: Path) -> str:
     st = local_storage.stat(thumb_path)
@@ -44,7 +43,10 @@ def _check_not_modified(request: Request, etag: str) -> Response | None:
     if inm and etag in inm:
         return Response(
             status_code=304,
-            headers={"ETag": etag, "Cache-Control": _THUMB_CACHE_CONTROL},
+            headers={
+                "ETag": etag,
+                "Cache-Control": get_config().thumbnails.http_cache_control,
+            },
         )
     return None
 
@@ -52,7 +54,10 @@ def _check_not_modified(request: Request, etag: str) -> Response | None:
 async def _serve_thumb(request: Request, media_id: int, size: str) -> Response:
     """Generate and serve a thumbnail/preview with ETag + 304 support."""
     media_path = await get_media_path(request, media_id)
-    thumb = await run_in_threadpool(get_thumbnail, media_path, media_id, size)
+    cache_dir = get_thumb_cache_dir(request)
+    thumb = await run_in_threadpool(
+        get_thumbnail, media_path, media_id, size, cache_dir, storage=local_storage
+    )
     if not thumb:
         raise HTTPException(404, "Thumbnail generation failed")
     etag = _make_etag(thumb)
@@ -62,7 +67,10 @@ async def _serve_thumb(request: Request, media_id: int, size: str) -> Response:
     return FileResponse(
         thumb,
         media_type="image/webp",
-        headers={"Cache-Control": _THUMB_CACHE_CONTROL, "ETag": etag},
+        headers={
+            "Cache-Control": get_config().thumbnails.http_cache_control,
+            "ETag": etag,
+        },
     )
 
 
@@ -204,7 +212,7 @@ async def get_media_file(
     if not local_storage.exists(fpath):
         raise HTTPException(404, "File not found on disk")
 
-    return stream_file(fpath, request)
+    return stream_file(fpath, request, storage=local_storage)
 
 
 @router.put("/{media_id}/rating")

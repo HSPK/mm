@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mm.db.sync_client import DBClient
-from mm.io import FileStorage, local_storage
+from mm.io import FileStorage
 from mm.media.scanner import ScanResult, save_media_metadata, scan_files
 from mm.utils.paths import resolve_media_path
 
@@ -45,7 +45,7 @@ def plan_missing_media_cleanup(
     db: DBClient,
     library_root: str | Path,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> MissingMediaPlan:
     """Find DB rows whose files are missing from disk."""
     root = str(library_root)
@@ -80,7 +80,7 @@ def plan_library_sync(
     db: DBClient,
     library_root: str | Path,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> LibrarySyncPlan:
     """Find stale and changed DB rows relative to files on disk."""
     root = str(library_root)
@@ -124,7 +124,7 @@ def rescan_changed_media(
     paths: list[str],
     *,
     jobs: int = 0,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
     on_progress: Callable[[ScanResult], None] | None = None,
     on_error: Callable[[ScanResult], None] | None = None,
 ) -> RescanResult:

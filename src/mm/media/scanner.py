@@ -17,7 +17,7 @@ from mm.config import (
 )
 from mm.db.dto import Media, Metadata
 from mm.db.models import MediaType
-from mm.io import FileStorage, local_storage
+from mm.io import FileStorage
 from mm.utils.hashing import file_hash
 from mm.utils.parallel import MapBackend, map_items
 from mm.utils.paths import make_relative_path
@@ -55,7 +55,7 @@ def discover_media(
     directory: Path,
     allowed_extensions: frozenset[str] | set[str] | None = None,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> Generator[Path, None, None]:
     """Yield all supported media file paths under *directory*, skipping hidden files/dirs."""
     if allowed_extensions is None:
@@ -68,7 +68,7 @@ def scan_file(
     path: Path,
     compute_hash: bool = True,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> Media:
     """Build a Media dataclass for one file on disk."""
     stat = storage.stat(path)
@@ -92,7 +92,7 @@ def scan_and_extract(
     path: Path,
     compute_hash: bool = True,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> ScanResult:
     """Scan a file and extract its metadata, returning Media + Metadata directly."""
     try:
@@ -151,7 +151,7 @@ def scan_files(
     files: list[Path],
     *,
     compute_hash: bool = True,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
     jobs: int = 0,
     backend: MapBackend = "process",
     on_progress: Callable[[ScanResult], None] | None = None,

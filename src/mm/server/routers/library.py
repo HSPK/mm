@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from mm.config import DEFAULT_DB_NAME
+from mm.config import get_config
 from mm.db.backend import DatabaseTarget
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
@@ -27,16 +27,19 @@ router = APIRouter(prefix="/api/library", tags=["library"])
 @router.get("")
 async def get_current_library(
     request: Request,
+    db: AsyncDBClient = Depends(get_db),
     user: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return info about the currently active library."""
     db_path = str(getattr(request.app.state, "db_path", ""))
     if not db_path:
-        return {"db_path": "", "name": "default"}
+        return {"db_path": "", "name": "default", "library_id": ""}
     target = DatabaseTarget.from_value(db_path)
+    config = await db.library_config.get()
     return {
         "db_path": target.display,
         "name": target.local_path.parent.name if target.local_path else "postgres",
+        "library_id": config.library_id,
     }
 
 
@@ -82,7 +85,7 @@ async def switch_library(
 
     # If a directory is given, look for mm.db inside
     if target.is_local_file and target.local_path and local_storage.is_dir(target.local_path):
-        target = DatabaseTarget.from_value(target.local_path / DEFAULT_DB_NAME)
+        target = DatabaseTarget.from_value(target.local_path / get_config().import_.db_name)
 
     if target.is_local_file and target.local_path and not local_storage.exists(target.local_path):
         raise HTTPException(status_code=404, detail=f"Database not found: {target.display}")

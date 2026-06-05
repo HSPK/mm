@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
-from mm.io import FileStorage, local_storage
+from mm.io import FileStorage
 
 _RANGE_RE = re.compile(r"bytes=(\d+)-(\d*)")
 
@@ -16,7 +16,7 @@ def stream_file(
     file_path: Path,
     request: Request,
     *,
-    storage: FileStorage = local_storage,
+    storage: FileStorage,
 ) -> StreamingResponse | FileResponse:
     """Stream a file with HTTP Range request support for video seeking."""
     content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"

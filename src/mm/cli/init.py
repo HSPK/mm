@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from mm.cli import ui
-from mm.config import DEFAULT_IMPORT_TEMPLATE
+from mm.config import get_config
 
 
 @click.command()
@@ -28,7 +28,7 @@ def init(directory: Path | None) -> None:
 
     dest = directory.resolve()
     name = click.prompt("Library name", default=dest.name)
-    template = click.prompt("Import template", default=DEFAULT_IMPORT_TEMPLATE)
+    template = click.prompt("Import template", default=get_config().import_.template)
     lib_root = Path(
         click.prompt("Library root (where media files are stored)", default=str(dest))
     ).resolve()
