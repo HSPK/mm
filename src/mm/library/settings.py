@@ -14,6 +14,7 @@ class LibraryConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    library_id: str = ""  # Stable UUID4, generated once on first access
     library_name: str = ""
     import_template: str = DEFAULT_IMPORT_TEMPLATE
     library_root: Path

@@ -27,16 +27,19 @@ router = APIRouter(prefix="/api/library", tags=["library"])
 @router.get("")
 async def get_current_library(
     request: Request,
+    db: AsyncDBClient = Depends(get_db),
     user: User | None = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return info about the currently active library."""
     db_path = str(getattr(request.app.state, "db_path", ""))
     if not db_path:
-        return {"db_path": "", "name": "default"}
+        return {"db_path": "", "name": "default", "library_id": ""}
     target = DatabaseTarget.from_value(db_path)
+    config = await db.library_config.get()
     return {
         "db_path": target.display,
         "name": target.local_path.parent.name if target.local_path else "postgres",
+        "library_id": config.library_id,
     }
 
 

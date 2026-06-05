@@ -109,3 +109,44 @@ def test_count_and_stats(db: DBClient):
 
     dist = db.stats.type_distribution()
     assert dist["video"] == 1
+
+
+def test_library_id_generated_on_first_read(db: DBClient):
+    """library_id is a non-empty UUID4 string generated on the first get()."""
+    import uuid
+
+    config = db.library_config.get()
+    assert config.library_id, "library_id must be non-empty"
+    # Must be a valid UUID4
+    parsed = uuid.UUID(config.library_id, version=4)
+    assert str(parsed) == config.library_id
+
+
+def test_library_id_is_stable_across_reads(db: DBClient):
+    """Repeated get() calls return the same library_id."""
+    id1 = db.library_config.get().library_id
+    id2 = db.library_config.get().library_id
+    assert id1 == id2
+
+
+def test_library_id_is_unique_across_libraries(tmp_path: Path):
+    """Two separate library databases have different library_ids."""
+    db_a = DBClient(tmp_path / "a.db")
+    db_b = DBClient(tmp_path / "b.db")
+    try:
+        id_a = db_a.library_config.get().library_id
+        id_b = db_b.library_config.get().library_id
+        assert id_a != id_b
+    finally:
+        db_a.close()
+        db_b.close()
+
+
+def test_library_id_preserved_after_config_update(db: DBClient):
+    """Setting other config values does not change the library_id."""
+    original_id = db.library_config.get().library_id
+
+    current = db.library_config.get()
+    db.library_config.set(LibraryConfig(library_name="Updated", library_root=current.library_root))
+
+    assert db.library_config.get().library_id == original_id
