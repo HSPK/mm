@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from mm.config import get_config
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
 from mm.library.settings import LibraryConfig
@@ -16,13 +17,9 @@ _bearer = HTTPBearer(auto_error=False)
 
 # Token cache: token → (User, expiry_ts)
 _TOKEN_CACHE: dict[str, tuple[User, float]] = {}
-_TOKEN_CACHE_TTL = 300
-_TOKEN_CACHE_MAX = 256
 
 # Media path cache: media_id → (path_str, expiry_ts)
 _MEDIA_PATH_CACHE: dict[int, tuple[str, float]] = {}
-_MEDIA_PATH_TTL = 600
-_MEDIA_PATH_MAX = 4096
 
 
 def _evict_cache(cache: dict, max_size: int) -> None:
@@ -94,8 +91,8 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    _TOKEN_CACHE[token] = (user, now + _TOKEN_CACHE_TTL)
-    _evict_cache(_TOKEN_CACHE, _TOKEN_CACHE_MAX)
+    _TOKEN_CACHE[token] = (user, now + get_config().server.token_cache.ttl)
+    _evict_cache(_TOKEN_CACHE, get_config().server.token_cache.max)
 
     return user
 
@@ -127,6 +124,6 @@ async def get_media_path(request: Request, media_id: int) -> str:
     config = get_library_config(request)
     abs_path = resolve_media_path(m.path, config.library_root)
 
-    _MEDIA_PATH_CACHE[media_id] = (abs_path, now + _MEDIA_PATH_TTL)
-    _evict_cache(_MEDIA_PATH_CACHE, _MEDIA_PATH_MAX)
+    _MEDIA_PATH_CACHE[media_id] = (abs_path, now + get_config().server.media_path_cache.ttl)
+    _evict_cache(_MEDIA_PATH_CACHE, get_config().server.media_path_cache.max)
     return abs_path

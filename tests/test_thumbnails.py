@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from mm.config import get_config
 from mm.io import local_storage
 from mm.media.thumbnails import (
-    DEFAULT_CACHE_DIR,
     cache_dir_for_library,
     get_thumbnail,
 )
@@ -18,10 +18,11 @@ from PIL import Image  # noqa: E402
 
 
 def test_cache_dir_for_library_uses_id_as_subdir() -> None:
+    base = get_config().paths.thumbs_dir
     a = cache_dir_for_library("lib-a")
     b = cache_dir_for_library("lib-b")
-    assert a == DEFAULT_CACHE_DIR / "lib-a"
-    assert b == DEFAULT_CACHE_DIR / "lib-b"
+    assert a == base / "lib-a"
+    assert b == base / "lib-b"
     assert a != b
 
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from mm.config import CLIP_MODEL_NAME, CLIP_PRETRAINED
+from mm.config import get_config
 from mm.io import FileStorage
 
 # ---------------------------------------------------------------------------
@@ -22,16 +22,17 @@ def get_clip_model() -> tuple[Any, Any, Any, Any]:
     import open_clip
     import torch
 
+    cfg = get_config().clip
     device = (
         "mps"
         if torch.backends.mps.is_available()
         else ("cuda" if torch.cuda.is_available() else "cpu")
     )
     model, _, preprocess = open_clip.create_model_and_transforms(
-        CLIP_MODEL_NAME,
-        pretrained=CLIP_PRETRAINED,
+        cfg.model_name,
+        pretrained=cfg.pretrained,
     )
-    tokenizer = open_clip.get_tokenizer(CLIP_MODEL_NAME)
+    tokenizer = open_clip.get_tokenizer(cfg.model_name)
     model = model.to(device).eval()
     return model, preprocess, tokenizer, device
 

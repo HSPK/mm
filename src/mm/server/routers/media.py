@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
+from mm.config import get_config
 from mm.db.dto import User
 from mm.io import local_storage
 from mm.media.thumbnails import get_thumbnail
@@ -31,9 +32,6 @@ from mm.utils.paths import resolve_media_path
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
-# ── Cache headers ──
-_THUMB_CACHE_CONTROL = "public, max-age=31536000, immutable"
-
 
 def _make_etag(thumb_path: Path) -> str:
     st = local_storage.stat(thumb_path)
@@ -45,7 +43,10 @@ def _check_not_modified(request: Request, etag: str) -> Response | None:
     if inm and etag in inm:
         return Response(
             status_code=304,
-            headers={"ETag": etag, "Cache-Control": _THUMB_CACHE_CONTROL},
+            headers={
+                "ETag": etag,
+                "Cache-Control": get_config().thumbnails.http_cache_control,
+            },
         )
     return None
 
@@ -66,7 +67,10 @@ async def _serve_thumb(request: Request, media_id: int, size: str) -> Response:
     return FileResponse(
         thumb,
         media_type="image/webp",
-        headers={"Cache-Control": _THUMB_CACHE_CONTROL, "ETag": etag},
+        headers={
+            "Cache-Control": get_config().thumbnails.http_cache_control,
+            "ETag": etag,
+        },
     )
 
 

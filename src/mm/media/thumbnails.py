@@ -10,24 +10,15 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from mm.config import VIDEO_EXTENSIONS
+from mm.config import VIDEO_EXTENSIONS, get_config
 from mm.io import FileStorage
-
-THUMB_SIZES = {
-    "sm": (200, 200),
-    "md": (400, 400),
-    "lg": (800, 800),
-    "xl": (1920, 1080),
-}
-
-DEFAULT_CACHE_DIR = Path.home() / ".cache" / "mm" / "thumbs"
 
 _FFMPEG: str | None = shutil.which("ffmpeg")
 
 
 def cache_dir_for_library(library_id: str | None, base: Path | None = None) -> Path:
     """Return ``base/<library_id>``; falls back to ``base`` when id is empty."""
-    base = base or DEFAULT_CACHE_DIR
+    base = base or get_config().paths.thumbs_dir
     return base / library_id if library_id else base
 
 
@@ -40,8 +31,9 @@ def get_thumbnail(
     storage: FileStorage,
 ) -> Path | None:
     """Return path to a cached thumbnail, generating if needed."""
-    cache_dir = cache_dir or DEFAULT_CACHE_DIR
-    if size not in THUMB_SIZES:
+    cfg = get_config().thumbnails
+    cache_dir = cache_dir or get_config().paths.thumbs_dir
+    if size not in cfg.sizes:
         size = "md"
 
     dest = cache_dir / size / f"{media_id}.webp"
@@ -55,8 +47,8 @@ def get_thumbnail(
 
     ext = Path(source_path).suffix.lower()
     if ext in VIDEO_EXTENSIONS:
-        return _generate_video(source_path, dest, THUMB_SIZES[size], storage=storage)
-    return _generate_image(source_path, dest, THUMB_SIZES[size], storage=storage)
+        return _generate_video(source_path, dest, cfg.sizes[size], storage=storage)
+    return _generate_image(source_path, dest, cfg.sizes[size], storage=storage)
 
 
 def clear_cache(
@@ -65,7 +57,7 @@ def clear_cache(
     storage: FileStorage,
 ) -> int:
     """Remove all cached thumbnails. Returns count deleted."""
-    cache_dir = cache_dir or DEFAULT_CACHE_DIR
+    cache_dir = cache_dir or get_config().paths.thumbs_dir
     count = 0
     if storage.exists(cache_dir):
         for path in storage.rglob_files(cache_dir):

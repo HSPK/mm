@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from mm.config import DEFAULT_DB_NAME, add_database, set_active_database
+from mm.config import add_database, get_config, set_active_database
 from mm.db.sync_client import DBClient
 from mm.io import local_storage
 from mm.library.settings import LibraryConfig
@@ -30,7 +30,7 @@ def inspect_library_setup(directory: Path) -> LibrarySetupRequirements:
     """Resolve setup paths and report what interactive inputs are needed."""
     destination = directory.resolve()
     local_storage.mkdir(destination)
-    db_path = destination / DEFAULT_DB_NAME
+    db_path = destination / get_config().import_.db_name
     db = DBClient(db_path)
     try:
         needs_admin = db.user.count() == 0
@@ -51,7 +51,7 @@ def initialize_library(
 ) -> LibrarySetupResult:
     """Create or update a library database and register it as active."""
     local_storage.mkdir(destination)
-    db_path = destination / DEFAULT_DB_NAME
+    db_path = destination / get_config().import_.db_name
     config = LibraryConfig(
         library_name=name,
         import_template=import_template,

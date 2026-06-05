@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from mm.config import DEFAULT_IMPORT_TEMPLATE
+from mm.config import get_config
 from mm.db.dto import Media, Metadata
 from mm.db.sync_client import DBClient
 from mm.io import FileStorage
@@ -64,11 +64,13 @@ class MediaPathRepairPlan:
 def plan_media_path_repairs(
     db: DBClient,
     library_root: Path,
-    template: str = DEFAULT_IMPORT_TEMPLATE,
+    template: str | None = None,
     *,
     storage: FileStorage,
 ) -> MediaPathRepairPlan:
     """Plan safe media path repairs without writing to the database."""
+    if template is None:
+        template = get_config().import_.template
     root = library_root.resolve()
     media_rows = [media for media in db.media.list() if media.id is not None]
     metadata_by_id = db.metadata.get_for_ids([media.id for media in media_rows if media.id])

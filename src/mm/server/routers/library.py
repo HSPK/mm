@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from mm.config import DEFAULT_DB_NAME
+from mm.config import get_config
 from mm.db.backend import DatabaseTarget
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
@@ -85,7 +85,7 @@ async def switch_library(
 
     # If a directory is given, look for mm.db inside
     if target.is_local_file and target.local_path and local_storage.is_dir(target.local_path):
-        target = DatabaseTarget.from_value(target.local_path / DEFAULT_DB_NAME)
+        target = DatabaseTarget.from_value(target.local_path / get_config().import_.db_name)
 
     if target.is_local_file and target.local_path and not local_storage.exists(target.local_path):
         raise HTTPException(status_code=404, detail=f"Database not found: {target.display}")

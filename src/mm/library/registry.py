@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mm.config import (
-    DEFAULT_DB_NAME,
     add_database,
+    get_config,
     load_cli_config,
     remove_database,
     set_active_database,
@@ -58,7 +58,7 @@ def register_database(path: str | Path, name: str | None = None) -> DatabaseRegi
         resolved = target.local_path
         assert resolved is not None
         if local_storage.is_dir(resolved):
-            resolved = resolved / DEFAULT_DB_NAME
+            resolved = resolved / get_config().import_.db_name
         if not local_storage.exists(resolved):
             raise FileNotFoundError(resolved)
         target = DatabaseTarget.from_value(resolved)

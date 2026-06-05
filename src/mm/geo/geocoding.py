@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from mm.config import get_config
 from mm.io import local_storage
 
 if TYPE_CHECKING:
@@ -23,7 +24,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_CACHE_DIR = Path.home() / ".cache" / "mm" / "geonames"
+
+def _cache_dir() -> Path:
+    return get_config().paths.geonames_dir
 
 # ─── Country code → name ──────────────────────────────────
 
@@ -219,18 +222,18 @@ def _ensure_data() -> None:
     """Download GeoNames data files if not cached."""
     import urllib.request
 
-    local_storage.mkdir(_CACHE_DIR)
+    local_storage.mkdir(_cache_dir())
 
-    cities_file = _CACHE_DIR / "cities15000.txt"
-    admin1_file = _CACHE_DIR / "admin1CodesASCII.txt"
+    cities_file = _cache_dir() / "cities15000.txt"
+    admin1_file = _cache_dir() / "admin1CodesASCII.txt"
 
     if not local_storage.exists(cities_file):
         logger.info("Downloading GeoNames cities15000 (~2.5 MB)...")
         url = "https://download.geonames.org/export/dump/cities15000.zip"
-        zip_path = _CACHE_DIR / "cities15000.zip"
+        zip_path = _cache_dir() / "cities15000.zip"
         urllib.request.urlretrieve(url, zip_path)
         with zipfile.ZipFile(zip_path) as zf:
-            zf.extract("cities15000.txt", _CACHE_DIR)
+            zf.extract("cities15000.txt", _cache_dir())
         local_storage.delete_file(zip_path)
         logger.info("GeoNames cities15000 downloaded.")
 
@@ -252,7 +255,7 @@ class _CityGeocoder:
 
         # Load admin1 codes:  "CN.01" → "Anhui Sheng"
         admin1_map: dict[str, str] = {}
-        admin1_file = _CACHE_DIR / "admin1CodesASCII.txt"
+        admin1_file = _cache_dir() / "admin1CodesASCII.txt"
         with local_storage.open(admin1_file, "r", encoding="utf-8") as f:
             for line in f:
                 parts = line.strip().split("\t")
@@ -263,7 +266,7 @@ class _CityGeocoder:
         # Columns: 0=id 1=name 2=ascii 3=alternates 4=lat 5=lon
         #          8=cc 10=admin1_code 14=population
         cities: list[dict] = []
-        cities_file = _CACHE_DIR / "cities15000.txt"
+        cities_file = _cache_dir() / "cities15000.txt"
         with local_storage.open(cities_file, "r", encoding="utf-8") as f:
             for line in f:
                 parts = line.split("\t")
