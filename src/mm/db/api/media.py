@@ -82,6 +82,36 @@ class MediaApi(DbApi):
             )
         ]
 
+    async def by_hashes(self, file_hashes: list[str]) -> dict[str, list[Media]]:
+        """Bulk variant of ``by_hash`` — single query, grouped by hash."""
+        if not file_hashes:
+            return {}
+        result: dict[str, list[Media]] = {h: [] for h in file_hashes}
+        rows = await self.objects.fetchall(
+            MediaModel.select().where(MediaModel.file_hash.in_(file_hashes))
+        )
+        for row in rows:
+            result.setdefault(row.file_hash, []).append(to_media(row))
+        return result
+
+    async def duplicate_hashes(self, min_count: int = 2) -> list[tuple[str, int]]:
+        """Return file_hashes that have >= min_count alive media rows, sorted
+        by count desc. Empty hashes are skipped."""
+        rows = await self.objects.fetchall(
+            MediaModel.select(
+                MediaModel.file_hash,
+                fn.COUNT(MediaModel.id).alias("cnt"),
+            )
+            .where(
+                MediaModel.deleted_at.is_null(),
+                MediaModel.file_hash != "",
+            )
+            .group_by(MediaModel.file_hash)
+            .having(fn.COUNT(MediaModel.id) >= min_count)
+            .order_by(fn.COUNT(MediaModel.id).desc(), MediaModel.file_hash)
+        )
+        return [(row.file_hash, row.cnt) for row in rows]
+
     async def update_path(self, media_id: int, path: str, filename: str, extension: str) -> int:
         return await self.objects.execute(
             MediaModel.update(path=path, filename=filename, extension=extension).where(

@@ -82,14 +82,14 @@ class TagsApi(DbApi):
         await self.delete_orphans()
         return removed
 
-    async def stats(self) -> list[tuple[str, int]]:
+    async def stats(self) -> list[tuple[int, str, int]]:
         rows = await self.objects.fetchall(
-            TagModel.select(TagModel.name, fn.COUNT(MediaTagModel.media).alias("cnt"))
+            TagModel.select(TagModel.id, TagModel.name, fn.COUNT(MediaTagModel.media).alias("cnt"))
             .join(MediaTagModel, peewee.JOIN.LEFT_OUTER)
-            .group_by(TagModel.name)
+            .group_by(TagModel.id, TagModel.name)
             .order_by(fn.COUNT(MediaTagModel.media).desc())
         )
-        return [(r.name, r.cnt) for r in rows]
+        return [(r.id, r.name, r.cnt) for r in rows]
 
     async def rename(self, tag_id: int, new_name: str) -> None:
         await self.objects.execute(

@@ -110,10 +110,10 @@ async def _fetch_cover_and_count(
 
 def _expand_per_tag(
     defn: dict[str, Any],
-    tag_stats: list[tuple[str, int]],
+    tag_stats: list[tuple[int, str, int]],
 ) -> list[dict[str, Any]]:
     albums: list[dict[str, Any]] = []
-    for name, count in tag_stats:
+    for _tag_id, name, count in tag_stats:
         if count <= 0:
             continue
         albums.append(
@@ -369,7 +369,7 @@ async def build_smart_albums(db: AsyncDBClient) -> dict[str, Any]:
     known_count = sum(year_map.values())
     unknown_date_count = max(0, stats_total - known_count)
     available_years = sorted([int(y) for y in year_map], reverse=True)
-    tag_stats = [(n, c) for n, c in tag_stats_raw if c > 0]
+    tag_stats = [(i, n, c) for i, n, c in tag_stats_raw if c > 0]
 
     # Trash count (fast single query)
     _, trash_count = await db.media.query(page=1, per_page=1, deleted=True)
