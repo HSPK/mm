@@ -163,14 +163,23 @@ interface ThemeState {
     setTheme: (id: string) => void
 }
 
-const savedId = localStorage.getItem("mm-theme") || "midnight"
+const THEME_STORAGE_KEY = "mm-theme"
+
+/** Default to the user's system colour scheme when nothing is stored. */
+function systemDefaultThemeId(): string {
+    if (typeof window === "undefined" || !window.matchMedia) return "midnight"
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "midnight" : "light"
+}
+
+const savedId = (typeof localStorage !== "undefined" && localStorage.getItem(THEME_STORAGE_KEY))
+    || systemDefaultThemeId()
 
 export const useThemeStore = create<ThemeState>((set) => ({
     themeId: savedId,
     setTheme: (id: string) => {
         const theme = themes.find((t) => t.id === id)
         if (!theme) return
-        localStorage.setItem("mm-theme", id)
+        localStorage.setItem(THEME_STORAGE_KEY, id)
         applyTheme(theme)
         set({ themeId: id })
     },
@@ -179,3 +188,19 @@ export const useThemeStore = create<ThemeState>((set) => ({
 // Apply saved theme immediately on import
 const initial = themes.find((t) => t.id === savedId) ?? themes[0]
 applyTheme(initial)
+
+// Track system colour-scheme changes — only when the user hasn't picked
+// explicitly (no localStorage key). Mirrors Apple's behavior where Photos
+// follows the system unless overridden in its own settings.
+if (typeof window !== "undefined" && window.matchMedia) {
+    const mql = window.matchMedia("(prefers-color-scheme: dark)")
+    mql.addEventListener?.("change", (e) => {
+        if (localStorage.getItem(THEME_STORAGE_KEY)) return // user override
+        const next = e.matches ? "midnight" : "light"
+        const theme = themes.find((t) => t.id === next)
+        if (theme) {
+            applyTheme(theme)
+            useThemeStore.setState({ themeId: next })
+        }
+    })
+}
