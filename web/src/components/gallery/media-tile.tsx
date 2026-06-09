@@ -5,7 +5,7 @@ import type { Media } from "@/api/types"
 
 // ─── Shared media tile with long-press selection ──────────
 
-const LONG_PRESS_MS = 400
+const LONG_PRESS_MS = 300
 
 export const MediaTile = memo(function MediaTile({
     item,
@@ -124,11 +124,11 @@ export const MediaTile = memo(function MediaTile({
 import { Film } from "lucide-react"
 import { StarRating } from "@/components/ui/star-rating"
 import { fmtDateShort, fmtDuration } from "@/lib/format"
-import { RAW_EXTS_UPPER } from "@/lib/media-url"
+import { isRawBadgeExtension } from "@/lib/media-kind"
 
 const Overlay = memo(function Overlay({ item }: { item: Media }) {
     const ext = item.extension?.replace(/^\./, "").toUpperCase() || ""
-    const isRaw = RAW_EXTS_UPPER.has(ext)
+    const isRaw = isRawBadgeExtension(ext)
     return (
         <>
             {/* Single hover overlay */}
