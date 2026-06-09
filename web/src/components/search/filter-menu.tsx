@@ -289,11 +289,31 @@ export function FilterMenu({ showFilters, onNavigate }: FilterMenuProps) {
             )}
 
             <div className="py-1 px-1.5">
-                <MenuItem icon={MapIcon} label="Map" onClick={() => navAndClose("/map")} />
-                <MenuItem icon={LayoutDashboard} label="Stats" onClick={() => navAndClose("/dashboard")} />
-                <MenuItem icon={TagIcon} label="Manage tags" onClick={() => navAndClose("/tags")} />
-                <MenuItem icon={Copy} label="Duplicates" onClick={() => navAndClose("/duplicates")} />
-                <MenuItem icon={Settings} label="Settings" onClick={() => navAndClose("/settings")} />
+                <MenuItem
+                    icon={MapIcon} label="Map"
+                    onClick={() => navAndClose("/map")}
+                    onPrefetch={() => void import("@/pages/map")}
+                />
+                <MenuItem
+                    icon={LayoutDashboard} label="Stats"
+                    onClick={() => navAndClose("/dashboard")}
+                    onPrefetch={() => void import("@/pages/dashboard")}
+                />
+                <MenuItem
+                    icon={TagIcon} label="Manage tags"
+                    onClick={() => navAndClose("/tags")}
+                    onPrefetch={() => void import("@/pages/tags")}
+                />
+                <MenuItem
+                    icon={Copy} label="Duplicates"
+                    onClick={() => navAndClose("/duplicates")}
+                    onPrefetch={() => void import("@/pages/duplicates")}
+                />
+                <MenuItem
+                    icon={Settings} label="Settings"
+                    onClick={() => navAndClose("/settings")}
+                    onPrefetch={() => void import("@/pages/settings")}
+                />
             </div>
 
             <div className="border-t border-border pt-1 px-1.5">
@@ -324,12 +344,16 @@ interface MenuItemProps {
     icon: typeof LayoutDashboard
     label: string
     onClick: () => void
+    /** Called once on first hover/focus — used to warm the route chunk. */
+    onPrefetch?: () => void
 }
 
-function MenuItem({ icon: Icon, label, onClick }: MenuItemProps) {
+function MenuItem({ icon: Icon, label, onClick, onPrefetch }: MenuItemProps) {
     return (
         <button
             onClick={onClick}
+            onMouseEnter={onPrefetch}
+            onFocus={onPrefetch}
             className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-foreground/80 hover:bg-secondary/60 rounded-xl transition-colors"
         >
             <Icon className="h-4 w-4 text-muted-foreground" />
