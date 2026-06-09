@@ -1,7 +1,8 @@
-import { create } from "zustand"
 import axios from "axios"
-import { api } from "@/api/client"
+import { create } from "zustand"
+import { authRepo, type AuthRepository } from "@/api/auth"
 import type { User } from "@/api/types"
+import { browserTokenStorage, type TokenStorage } from "@/lib/token-storage"
 
 interface AuthState {
     token: string | null
@@ -14,52 +15,59 @@ interface AuthState {
     logout: () => void
 }
 
-// Sync token to cookie on initial load
-const initialToken = localStorage.getItem("mm_token")
-if (initialToken) {
-    document.cookie = `mm_token=${initialToken}; path=/; SameSite=Strict`
+export interface AuthStoreDeps {
+    repo?: AuthRepository
+    tokenStorage?: TokenStorage
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-    token: initialToken,
-    user: null,
-    loading: false,
-    error: null,
-    get isAuthenticated() {
-        return !!get().token
-    },
+function extractLoginError(err: unknown): string {
+    if (axios.isAxiosError<{ detail?: string }>(err)) {
+        return err.response?.data?.detail || "Login failed"
+    }
+    return "Login failed"
+}
 
-    login: async (username, password) => {
-        set({ loading: true, error: null })
-        try {
-            const res = await api.post<{ token: string; user: User }>("/auth/login", { username, password })
-            const token = res.data.token
-            localStorage.setItem("mm_token", token)
-            document.cookie = `mm_token=${token}; path=/; SameSite=Strict`
-            set({ token, loading: false })
-            await get().fetchUser()
-            return true
-        } catch (err: unknown) {
-            const msg = axios.isAxiosError<{ detail?: string }>(err)
-                ? err.response?.data?.detail || "Login failed"
-                : "Login failed"
-            set({ error: msg, loading: false })
-            return false
-        }
-    },
+export function createAuthStore(deps: AuthStoreDeps = {}) {
+    const repo = deps.repo ?? authRepo
+    const storage = deps.tokenStorage ?? browserTokenStorage
 
-    fetchUser: async () => {
-        try {
-            const res = await api.get<User>("/auth/me")
-            set({ user: res.data })
-        } catch {
-            get().logout()
-        }
-    },
+    return create<AuthState>((set, get) => ({
+        token: storage.get(),
+        user: null,
+        loading: false,
+        error: null,
+        get isAuthenticated() {
+            return !!get().token
+        },
 
-    logout: () => {
-        localStorage.removeItem("mm_token")
-        document.cookie = "mm_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-        set({ token: null, user: null })
-    },
-}))
+        login: async (username, password) => {
+            set({ loading: true, error: null })
+            try {
+                const { token } = await repo.login(username, password)
+                storage.set(token)
+                set({ token, loading: false })
+                await get().fetchUser()
+                return true
+            } catch (err: unknown) {
+                set({ error: extractLoginError(err), loading: false })
+                return false
+            }
+        },
+
+        fetchUser: async () => {
+            try {
+                const user = await repo.me()
+                set({ user })
+            } catch {
+                get().logout()
+            }
+        },
+
+        logout: () => {
+            storage.clear()
+            set({ token: null, user: null })
+        },
+    }))
+}
+
+export const useAuthStore = createAuthStore()
