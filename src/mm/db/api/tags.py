@@ -58,16 +58,67 @@ class TagsApi(DbApi):
         )
 
     async def bulk_add(self, media_ids: list[int], tag_names: list[str]) -> int:
-        tags = [await self.get_or_create(n) for n in tag_names]
-        count = 0
-        for mid in media_ids:
-            for t in tags:
-                try:
-                    await self.objects.create(MediaTagModel, media=mid, tag=t.id)
-                    count += 1
-                except peewee.IntegrityError:
-                    pass
-        return count
+        """Bulk-tag many media with many tags. Was O(M*N) round-trips
+        (one INSERT per (media, tag) pair plus per-name get_or_create);
+        now uses 2 SELECTs + at most 2 INSERTs total regardless of size."""
+        if not media_ids or not tag_names:
+            return 0
+
+        names = list({normalise_tag(n) for n in tag_names if n})
+        if not names:
+            return 0
+
+        # Single SELECT for existing tags
+        existing = {
+            t.name: t
+            for t in await self.objects.fetchall(
+                TagModel.select().where(TagModel.name.in_(names))
+            )
+        }
+        # Single INSERT for missing tags
+        missing = [n for n in names if n not in existing]
+        if missing:
+            await self.objects.execute(
+                TagModel.insert_many(
+                    [{"name": n, "source": TagSource.MANUAL.value} for n in missing]
+                ).on_conflict_ignore()
+            )
+            for t in await self.objects.fetchall(
+                TagModel.select().where(TagModel.name.in_(missing))
+            ):
+                existing[t.name] = t
+
+        tag_ids = [t.id for t in existing.values()]
+
+        # Count pre-existing pairs so the caller knows how many were really added
+        before = await self.objects.count(
+            MediaTagModel.select().where(
+                MediaTagModel.media.in_(media_ids)
+                & MediaTagModel.tag.in_(tag_ids)
+            )
+        )
+        # Single INSERT for the M*N cross product
+        rows = [{"media": mid, "tag": tid} for mid in media_ids for tid in tag_ids]
+        try:
+            await self.objects.execute(
+                MediaTagModel.insert_many(rows).on_conflict_ignore()
+            )
+        except peewee.IntegrityError:
+            # Fallback for backends without ON CONFLICT
+            for mid in media_ids:
+                for tid in tag_ids:
+                    try:
+                        await self.objects.create(MediaTagModel, media=mid, tag=tid)
+                    except peewee.IntegrityError:
+                        pass
+
+        after = await self.objects.count(
+            MediaTagModel.select().where(
+                MediaTagModel.media.in_(media_ids)
+                & MediaTagModel.tag.in_(tag_ids)
+            )
+        )
+        return max(0, after - before)
 
     async def bulk_remove(self, media_ids: list[int], tag_names: list[str]) -> int:
         tags = [await self.get_by_name(n) for n in tag_names]

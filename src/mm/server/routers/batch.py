@@ -62,7 +62,8 @@ async def batch_update_metadata(
     body: BatchMetadataBody,
     _u: User | None = Depends(get_current_user),
 ) -> BatchAffected:
-    """Apply the same metadata patch (date/gps/location) to many media."""
+    """Apply the same metadata patch (date/gps/location) to many media in
+    a single round-trip (2 SQL statements regardless of size)."""
     db = get_db(request)
     patch = {
         k: v
@@ -71,9 +72,5 @@ async def batch_update_metadata(
     }
     if not patch or not body.media_ids:
         return BatchAffected(affected=0)
-    affected = 0
-    for mid in body.media_ids:
-        result = await db.metadata.update(mid, **patch)
-        if result is not None:
-            affected += 1
+    affected = await db.metadata.bulk_update(body.media_ids, **patch)
     return BatchAffected(affected=affected)
