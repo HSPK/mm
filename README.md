@@ -80,6 +80,13 @@ The full documentation site includes:
 - [Architecture notes](https://hspk.github.io/mm/architecture/overview/)
 - [Developer setup](https://hspk.github.io/mm/development/setup/)
 
+## Native iOS / macOS app
+
+A SwiftUI client targeting iOS 17+ and macOS 14+ lives under [`ios/`](./ios).
+It's a separate Swift codebase that talks to this server over HTTP and
+shares no code with the web frontend (by design — native UI). See
+[ios/README.md](./ios/README.md) for build instructions.
+
 ## License
 
 MM is available under the [PolyForm Noncommercial License 1.0.0](LICENSE).

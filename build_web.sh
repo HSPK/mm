@@ -7,10 +7,10 @@ cd "$ROOT"
 
 echo "==> Installing web dependencies..."
 cd web
-npm install
+bun install --frozen-lockfile
 
 echo "==> Building frontend..."
-npm run build
+bun run build
 cd ..
 
 echo "==> Copying web/dist -> src/mm/_web_dist..."

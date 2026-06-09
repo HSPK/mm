@@ -28,17 +28,15 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          bun-version: latest
 
       - name: Build frontend
         run: |
-          npm ci --prefix web
-          npm --prefix web run build
+          bun install --cwd web --frozen-lockfile
+          bun run --cwd web build
 
       - name: Verify frontend bundle
         run: |
