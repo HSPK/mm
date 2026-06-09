@@ -1,116 +1,78 @@
-export interface Media {
-    id: number
-    filename: string
-    extension: string
-    media_type: string
-    file_size: number
-    rating: number
-    width?: number
-    height?: number
-    date_taken?: string | null
-    camera_model?: string | null
-    duration?: number | null
-    gps_lat?: number | null
-    gps_lon?: number | null
-    location_label?: string | null
-    location_city?: string | null
-    location_country?: string | null
-    deleted_at?: string | null
-}
+import type { components } from "./schema"
 
-export interface MediaMetadata {
-    date_taken: string | null
-    camera_make: string | null
-    camera_model: string | null
-    lens_model: string | null
-    focal_length: number | null
-    aperture: number | null
-    shutter_speed: string | null
-    iso: number | null
-    width: number | null
-    height: number | null
-    duration: number | null
-    gps_lat: number | null
-    gps_lon: number | null
-    location_label?: string | null
-    location_country?: string | null
-    location_city?: string | null
-    orientation: number | null
-}
+type Schemas = components["schemas"]
 
-export interface MediaTag {
-    name: string
-    source: string
-    confidence: number | null
-}
+// ─── Request bodies ──────────────────────────────────────
+// Auto-synced from FastAPI via `bun run gen:api`.
 
-export interface MediaDetail {
-    id: number
-    path: string
-    filename: string
-    extension: string
-    media_type: string
-    file_size: number
-    file_hash: string
-    rating: number
-    scanned_at: string | null
-    metadata: MediaMetadata | null
-    tags: MediaTag[]
-}
+export type LoginBody = Schemas["LoginBody"]
+export type CreateAlbumBody = Schemas["CreateAlbumBody"]
+export type AlbumMediaBody = Schemas["AlbumMediaBody"]
+export type RatingBody = Schemas["RatingBody"]
+export type TagsBody = Schemas["TagsBody"]
+export type UpdateMetadataBody = Schemas["UpdateMetadataBody"]
+export type BatchDeleteBody = Schemas["BatchDeleteBody"]
+export type BatchTagBody = Schemas["BatchTagBody"]
+export type BatchRatingBody = Schemas["BatchRatingBody"]
+export type SwitchLibraryBody = Schemas["SwitchLibraryBody"]
 
-export interface PaginatedMedia {
-    items: Media[]
-    total: number
-    page: number
-    per_page: number
-    pages: number
-}
+// ─── Response shapes ─────────────────────────────────────
+// All response models are typed by the server now (every route declares
+// response_model=...). These aliases mean changing the wire format anywhere
+// shows up as a TypeScript error here.
 
+export type Media = Schemas["MediaBrief"]
+export type MediaMetadata = Schemas["MediaMetadata"]
+export type MediaTag = Schemas["MediaTag"]
+export type MediaDetail = Schemas["MediaDetail"]
+export type PaginatedMedia = Schemas["PaginatedMedia"]
+export type RatingResponse = Schemas["RatingResponse"]
+export type BatchAffected = Schemas["BatchAffected"]
+export type StatusMessage = Schemas["StatusMessage"]
+
+export type User = Schemas["UserSummary"]
+export type LoginResponse = Schemas["LoginResponse"]
+export type AuthStatus = Schemas["AuthStatus"]
+
+export type AlbumSummary = Schemas["AlbumSummary"]
+export type CreatedAlbum = Schemas["CreatedAlbum"]
+export type AlbumActionResponse = Schemas["AlbumActionResponse"]
+
+export type LibraryInfo = Schemas["LibraryInfo"]
+export type SwitchLibraryResponse = Schemas["SwitchLibraryResponse"]
+
+export type SmartAlbum = Schemas["SmartAlbumEntry"]
+export type SmartAlbumsResponse = Schemas["SmartAlbumsResponse"]
+
+export type CameraStats = Schemas["CameraStats"]
+export type TagStats = Schemas["TagStats"]
+export type LibraryStats = Schemas["LibraryStats"]
+export type TimelineEntry = Schemas["TimelineEntry"]
+export type TypeDistribution = Schemas["TypeDistribution"]
+export type DuplicateGroup = Schemas["DuplicateGroup"]
+export type GeoPoint = Schemas["GeoPoint"]
+
+export type UserDetail = Schemas["UserDetail"]
+export type SmartAlbumDefinition = Schemas["SmartAlbumDefinition"]
+export type SmartAlbumResetResult = Schemas["SmartAlbumResetResult"]
+export type StatusOk = Schemas["StatusOk"]
+
+export type BatchMetadataBody = Schemas["BatchMetadataBody"]
+
+// ─── Legacy token shape kept for compatibility ───────────
+// Used by some auth flows that pre-date LoginResponse. Will be removed once
+// all call sites use LoginResponse.token instead.
 export interface Token {
     access_token: string
     token_type: string
 }
 
-export interface LoginBody {
-    username: string
-    password: string
-}
+// ─── Tag (compat with existing UI) ───────────────────────
+// `Tag` is shaped like the /tags endpoint payload — alias of TagStats.
+export type Tag = Schemas["TagStats"]
 
-export interface Tag {
-    name: string
-    count: number
-}
-
-export interface User {
-    id: number
-    username: string
-    display_name: string
-    is_admin: boolean
-}
-
-// ─── Smart Albums ─────────────────────────────────────────
-
-export interface SmartAlbum {
-    key: string
-    title: string
-    subtitle?: string
-    count?: number
-    cover_id?: number | null
-    icon?: string
-    color?: string
-    filters: Record<string, unknown>
-    search_text?: string
-    festival_id?: string
-}
-
-export interface SmartAlbumsResponse {
-    library: SmartAlbum[]
-    tags: SmartAlbum[]
-    cameras: SmartAlbum[]
-    festivals: SmartAlbum[]
-    years: SmartAlbum[]
-    places: SmartAlbum[]
-}
+// ─── UI-only types (not wire payloads) ───────────────────
+// These describe what the UI builds locally, not what the server sends.
 
 export type SectionId = "tags" | "cameras" | "festivals" | "years" | "places"
 
