@@ -157,7 +157,10 @@ async def list_trash(
 ) -> list[MediaBrief]:
     db = get_db(request)
     items = await db.media.list_trash()
-    return [serialize_media_brief(m) for m in items]
+    # Batch-fetch metadata so date/camera/dimensions render in the trash view too.
+    media_ids = [m.id for m in items if m.id]
+    meta_map = await db.metadata.get_for_ids(media_ids) if media_ids else {}
+    return [serialize_media_brief(m, meta_map.get(m.id)) for m in items]
 
 
 @router.delete("/trash", response_model=StatusMessage)

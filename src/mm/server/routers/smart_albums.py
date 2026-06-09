@@ -7,7 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from mm.db.dto import User
-from mm.server.dependencies import get_current_user, get_db
+from mm.library.settings import LibraryConfig
+from mm.server.dependencies import get_current_user, get_db, get_library_config
 from mm.server.schemas import (
     SmartAlbumBody,
     SmartAlbumDefinition,
@@ -16,9 +17,14 @@ from mm.server.schemas import (
     SmartAlbumsResponse,
     StatusOk,
 )
-from mm.server.smart_albums import build_smart_albums
+from mm.server.smart_albums import build_smart_albums_cached, invalidate_smart_albums_cache
 
 router = APIRouter(prefix="/api/smart-albums", tags=["smart-albums"])
+
+
+def _library_id(request: Request) -> str | None:
+    config: LibraryConfig | None = getattr(request.app.state, "config", None)
+    return config.library_id if config else None
 
 
 # ── Resolved list (consumed by the frontend) ──────────────
@@ -31,7 +37,8 @@ async def get_smart_albums(
 ) -> SmartAlbumsResponse:
     """Return all smart album sections with covers resolved server-side."""
     db = get_db(request)
-    return SmartAlbumsResponse.model_validate(await build_smart_albums(db))
+    payload = await build_smart_albums_cached(db, _library_id(request))
+    return SmartAlbumsResponse.model_validate(payload)
 
 
 # ── Raw definitions CRUD ──────────────────────────────────
@@ -75,6 +82,7 @@ async def create_definition(
         result = await db.smart_album.create(data)
     except Exception as exc:
         raise HTTPException(400, str(exc)) from exc
+    invalidate_smart_albums_cache(_library_id(request))
     return SmartAlbumDefinition.model_validate(result)
 
 
@@ -91,6 +99,7 @@ async def update_definition(
     result = await db.smart_album.update(album_id, data)
     if not result:
         raise HTTPException(404, "Smart album not found")
+    invalidate_smart_albums_cache(_library_id(request))
     return SmartAlbumDefinition.model_validate(result)
 
 
@@ -105,6 +114,7 @@ async def delete_definition(
     ok = await db.smart_album.delete(album_id)
     if not ok:
         raise HTTPException(404, "Smart album not found or is a system album")
+    invalidate_smart_albums_cache(_library_id(request))
     return StatusOk()
 
 
@@ -119,6 +129,7 @@ async def toggle_definition(
     result = await db.smart_album.toggle(album_id)
     if not result:
         raise HTTPException(404, "Smart album not found")
+    invalidate_smart_albums_cache(_library_id(request))
     return SmartAlbumDefinition.model_validate(result)
 
 
@@ -130,4 +141,5 @@ async def reset_definitions(
     """Delete all smart album definitions and re-seed defaults."""
     db = get_db(request)
     count = await db.smart_album.reset()
+    invalidate_smart_albums_cache(_library_id(request))
     return SmartAlbumResetResult(seeded=count)

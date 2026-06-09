@@ -17,12 +17,31 @@ album, and returns structured section data ready for the frontend.
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import date, timedelta
 from typing import Any
 
 from lunar_python import Lunar
 
 from mm.db.client import AsyncDBClient
+
+# ═══════════════════════════════════════════════════════════
+# Result cache — smart-album computation hits 7 DB queries in
+# parallel and then expands generators; for any user repeatedly
+# opening Albums it pays to memoise for a few seconds.
+# ═══════════════════════════════════════════════════════════
+
+_SA_CACHE_TTL_SEC = 20.0
+_sa_cache: dict[str, tuple[float, dict[str, list[dict[str, Any]]]]] = {}
+
+
+def invalidate_smart_albums_cache(library_id: str | None = None) -> None:
+    """Clear the cached smart-album response. Called by routes that mutate
+    library state (tag rename, album CRUD, definitions changed, etc.)."""
+    if library_id is None:
+        _sa_cache.clear()
+    else:
+        _sa_cache.pop(library_id, None)
 
 # ═══════════════════════════════════════════════════════════
 # Festival date helpers
@@ -334,6 +353,27 @@ async def build_smart_albums(db: AsyncDBClient) -> dict[str, Any]:
     5. Batch-resolve cover images for everything.
     6. Return ``{library: [...], tags: [...], ...}`` ready for the frontend.
     """
+    return await _build_smart_albums_uncached(db)
+
+
+async def build_smart_albums_cached(
+    db: AsyncDBClient, library_id: str | None
+) -> dict[str, list[dict[str, Any]]]:
+    """TTL-cached variant. Cache key is the library_id so multi-library
+    setups don't cross-contaminate. Falls back to uncached when no
+    library_id (e.g. an open-access deployment that never set one)."""
+    if library_id is None:
+        return await _build_smart_albums_uncached(db)
+    now = time.monotonic()
+    hit = _sa_cache.get(library_id)
+    if hit is not None and now - hit[0] < _SA_CACHE_TTL_SEC:
+        return hit[1]
+    result = await _build_smart_albums_uncached(db)
+    _sa_cache[library_id] = (now, result)
+    return result
+
+
+async def _build_smart_albums_uncached(db: AsyncDBClient) -> dict[str, Any]:
 
     # ── 1. Load definitions ──
     definitions = await db.smart_album.list()
