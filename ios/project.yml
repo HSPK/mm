@@ -1,0 +1,84 @@
+# xcodegen v2.x configuration. After editing, run `xcodegen generate` to
+# regenerate MM.xcodeproj. We don't commit the .xcodeproj — this file is the
+# single source of truth.
+name: MM
+options:
+  bundleIdPrefix: com.hspk.mm
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER_PREFIX).$(TARGET_NAME)
+    GENERATE_INFOPLIST_FILE: NO
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+
+targets:
+  MM-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: MM
+        excludes:
+          - "**/*.entitlements"
+          - "Info-macOS.plist"
+    info:
+      path: MM/Info-iOS.plist
+      properties:
+        CFBundleDisplayName: MM
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+  MM-macOS:
+    type: application
+    platform: macOS
+    sources:
+      - path: MM
+        excludes:
+          - "Info-iOS.plist"
+    info:
+      path: MM/Info-macOS.plist
+      properties:
+        CFBundleDisplayName: MM
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.photography
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSHumanReadableCopyright: ""
+    settings:
+      base:
+        ENABLE_APP_SANDBOX: YES
+    entitlements:
+      path: MM/MM-macOS.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-only: true

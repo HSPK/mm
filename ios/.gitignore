@@ -1,0 +1,24 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserstate
+xcuserdata/
+*.swp
+.DS_Store
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# CocoaPods (unused but listed for completeness)
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Build outputs
+*.ipa
+*.dSYM.zip
+*.dSYM
