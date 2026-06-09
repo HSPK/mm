@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# transient artifact from `bun run gen:api`
+openapi.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
