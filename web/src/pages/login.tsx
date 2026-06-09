@@ -1,10 +1,8 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
+import { ImageIcon, Lock, User } from "lucide-react"
 import { useAuthStore } from "@/stores/auth"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Loader2 } from "lucide-react"
 
 export default function LoginPage() {
     const navigate = useNavigate()
@@ -19,50 +17,67 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-background p-4">
-            <Card className="w-full max-w-sm">
-                <CardHeader className="text-center">
-                    <CardTitle>MM</CardTitle>
-                    <p className="text-sm text-muted-foreground">Sign in to your media library</p>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="space-y-2">
-                            <label htmlFor="username" className="text-sm font-medium">
-                                Username
-                            </label>
-                            <Input
+        <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="w-full max-w-[360px] space-y-10">
+                {/* App identity — Apple sign-in style: large icon, name, single-line tagline */}
+                <div className="flex flex-col items-center text-center space-y-4">
+                    <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px] bg-gradient-to-br from-primary to-primary/70 elevation-2">
+                        <ImageIcon className="h-9 w-9 text-white" strokeWidth={1.75} />
+                    </div>
+                    <div className="space-y-1">
+                        <h1 className="text-[28px] font-bold tracking-tight">Sign in to MM</h1>
+                        <p className="text-[15px] text-muted-foreground">Your personal media library</p>
+                    </div>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    {/* Apple-style joined field group: rounded card containing inputs separated by hairlines */}
+                    <div className="bg-card rounded-2xl overflow-hidden elevation-1">
+                        <div className="flex items-center px-4">
+                            <User className="h-5 w-5 text-muted-foreground/60 shrink-0" strokeWidth={1.75} />
+                            <input
                                 id="username"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="Enter username"
+                                placeholder="Apple ID or username"
                                 autoComplete="username"
                                 autoFocus
+                                aria-label="Username"
+                                className="flex-1 bg-transparent h-12 px-3 text-[15px] placeholder:text-muted-foreground/60 focus:outline-none"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <label htmlFor="password" className="text-sm font-medium">
-                                Password
-                            </label>
-                            <Input
+                        <div className="border-t border-border" />
+                        <div className="flex items-center px-4">
+                            <Lock className="h-5 w-5 text-muted-foreground/60 shrink-0" strokeWidth={1.75} />
+                            <input
                                 id="password"
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter password"
+                                placeholder="Password"
                                 autoComplete="current-password"
+                                aria-label="Password"
+                                aria-invalid={error ? true : undefined}
+                                className="flex-1 bg-transparent h-12 px-3 text-[15px] placeholder:text-muted-foreground/60 focus:outline-none"
                             />
                         </div>
-                        {error && (
-                            <p className="text-sm text-destructive text-center">{error}</p>
-                        )}
-                        <Button type="submit" className="w-full" disabled={loading}>
-                            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Sign In
-                        </Button>
-                    </form>
-                </CardContent>
-            </Card>
+                    </div>
+
+                    {error && (
+                        <p className="px-2 text-[13px] text-destructive" role="alert">{error}</p>
+                    )}
+
+                    <Button
+                        type="submit"
+                        size="lg"
+                        className="w-full"
+                        loading={loading}
+                        disabled={!username || !password}
+                    >
+                        {loading ? "Signing in…" : "Sign in"}
+                    </Button>
+                </form>
+            </div>
         </div>
     )
 }

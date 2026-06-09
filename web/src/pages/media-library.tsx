@@ -1,25 +1,29 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from "react"
-import { useMediaStore } from "@/stores/media"
-import { Button } from "@/components/ui/button"
-import { Loader2, ImageOff } from "lucide-react"
+import { ImageOff } from "lucide-react"
+import { useMediaQueryStore } from "@/stores/media-query"
+import { useSelectionStore } from "@/stores/media-selection"
+import { useViewPrefsStore } from "@/stores/view-prefs"
+import { EmptyState } from "@/components/ui/empty-state"
+import { Spinner } from "@/components/ui/spinner"
 import { GalleryGrid } from "@/components/gallery"
+import { MediaGridSkeleton } from "@/components/gallery/media-grid-skeleton"
 import { MediaDetailPanel } from "@/components/media-detail"
 import { useDetailPanel } from "@/hooks/use-detail-panel"
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll"
 import { usePinchZoom } from "@/hooks/use-pinch-zoom"
 import { groupByDay, groupByMonth } from "@/lib/format"
 
-// ─── component ────────────────────────────────────────────
 export default function MediaLibraryPage() {
     const {
         items, total, loading, hasMore, error,
         filters, fetchMedia, resetFilters,
-        viewMode, dateGroupMode,
-        thumbSize, setThumbSize,
         removeItem,
+    } = useMediaQueryStore()
+    const { viewMode, dateGroupMode, thumbSize, setThumbSize } = useViewPrefsStore()
+    const {
         selectionMode, selectedIds,
         enterSelectionMode, toggleSelected,
-    } = useMediaStore()
+    } = useSelectionStore()
 
     const sentinelRef = useRef<HTMLDivElement>(null)
     const galleryRef = useRef<HTMLDivElement>(null)
@@ -102,7 +106,6 @@ export default function MediaLibraryPage() {
 
     return (
         <div className="pb-20">
-            {/* ── Gallery ── */}
             <div ref={galleryRef} className="px-2 sm:px-4 pt-2">
                 {error && (
                     <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
@@ -110,15 +113,17 @@ export default function MediaLibraryPage() {
                     </div>
                 )}
 
+                {loading && items.length === 0 && (
+                    <MediaGridSkeleton />
+                )}
+
                 {!loading && items.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-                        <ImageOff className="h-10 w-10 mb-3 opacity-40" />
-                        <p className="text-base font-medium mb-1">No media found</p>
-                        <p className="text-sm text-muted-foreground/60 mb-5">Try adjusting your filters</p>
-                        <Button variant="secondary" size="sm" className="rounded-xl" onClick={resetFilters}>
-                            Clear filters
-                        </Button>
-                    </div>
+                    <EmptyState
+                        icon={ImageOff}
+                        title="No media found"
+                        description="Try adjusting your filters or import new media."
+                        action={{ label: "Clear filters", onClick: resetFilters }}
+                    />
                 )}
 
                 {groups
@@ -159,9 +164,9 @@ export default function MediaLibraryPage() {
 
                 <div ref={sentinelRef} className="h-1" />
 
-                {loading && (
+                {loading && items.length > 0 && (
                     <div className="flex justify-center py-10">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/40" />
+                        <Spinner size="md" className="text-muted-foreground/40" />
                     </div>
                 )}
 

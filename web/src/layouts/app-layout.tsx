@@ -2,7 +2,8 @@ import { useRef, useState, useEffect, useLayoutEffect, useCallback, type TouchEv
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { FloatingSearchBar } from "@/components/floating-search-bar"
-import { useMediaStore } from "@/stores/media"
+import { useMediaQueryStore } from "@/stores/media-query"
+import { useSelectionStore } from "@/stores/media-selection"
 import { useAlbumSectionStore } from "@/stores/album-section"
 import { BottomBar } from "@/components/bottom-bar"
 import { navItems } from "@/components/navigation/nav-items"
@@ -40,7 +41,8 @@ export default function AppLayout() {
         setLibraryScrollEl(el)
     }, [])
 
-    const { activeLabel: currentLabel, filters, selectionMode, exitSelectionMode, resetFilters } = useMediaStore()
+    const { activeLabel: currentLabel, filters, resetFilters } = useMediaQueryStore()
+    const { selectionMode, exitSelectionMode } = useSelectionStore()
     const isDeletedView = filters.deleted
     useEffect(() => {
         if (isTabRoute) return

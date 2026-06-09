@@ -1,40 +1,99 @@
 @import "tailwindcss";
 
+/* ── Apple HIG-inspired theme tokens ─────────────────────── */
 @theme {
-  /* Default colors — overridden at runtime by theme store via inline styles on :root */
-  --color-background: #09090b;
-  --color-foreground: #fafafa;
-  --color-card: #0a0a0a;
-  --color-card-foreground: #fafafa;
-  --color-popover: #0a0a0a;
-  --color-popover-foreground: #fafafa;
-  --color-primary: #3b82f6;
+  /* Default dark palette — overridden at runtime by theme store */
+  /* Apple's dark mode uses near-pure-black backgrounds with elevated card layers */
+  --color-background: #000000;
+  --color-foreground: #f5f5f7;
+  --color-card: #1c1c1e;
+  --color-card-foreground: #f5f5f7;
+  --color-popover: #1c1c1e;
+  --color-popover-foreground: #f5f5f7;
+  /* systemBlue (dark) */
+  --color-primary: #0a84ff;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #27272a;
-  --color-secondary-foreground: #fafafa;
-  --color-muted: #27272a;
-  --color-muted-foreground: #a1a1aa;
-  --color-accent: #27272a;
-  --color-accent-foreground: #fafafa;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #fafafa;
-  --color-border: #27272a;
-  --color-input: #27272a;
-  --color-ring: #3b82f6;
-  --radius: 0.5rem;
+  /* Apple "secondary system fill" */
+  --color-secondary: #2c2c2e;
+  --color-secondary-foreground: #f5f5f7;
+  --color-muted: #1c1c1e;
+  --color-muted-foreground: #98989d;
+  --color-accent: #2c2c2e;
+  --color-accent-foreground: #f5f5f7;
+  /* systemRed (dark) */
+  --color-destructive: #ff453a;
+  --color-destructive-foreground: #ffffff;
+  /* Apple "separator" — almost invisible */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: #1c1c1e;
+  --color-ring: #0a84ff;
+  --radius: 0.875rem;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* San Francisco system font stack — falls back to Inter / system */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+               "Helvetica Neue", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Apple-style motion curves */
+  --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-apple-snappy: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Borders are subtle separators — keep the global default so `border` utility
+   uses our separator color (not currentColor). */
 * {
   border-color: var(--color-border);
 }
 
-body {
+html, body {
   background-color: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11"; /* opt-in SF stylistic alternates if available */
+  text-rendering: optimizeLegibility;
 }
+
+body {
+  letter-spacing: -0.011em; /* Apple's tight tracking */
+}
+
+/* ── Apple Materials (HIG-inspired translucency layers) ───
+   Use these on toolbars, sidebars, sheets, and popovers for the
+   characteristic "glassy" iOS/macOS look. */
+.material-bar {
+  background-color: color-mix(in srgb, var(--color-background) 72%, transparent);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+}
+.material-thick {
+  background-color: color-mix(in srgb, var(--color-background) 86%, transparent);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+}
+.material-thin {
+  background-color: color-mix(in srgb, var(--color-background) 56%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+.material-ultrathin {
+  background-color: color-mix(in srgb, var(--color-background) 36%, transparent);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+
+/* Hairline separator — Apple's 1px translucent rule used on toolbars */
+.hairline-b {
+  box-shadow: 0 1px 0 0 var(--color-border);
+}
+.hairline-t {
+  box-shadow: 0 -1px 0 0 var(--color-border);
+}
+
+/* Apple-style elevation — gentle, almost no shadow */
+.elevation-1 { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 1px rgba(0, 0, 0, 0.03); }
+.elevation-2 { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04); }
+.elevation-3 { box-shadow: 0 10px 40px rgba(0, 0, 0, 0.14), 0 2px 4px rgba(0, 0, 0, 0.06); }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
@@ -78,4 +137,69 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Skeleton shimmer sweep */
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
 
+/* Toast slide-in */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(0.5rem) scale(0.96); }
+}
+
+
+
+/* ── Leaflet map pins ────────────────────────────────────── */
+.leaflet-container {
+  font-family: inherit;
+  background: hsl(var(--background));
+}
+.leaflet-popup-content-wrapper {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-radius: 12px;
+}
+.leaflet-popup-tip {
+  background: hsl(var(--background));
+}
+.mm-pin-wrap {
+  background: transparent;
+}
+.mm-pin {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: white;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.mm-pin:hover {
+  transform: scale(1.1);
+}
+.mm-pin::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: white;
+  z-index: -1;
+}
+.mm-pin img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

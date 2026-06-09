@@ -1,32 +1,56 @@
-import { useState, memo } from "react"
+import { memo, useState } from "react"
 import { cn } from "@/lib/utils"
+import { config } from "@/lib/config"
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api"
-// Check if API is cross-origin (needs credentials attribute)
-const IS_CROSS_ORIGIN = API_BASE.startsWith("http")
+const IS_CROSS_ORIGIN = config.apiBaseUrl.startsWith("http")
 
 interface AuthImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
-    /** API path, e.g. "/media/123/thumbnail" — uses cookie auth */
     apiSrc: string | null
+    /**
+     * Optional fallback element shown when the source fails to load. Defaults
+     * to a neutral muted block — pass `null` to render nothing.
+     */
+    fallback?: React.ReactNode
 }
 
 /**
- * An <img> that loads via native browser image loading with cookie authentication.
- * More efficient than fetching blobs - browser handles request queuing.
+ * Cookie-authenticated <img>. Shows an animated shimmer placeholder while
+ * loading and a customizable fallback on error.
  */
-export const AuthImage = memo(function AuthImage({ apiSrc, className, alt, loading = "lazy", ...rest }: AuthImageProps) {
+export const AuthImage = memo(function AuthImage({
+    apiSrc,
+    className,
+    alt,
+    loading = "lazy",
+    fallback,
+    ...rest
+}: AuthImageProps) {
     const [loaded, setLoaded] = useState(false)
     const [error, setError] = useState(false)
 
     if (!apiSrc || error) {
-        return <div className={cn("bg-muted", className)} />
+        if (fallback !== undefined) {
+            return <>{fallback}</>
+        }
+        return <div className={cn("bg-muted", className)} aria-hidden />
     }
 
-    const src = apiSrc.startsWith("/") ? `${API_BASE}${apiSrc}` : apiSrc
+    const src = apiSrc.startsWith("/") ? `${config.apiBaseUrl}${apiSrc}` : apiSrc
 
     return (
         <>
-            {!loaded && <div className={cn("bg-muted absolute inset-0", className)} />}
+            {!loaded && (
+                <div
+                    aria-hidden
+                    className={cn(
+                        "absolute inset-0 bg-muted/60 overflow-hidden",
+                        "before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.5s_infinite]",
+                        "before:bg-gradient-to-r before:from-transparent before:via-white/[0.06] before:to-transparent",
+                        "motion-reduce:before:animate-none",
+                        className,
+                    )}
+                />
+            )}
             <img
                 src={src}
                 alt={alt ?? ""}
