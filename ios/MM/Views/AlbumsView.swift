@@ -166,7 +166,7 @@ struct AlbumCard: View {
     private let repo = MediaRepository.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 Group {
                     if let cover = album.coverId {
@@ -176,42 +176,37 @@ struct AlbumCard: View {
                             Color.secondary.opacity(0.12)
                             Image(systemName: iconName)
                                 .font(.system(size: 32))
-                                .foregroundStyle(.secondary.opacity(0.5))
+                                .foregroundStyle(.secondary.opacity(0.55))
                         }
                     }
                 }
-                .aspectRatio(4.0/3.0, contentMode: .fill)
+                .aspectRatio(1, contentMode: .fill)
                 .clipped()
                 .clipShape(.rect(cornerRadius: 14))
-                .overlay(
-                    LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom)
-                        .clipShape(.rect(cornerRadius: 14))
-                )
+                .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+                #if os(iOS)
+                .hoverEffect(.lift)
+                #endif
+            }
 
+            VStack(alignment: .leading, spacing: 1) {
+                Text(album.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
                 if let count = album.count {
                     Text(count.formatted(.number))
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background(.black.opacity(0.55), in: .capsule)
-                        .foregroundStyle(.white)
-                        .padding(8)
-                }
-            }
-            .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(album.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                } else if let subtitle = album.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .foregroundStyle(.white)
-                    if let subtitle = album.subtitle, !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.75))
-                            .lineLimit(1)
-                    }
                 }
-                .padding(10)
             }
+            .padding(.horizontal, 2)
         }
     }
 
