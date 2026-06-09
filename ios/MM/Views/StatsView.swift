@@ -73,6 +73,7 @@ struct StatsView: View {
                 }
             }
         }
+        .refreshable { await load() }
     }
 
     private func load() async {
