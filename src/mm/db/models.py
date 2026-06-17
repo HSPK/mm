@@ -201,6 +201,14 @@ class LibraryConfigModel(BaseModel):
         table_name = "library_config"
 
 
+class SchemaMigrationModel(BaseModel):
+    name = CharField(max_length=128, primary_key=True)
+    applied_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "schema_migrations"
+
+
 ALL_TABLES = [
     MediaModel,
     MetadataModel,
@@ -211,4 +219,5 @@ ALL_TABLES = [
     AlbumMediaModel,
     SmartAlbumModel,
     LibraryConfigModel,
+    SchemaMigrationModel,
 ]

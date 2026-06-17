@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from mm.db.dto import Media
@@ -109,6 +110,68 @@ def test_count_and_stats(db: DBClient):
 
     dist = db.stats.type_distribution()
     assert dist["video"] == 1
+
+
+def test_db_client_migrates_legacy_schema(tmp_path: Path):
+    db_path = tmp_path / "legacy.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE media (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                filename TEXT NOT NULL,
+                extension VARCHAR(16) NOT NULL,
+                media_type VARCHAR(16) NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                file_hash VARCHAR(64) NOT NULL DEFAULT '',
+                rating INTEGER NOT NULL DEFAULT 0,
+                created_at DATETIME,
+                modified_at DATETIME,
+                scanned_at DATETIME NOT NULL
+            );
+            CREATE TABLE smart_albums (
+                id INTEGER PRIMARY KEY,
+                key VARCHAR(256) NOT NULL UNIQUE,
+                section VARCHAR(64),
+                title VARCHAR(256) NOT NULL,
+                subtitle VARCHAR(512),
+                icon VARCHAR(64),
+                color VARCHAR(64),
+                filters TEXT,
+                generator VARCHAR(64),
+                generator_config TEXT,
+                position INTEGER,
+                is_system INTEGER,
+                enabled INTEGER,
+                created_at DATETIME,
+                updated_at DATETIME
+            );
+            INSERT INTO smart_albums (
+                key, section, title, subtitle, icon, color, filters, generator_config,
+                position, is_system, enabled
+            ) VALUES (
+                'legacy', 'library', 'Legacy', NULL, 'images', NULL, '{}', '{}', 0, 1, 1
+            );
+            """
+        )
+
+    client = DBClient(db_path)
+    client.close()
+
+    with sqlite3.connect(db_path) as conn:
+        media_columns = {row[1] for row in conn.execute("PRAGMA table_info(media)")}
+        color = conn.execute("SELECT color FROM smart_albums WHERE key = 'legacy'").fetchone()[0]
+        migrations = {
+            row[0] for row in conn.execute("SELECT name FROM schema_migrations ORDER BY name")
+        }
+
+    assert "deleted_at" in media_columns
+    assert color == ""
+    assert migrations == {
+        "0001_add_media_deleted_at",
+        "0002_normalize_smart_album_schema",
+    }
 
 
 def test_library_id_generated_on_first_read(db: DBClient):

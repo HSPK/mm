@@ -317,7 +317,7 @@ def _build_static_album(
         "title": defn["title"],
         "subtitle": defn.get("subtitle") or None,
         "icon": defn["icon"],
-        "color": defn.get("color") or None,
+        "color": defn.get("color") or "",
         "filters": filters,
         "search_text": defn["title"].lower(),
     }

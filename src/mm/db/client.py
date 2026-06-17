@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
 
 import peewee_aio
-from peewee import SQL
 
 from mm.db.api import (
     AlbumsApi,
@@ -21,6 +19,7 @@ from mm.db.api import (
     UsersApi,
 )
 from mm.db.backend import DatabaseTarget
+from mm.db.migrations import run_migrations
 from mm.db.models import (
     ALL_TABLES,
     database,
@@ -75,11 +74,8 @@ class AsyncDBClient:
 
     async def init_db(self) -> None:
         await self.manager.create_tables(*ALL_TABLES, safe=True)
-        if self.target.backend == "sqlite":
-            with suppress(Exception):
-                await self.manager.execute(
-                    SQL("ALTER TABLE media ADD COLUMN deleted_at DATETIME DEFAULT NULL")
-                )
+        with self.manager.allow_sync():
+            run_migrations(self.manager.pw_database, self.target.backend)
 
 
 if TYPE_CHECKING:

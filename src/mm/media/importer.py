@@ -24,17 +24,16 @@ class ImportPlanItem:
     reason: str = ""
 
 
-def build_dest_path(
+def build_template_values(
     media: Media,
     metadata: Metadata,
-    template: str,
-    dest_root: Path,
     default_date: datetime | None = None,
-) -> Path:
-    """Resolve a template into a concrete destination path."""
+) -> dict[str, object]:
+    """Build values supported by import path templates."""
     dt = metadata.date_taken or default_date or datetime.now()
+    original_name = Path(media.filename or media.path).stem
 
-    values = {
+    return {
         "year": dt.year,
         "month": dt.month,
         "day": dt.day,
@@ -43,8 +42,20 @@ def build_dest_path(
         "second": dt.second,
         "camera": metadata.camera_model or "unknown",
         "type": media.media_type.value,
+        "original_name": original_name,
         "ext": media.extension,
     }
+
+
+def build_dest_path(
+    media: Media,
+    metadata: Metadata,
+    template: str,
+    dest_root: Path,
+    default_date: datetime | None = None,
+) -> Path:
+    """Resolve a template into a concrete destination path."""
+    values = build_template_values(media, metadata, default_date)
 
     try:
         rel = template.format_map(values)

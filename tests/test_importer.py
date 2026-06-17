@@ -58,16 +58,24 @@ def test_build_dest_path_metadata_date_wins_over_default_date(tmp_path: Path):
     assert path == tmp_path / "2025-01-02.jpg"
 
 
+def test_build_dest_path_supports_original_name(tmp_path: Path):
+    media = Media(filename="IMG_0001.JPG", extension=".jpg")
+
+    path = build_dest_path(media, Metadata(), "{original_name}{ext}", tmp_path)
+
+    assert path == tmp_path / "IMG_0001.jpg"
+
+
 def test_build_dest_path_raises_structured_template_error(tmp_path: Path):
     media = Media(filename="ignored.jpg", extension=".jpg")
 
     with pytest.raises(ImportTemplateError) as exc:
-        build_dest_path(media, Metadata(), "{original_name}{ext}", tmp_path)
+        build_dest_path(media, Metadata(), "{unknown_name}{ext}", tmp_path)
 
     error = exc.value
     assert error.code.value == "import_template.format_failed"
-    assert error.details["template"] == "{original_name}{ext}"
-    assert "original_name" in error.details["error"]
+    assert error.details["template"] == "{unknown_name}{ext}"
+    assert "unknown_name" in error.details["error"]
     assert error.details["supported_fields"] == [
         "camera",
         "day",
@@ -75,6 +83,7 @@ def test_build_dest_path_raises_structured_template_error(tmp_path: Path):
         "hour",
         "minute",
         "month",
+        "original_name",
         "second",
         "type",
         "year",
