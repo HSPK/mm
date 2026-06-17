@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 
 from mm.config import get_config
+from mm.db.dto import Media
+from mm.db.models import MediaType
+from mm.db.sync_client import DBClient
 from mm.io import local_storage
+from mm.library.settings import LibraryConfig
+from mm.library.thumbnails import build_thumbnail_cache, thumbnail_cache_stats
 from mm.media.thumbnails import (
     cache_dir_for_library,
     get_thumbnail,
@@ -67,3 +72,80 @@ def test_same_library_and_media_id_reuses_cache(tmp_path: Path) -> None:
     first = get_thumbnail(str(src), media_id=1, size="sm", cache_dir=lib, storage=local_storage)
     second = get_thumbnail(str(src), media_id=1, size="sm", cache_dir=lib, storage=local_storage)
     assert first is not None and first == second
+
+
+def test_build_thumbnail_cache_and_stats(tmp_path: Path, db: DBClient) -> None:
+    library_root = tmp_path / "library"
+    library_root.mkdir()
+    source = library_root / "photo.jpg"
+    _make_image(source, (0, 128, 255))
+    db.library_config.set(LibraryConfig(library_root=library_root))
+    library_id = db.library_config.get().library_id
+    media_id = db.media.upsert(
+        Media(
+            path="photo.jpg",
+            filename="photo.jpg",
+            extension=".jpg",
+            media_type=MediaType.PHOTO,
+            file_size=source.stat().st_size,
+        )
+    )
+    cache_base = tmp_path / "thumbs"
+
+    result = build_thumbnail_cache(
+        db,
+        library_root,
+        library_id,
+        sizes=["sm"],
+        cache_base=cache_base,
+        storage=local_storage,
+    )
+    stats = thumbnail_cache_stats(library_id, cache_base=cache_base, storage=local_storage)
+
+    assert media_id > 0
+    assert result.total == 1
+    assert result.generated == 1
+    assert result.cached == 0
+    assert result.failed == 0
+    assert stats.file_count == 1
+    assert stats.total_size > 0
+
+
+def test_build_thumbnail_cache_reuses_fresh_cache(tmp_path: Path, db: DBClient) -> None:
+    library_root = tmp_path / "library"
+    library_root.mkdir()
+    source = library_root / "photo.jpg"
+    _make_image(source, (128, 0, 255))
+    db.library_config.set(LibraryConfig(library_root=library_root))
+    library_id = db.library_config.get().library_id
+    db.media.upsert(
+        Media(
+            path="photo.jpg",
+            filename="photo.jpg",
+            extension=".jpg",
+            media_type=MediaType.PHOTO,
+            file_size=source.stat().st_size,
+        )
+    )
+    cache_base = tmp_path / "thumbs"
+
+    build_thumbnail_cache(
+        db,
+        library_root,
+        library_id,
+        sizes=["sm"],
+        cache_base=cache_base,
+        storage=local_storage,
+    )
+    result = build_thumbnail_cache(
+        db,
+        library_root,
+        library_id,
+        sizes=["sm"],
+        cache_base=cache_base,
+        storage=local_storage,
+    )
+
+    assert result.generated == 0
+    assert result.cached == 1
+    assert result.failed == 0

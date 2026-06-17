@@ -10,6 +10,8 @@ from mm.utils.formatting import fmt_size as _sz
 def db_stats() -> None:
     """Show detailed database statistics."""
     from mm.cli import active_library
+    from mm.io import local_storage
+    from mm.library.thumbnails import thumbnail_cache_stats
 
     active = active_library()
     db = active.db
@@ -21,6 +23,7 @@ def db_stats() -> None:
     exts = db.stats.by_extension()
     ratings = db.stats.ratings()
     tags = db.stats.top_tags(15)
+    thumbs = thumbnail_cache_stats(active.config.library_id, storage=local_storage)
     total = comp["total"]
 
     ui.section("Library Statistics")
@@ -36,6 +39,9 @@ def db_stats() -> None:
             ("Photo Size", _sz(ov["photo_size"])),
             ("Video Size", _sz(ov["video_size"])),
             ("Video Duration", _dur(ov["video_duration"]) if ov["video_duration"] else "-"),
+            ("Thumbnail Cache", _sz(thumbs.total_size)),
+            ("Thumbnail Files", f"{thumbs.file_count:,}"),
+            ("Thumbnail Path", ui.path(thumbs.cache_dir)),
             ("Tags", f"{ov['tags']:,}"),
             ("Albums", f"{ov['albums']:,}"),
         ],

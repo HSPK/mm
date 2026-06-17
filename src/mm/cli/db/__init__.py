@@ -127,10 +127,13 @@ def _register() -> None:
     from mm.cli.db.clean import db_clean
     from mm.cli.db.stats import db_stats
     from mm.cli.db.sync import db_sync
+    from mm.cli.db.thumbnails import db_thumbnails
 
     db.add_command(db_stats)
     db.add_command(db_clean)
     db.add_command(db_sync)
+    db.add_command(db_thumbnails)
+    db.add_command(db_thumbnails, "thumbs")
 
 
 _register()
