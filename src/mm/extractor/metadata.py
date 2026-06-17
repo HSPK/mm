@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -15,8 +15,27 @@ from mm.utils.parsing import parse_datetime, safe_float, safe_int
 from mm.utils.process import run_json_command
 
 MetadataExtractor = Callable[[Path, int], Metadata]
+MetadataMode = Literal["exiftool", "pillow"]
 _METADATA_EXTRACTORS: dict[str, MetadataExtractor] = {}
 _DEFAULT_METADATA_EXTRACTOR: MetadataExtractor | None = None
+_EXIFTOOL_BATCH_SIZE = 200
+EXIFTOOL_INSTALL_HINT = (
+    "Install exiftool with `brew install exiftool`, or rerun with "
+    "`--metadata-mode pillow` for basic photo metadata."
+)
+
+
+class MetadataToolUnavailable(RuntimeError):
+    def __init__(self, tool: str, hint: str) -> None:
+        super().__init__(f"{tool} is required for the selected metadata mode. {hint}")
+        self.tool = tool
+        self.hint = hint
+
+
+def normalize_metadata_mode(mode: str) -> MetadataMode:
+    if mode in ("exiftool", "pillow"):
+        return mode
+    raise ValueError(f"Unsupported metadata mode: {mode}")
 
 
 class MetadataExtractorRegistration(BaseModel):
@@ -92,37 +111,125 @@ def get_metadata_extractor(path: Path) -> MetadataExtractor:
 _EXIFTOOL: str | None = shutil.which("exiftool")
 
 
+def require_metadata_mode(mode: MetadataMode) -> None:
+    if mode == "exiftool" and _EXIFTOOL is None:
+        raise MetadataToolUnavailable("exiftool", EXIFTOOL_INSTALL_HINT)
+
+
 def _extract_exiftool(path: Path) -> dict[str, Any]:
     """Call exiftool -j and return the first result dict."""
-    if _EXIFTOOL is None:
+    return _extract_exiftool_many([path]).get(path.resolve(), {})
+
+
+def _extract_exiftool_many(paths: Sequence[Path]) -> dict[Path, dict[str, Any]]:
+    require_metadata_mode("exiftool")
+    assert _EXIFTOOL is not None
+    result: dict[Path, dict[str, Any]] = {}
+    resolved = [path.resolve() for path in paths]
+    for i in range(0, len(resolved), _EXIFTOOL_BATCH_SIZE):
+        chunk = resolved[i : i + _EXIFTOOL_BATCH_SIZE]
+        data = run_json_command([_EXIFTOOL, "-j", "-n", "-G", *[str(path) for path in chunk]])
+        if not isinstance(data, list):
+            continue
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            source = item.get("SourceFile")
+            if source:
+                result[Path(str(source)).resolve()] = item
+    return result
+
+
+def _extract_pillow_photo(path: Path) -> dict[str, Any]:
+    try:
+        from PIL import Image
+
+        with Image.open(path) as img:
+            exif = img.getexif()
+            exif_ifd = _pillow_ifd(exif, 34665)
+            return {
+                "date_taken": parse_datetime(
+                    str(exif_ifd.get(36867) or exif_ifd.get(36868) or exif.get(306) or "")
+                ),
+                "camera_make": str(exif.get(271, "") or ""),
+                "camera_model": str(exif.get(272, "") or ""),
+                "lens_model": str(exif_ifd.get(42036, "") or ""),
+                "focal_length": safe_float(exif_ifd.get(37386)),
+                "aperture": safe_float(exif_ifd.get(33437)),
+                "shutter_speed": str(exif_ifd.get(33434, "") or ""),
+                "iso": safe_int(exif_ifd.get(34855) or exif_ifd.get(34867)),
+                "width": img.size[0],
+                "height": img.size[1],
+                "orientation": safe_int(exif.get(274)),
+            }
+    except Exception:
         return {}
-    data = run_json_command([_EXIFTOOL, "-j", "-n", "-G", str(path)])
-    if isinstance(data, list) and data:
-        return data[0]
-    return {}
+
+
+def _pillow_ifd(exif: Any, tag: int) -> dict[int, Any]:
+    get_ifd = getattr(exif, "get_ifd", None)
+    if not get_ifd:
+        return {}
+    try:
+        return dict(get_ifd(tag) or {})
+    except Exception:
+        return {}
+
+
+def _needs_pillow_photo_fallback(data: dict[str, Any]) -> bool:
+    return not (
+        data.get("EXIF:DateTimeOriginal")
+        or data.get("EXIF:CreateDate")
+        or data.get("XMP:DateCreated")
+    )
+
+
+def _metadata_from_photo_sources(
+    media_id: int,
+    exif: dict[str, Any],
+    pillow: dict[str, Any],
+) -> Metadata:
+    return Metadata(
+        media_id=media_id,
+        date_taken=(
+            parse_datetime(
+                exif.get("EXIF:DateTimeOriginal")
+                or exif.get("EXIF:CreateDate")
+                or exif.get("XMP:DateCreated")
+            )
+            or pillow.get("date_taken")
+        ),
+        camera_make=str(exif.get("EXIF:Make") or pillow.get("camera_make") or ""),
+        camera_model=str(exif.get("EXIF:Model") or pillow.get("camera_model") or ""),
+        lens_model=str(
+            exif.get("EXIF:LensModel") or exif.get("XMP:Lens") or pillow.get("lens_model") or ""
+        ),
+        focal_length=safe_float(exif.get("EXIF:FocalLength") or pillow.get("focal_length")),
+        aperture=safe_float(exif.get("EXIF:FNumber") or pillow.get("aperture")),
+        shutter_speed=str(exif.get("EXIF:ExposureTime") or pillow.get("shutter_speed") or ""),
+        iso=safe_int(exif.get("EXIF:ISO") or pillow.get("iso")),
+        width=safe_int(
+            exif.get("EXIF:ImageWidth") or exif.get("File:ImageWidth") or pillow.get("width")
+        ),
+        height=safe_int(
+            exif.get("EXIF:ImageHeight") or exif.get("File:ImageHeight") or pillow.get("height")
+        ),
+        gps_lat=safe_float(exif.get("EXIF:GPSLatitude")),
+        gps_lon=safe_float(exif.get("EXIF:GPSLongitude")),
+        orientation=safe_int(exif.get("EXIF:Orientation") or pillow.get("orientation")),
+    )
 
 
 def extract_photo_metadata(path: Path, media_id: int) -> Metadata:
     """Extract metadata for a photo via exiftool."""
     d = _extract_exiftool(path)
-    return Metadata(
-        media_id=media_id,
-        date_taken=parse_datetime(
-            d.get("EXIF:DateTimeOriginal") or d.get("EXIF:CreateDate") or d.get("XMP:DateCreated")
-        ),
-        camera_make=str(d.get("EXIF:Make", "") or ""),
-        camera_model=str(d.get("EXIF:Model", "") or ""),
-        lens_model=str(d.get("EXIF:LensModel", "") or d.get("XMP:Lens", "") or ""),
-        focal_length=safe_float(d.get("EXIF:FocalLength")),
-        aperture=safe_float(d.get("EXIF:FNumber")),
-        shutter_speed=str(d.get("EXIF:ExposureTime", "") or ""),
-        iso=safe_int(d.get("EXIF:ISO")),
-        width=safe_int(d.get("EXIF:ImageWidth") or d.get("File:ImageWidth")),
-        height=safe_int(d.get("EXIF:ImageHeight") or d.get("File:ImageHeight")),
-        gps_lat=safe_float(d.get("EXIF:GPSLatitude")),
-        gps_lon=safe_float(d.get("EXIF:GPSLongitude")),
-        orientation=safe_int(d.get("EXIF:Orientation")),
-    )
+    fallback = _extract_pillow_photo(path) if _needs_pillow_photo_fallback(d) else {}
+    return _metadata_from_photo_sources(media_id, d, fallback)
+
+
+def extract_photo_metadata_pillow(path: Path, media_id: int) -> Metadata:
+    """Extract basic photo metadata without exiftool."""
+    return _metadata_from_photo_sources(media_id, {}, _extract_pillow_photo(path))
 
 
 # ---------------------------------------------------------------------------
@@ -161,10 +268,8 @@ def _extract_ffprobe(path: Path) -> dict[str, Any]:
     return result
 
 
-def extract_video_metadata(path: Path, media_id: int) -> Metadata:
-    """Extract metadata for a video file via ffprobe (+ exiftool for EXIF)."""
+def _metadata_from_video_sources(path: Path, media_id: int, exif: dict[str, Any]) -> Metadata:
     ff = _extract_ffprobe(path)
-    exif = _extract_exiftool(path)
     ff_tags = ff.get("tags", {})
 
     # ffprobe 'tags' is often from format. Also check first video/audio stream tags.
@@ -263,6 +368,16 @@ def extract_video_metadata(path: Path, media_id: int) -> Metadata:
     )
 
 
+def extract_video_metadata(path: Path, media_id: int) -> Metadata:
+    """Extract metadata for a video file via ffprobe (+ exiftool for EXIF)."""
+    return _metadata_from_video_sources(path, media_id, _extract_exiftool(path))
+
+
+def extract_video_metadata_basic(path: Path, media_id: int) -> Metadata:
+    """Extract video metadata without exiftool."""
+    return _metadata_from_video_sources(path, media_id, {})
+
+
 def extract_audio_metadata(path: Path, media_id: int) -> Metadata:
     """Extract metadata for an audio file via ffprobe."""
     ff = _extract_ffprobe(path)
@@ -290,17 +405,88 @@ def check_tools() -> list[str]:
     return missing
 
 
-def extract_metadata(path: Path, media_id: int) -> Metadata:
+def extract_metadata(
+    path: Path,
+    media_id: int,
+    *,
+    mode: MetadataMode = "exiftool",
+) -> Metadata:
     """Extract metadata using the registered extractor for this file extension."""
     request = MetadataExtractionRequest(path=path, media_id=media_id)
-    extractor = get_metadata_extractor(request.path)
+    metadata = _extract_metadata_for_mode(request.path, request.media_id, mode, {})
     try:
-        result = MetadataExtractionResult(
-            metadata=extractor(request.path, request.media_id),
-        )
+        result = MetadataExtractionResult(metadata=metadata)
     except ValidationError:
         raise
     return result.metadata
+
+
+def extract_metadata_many(
+    paths: Sequence[Path],
+    media_ids: Sequence[int] | None = None,
+    *,
+    mode: MetadataMode = "exiftool",
+) -> list[Metadata]:
+    ids = list(media_ids) if media_ids is not None else [0] * len(paths)
+    if len(paths) != len(ids):
+        raise ValueError("paths and media_ids must have the same length")
+
+    resolved_paths = [path.resolve() for path in paths]
+    exif_by_path = _extract_exiftool_many(resolved_paths) if mode == "exiftool" else {}
+    result: list[Metadata] = []
+    for path, media_id in zip(resolved_paths, ids):
+        metadata = _extract_metadata_for_mode(path, media_id, mode, exif_by_path.get(path, {}))
+        result.append(MetadataExtractionResult(metadata=metadata).metadata)
+    return result
+
+
+def _extract_metadata_for_mode(
+    path: Path,
+    media_id: int,
+    mode: MetadataMode,
+    exif: dict[str, Any],
+) -> Metadata:
+    ext = path.suffix.lower()
+    custom = _registered_custom_extractor(path)
+    if custom is not None:
+        return custom(path, media_id)
+
+    if mode == "pillow":
+        if ext in PHOTO_EXTENSIONS:
+            return extract_photo_metadata_pillow(path, media_id)
+        if ext in VIDEO_EXTENSIONS:
+            return extract_video_metadata_basic(path, media_id)
+        if ext in AUDIO_EXTENSIONS:
+            return extract_audio_metadata(path, media_id)
+        return _custom_or_default_metadata(path, media_id, extract_photo_metadata_pillow)
+
+    require_metadata_mode("exiftool")
+    if ext in PHOTO_EXTENSIONS:
+        pillow = _extract_pillow_photo(path) if _needs_pillow_photo_fallback(exif) else {}
+        return _metadata_from_photo_sources(media_id, exif, pillow)
+    if ext in VIDEO_EXTENSIONS:
+        return _metadata_from_video_sources(path, media_id, exif)
+    if ext in AUDIO_EXTENSIONS:
+        return extract_audio_metadata(path, media_id)
+    return _custom_or_default_metadata(path, media_id, extract_photo_metadata)
+
+
+def _custom_or_default_metadata(
+    path: Path,
+    media_id: int,
+    default: MetadataExtractor,
+) -> Metadata:
+    return (_registered_custom_extractor(path) or default)(path, media_id)
+
+
+def _registered_custom_extractor(path: Path) -> MetadataExtractor | None:
+    ext = path.suffix.lower()
+    if ext in PHOTO_EXTENSIONS or ext in VIDEO_EXTENSIONS or ext in AUDIO_EXTENSIONS:
+        return None
+    extractor = _METADATA_EXTRACTORS.get(ext)
+    if extractor is None or extractor is _DEFAULT_METADATA_EXTRACTOR:
+        return None
+    return extractor
 
 
 _DEFAULT_METADATA_EXTRACTOR = extract_photo_metadata

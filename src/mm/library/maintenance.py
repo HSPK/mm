@@ -5,11 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from mm.db.sync_client import DBClient
 from mm.io import FileStorage
 from mm.media.scanner import ScanResult, save_media_metadata, scan_files
 from mm.utils.paths import resolve_media_path
+
+if TYPE_CHECKING:
+    from mm.extractor.metadata import MetadataMode
 
 
 @dataclass(frozen=True)
@@ -125,6 +129,7 @@ def rescan_changed_media(
     *,
     jobs: int = 0,
     storage: FileStorage,
+    metadata_mode: MetadataMode = "exiftool",
     on_progress: Callable[[ScanResult], None] | None = None,
     on_error: Callable[[ScanResult], None] | None = None,
 ) -> RescanResult:
@@ -138,6 +143,7 @@ def rescan_changed_media(
         jobs=jobs,
         storage=storage,
         backend="process",
+        metadata_mode=metadata_mode,
         on_progress=on_progress,
         on_error=on_error,
     )

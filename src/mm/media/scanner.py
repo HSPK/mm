@@ -24,6 +24,7 @@ from mm.utils.paths import make_relative_path
 
 if TYPE_CHECKING:
     from mm.db.sync_client import DBClient
+    from mm.extractor.metadata import MetadataMode
 
 
 @dataclass
@@ -93,13 +94,14 @@ def scan_and_extract(
     compute_hash: bool = True,
     *,
     storage: FileStorage,
+    metadata_mode: MetadataMode = "exiftool",
 ) -> ScanResult:
     """Scan a file and extract its metadata, returning Media + Metadata directly."""
     try:
         from mm.extractor.metadata import extract_metadata
 
         media = scan_file(path, compute_hash=compute_hash, storage=storage)
-        metadata = extract_metadata(path, 0)
+        metadata = extract_metadata(path, 0, mode=metadata_mode)
         return ScanResult(media=media, metadata=metadata)
     except Exception as e:
         return ScanResult(
@@ -144,7 +146,22 @@ def save_media_metadata(
 def scan_file_worker(args: tuple[str, bool, FileStorage]) -> ScanResult:
     """Worker function for mapped scanning that unpacks arguments."""
     path_str, compute_hash, storage = args
-    return scan_and_extract(Path(path_str), compute_hash=compute_hash, storage=storage)
+    path = Path(path_str)
+    try:
+        return ScanResult(
+            media=scan_file(path, compute_hash=compute_hash, storage=storage),
+            metadata=Metadata(),
+        )
+    except Exception as e:
+        return ScanResult(
+            media=Media(
+                path=str(path.resolve()),
+                filename=path.name,
+                extension=path.suffix.lower(),
+            ),
+            metadata=Metadata(),
+            error=str(e),
+        )
 
 
 def scan_files(
@@ -154,33 +171,59 @@ def scan_files(
     storage: FileStorage,
     jobs: int = 0,
     backend: MapBackend = "process",
+    metadata_mode: MetadataMode = "exiftool",
     on_progress: Callable[[ScanResult], None] | None = None,
     on_error: Callable[[ScanResult], None] | None = None,
 ) -> tuple[list[ScanResult], int]:
     """Scan files with configurable map backend and return results plus error count."""
+    from mm.extractor.metadata import extract_metadata_many
+
     work_items = [(str(path.resolve()), compute_hash, storage) for path in files]
     if not work_items:
         return [], 0
 
     errors = 0
+    scanned: list[ScanResult] = []
     results: list[ScanResult] = []
 
-    def _handle_result(result: ScanResult) -> None:
+    def _handle_scan_result(result: ScanResult) -> None:
         nonlocal errors
         if result.error:
             errors += 1
             if on_error:
                 on_error(result)
+            if on_progress:
+                on_progress(result)
         else:
-            results.append(result)
-        if on_progress:
-            on_progress(result)
+            scanned.append(result)
 
     map_items(
         scan_file_worker,
         work_items,
         jobs=jobs if jobs > 0 else min(mp.cpu_count(), 8),
         backend=backend,
-        on_result=_handle_result,
+        on_result=_handle_scan_result,
     )
+
+    try:
+        metadata_items = extract_metadata_many(
+            [Path(result.media.path) for result in scanned],
+            [0] * len(scanned),
+            mode=metadata_mode,
+        )
+    except Exception as e:
+        for result in scanned:
+            result.error = str(e)
+            errors += 1
+            if on_error:
+                on_error(result)
+            if on_progress:
+                on_progress(result)
+        return [], errors
+
+    for result, metadata in zip(scanned, metadata_items):
+        result.metadata = metadata
+        results.append(result)
+        if on_progress:
+            on_progress(result)
     return results, errors

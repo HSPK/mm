@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 
 from mm.db.dto import Media, Metadata
+from mm.db.sync_client import DBClient
 from mm.errors import ImportTemplateError
+from mm.library.settings import LibraryConfig
+from mm.media.import_workflow import execute_import_plan
 from mm.media.importer import ImportPlanItem, build_dest_path, execute_import, plan_import
 
 
@@ -139,3 +142,29 @@ def test_execute_import_uses_injected_storage(tmp_path: Path):
     assert storage.created_dirs == [destination.parent]
     assert storage.copied == [(source, destination)]
     assert storage.moved == []
+
+
+def test_execute_import_plan_reports_indexed_media(tmp_path: Path, db: DBClient):
+    storage = _ExecuteStorage()
+    source = tmp_path / "source.jpg"
+    library = tmp_path / "library"
+    destination = library / "2026" / "photo.jpg"
+    db.library_config.set(LibraryConfig(library_root=library, import_template="{type}{ext}"))
+
+    result = execute_import_plan(
+        db,
+        [
+            ImportPlanItem(
+                media=Media(path=str(source), filename="source.jpg", extension=".jpg"),
+                metadata=Metadata(),
+                source=source,
+                destination=destination,
+            )
+        ],
+        storage=storage,
+    )
+
+    assert result.file_count == 1
+    assert result.indexed_count == 1
+    assert db.media.count() == 1
+    assert db.media.list()[0].path == "2026/photo.jpg"

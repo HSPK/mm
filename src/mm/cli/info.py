@@ -12,20 +12,45 @@ from mm.utils.formatting import fmt_size
 
 @click.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-def info(file: Path) -> None:
+@click.option(
+    "--metadata-mode",
+    type=click.Choice(["exiftool", "pillow"]),
+    default="exiftool",
+    show_default=True,
+    help="Metadata extraction mode. Pillow mode extracts basic photo metadata only.",
+)
+def info(file: Path, metadata_mode: str) -> None:
     """Show metadata for a single media file."""
-    from mm.extractor.metadata import check_tools
+    from mm.extractor.metadata import (
+        MetadataToolUnavailable,
+        check_tools,
+        normalize_metadata_mode,
+        require_metadata_mode,
+    )
     from mm.media.scanner import scan_and_extract
 
-    missing = check_tools()
-    if missing:
-        ui.warning(
-            f"{', '.join(missing)} not found — metadata may be incomplete. "
-            "Install via: brew install exiftool ffmpeg",
-            stderr=True,
-        )
+    try:
+        normalized_metadata_mode = normalize_metadata_mode(metadata_mode)
+        require_metadata_mode(normalized_metadata_mode)
+    except MetadataToolUnavailable as error:
+        ui.error(str(error))
+        raise SystemExit(1) from error
 
-    res = scan_and_extract(file, compute_hash=True, storage=local_storage)
+    if normalized_metadata_mode == "pillow":
+        missing = [tool for tool in check_tools() if tool != "exiftool"]
+        if missing:
+            ui.warning(
+                f"{', '.join(missing)} not found — video/audio metadata may be incomplete. "
+                "Install via: brew install ffmpeg",
+                stderr=True,
+            )
+
+    res = scan_and_extract(
+        file,
+        compute_hash=True,
+        storage=local_storage,
+        metadata_mode=normalized_metadata_mode,
+    )
 
     if res.error:
         ui.error(f"Error scanning file: {res.error}")

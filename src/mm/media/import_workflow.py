@@ -27,6 +27,12 @@ class HashDedupResult:
     library_duplicates: int
 
 
+@dataclass(frozen=True)
+class ImportExecutionResult:
+    file_count: int
+    indexed_count: int
+
+
 def hash_and_dedup_files(
     db: DBClient,
     files: list[Path],
@@ -74,10 +80,12 @@ def execute_import_plan(
     move: bool = False,
     storage: FileStorage,
     on_progress: Callable[[int, int], None] | None = None,
-) -> int:
+) -> ImportExecutionResult:
     """Execute an import plan and store imported destination paths in the DB."""
-    count = execute_import(plan, move=move, on_progress=on_progress, storage=storage)
+    file_count = execute_import(plan, move=move, on_progress=on_progress, storage=storage)
+    indexed_count = 0
     for item in plan:
         if not item.skipped:
             save_media_metadata(db, item.media, item.metadata, media_path=item.destination)
-    return count
+            indexed_count += 1
+    return ImportExecutionResult(file_count=file_count, indexed_count=indexed_count)

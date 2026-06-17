@@ -58,7 +58,7 @@ def test_save_media_metadata_can_store_destination_path(tmp_path: Path, db: DBCl
     destination = library_root / "2026" / "renamed.jpg"
     db.library_config.set(LibraryConfig(library_root=library_root, import_template="{type}{ext}"))
 
-    result = scan_and_extract(source, storage=local_storage)
+    result = scan_and_extract(source, storage=local_storage, metadata_mode="pillow")
     media_id = save_media_metadata(db, result.media, result.metadata, media_path=destination)
 
     media = db.media.get(media_id)
