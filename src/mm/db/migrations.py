@@ -10,7 +10,7 @@ from peewee import CharField, Database, DateTimeField, IntegerField, SmallIntege
 from playhouse.migrate import PostgresqlMigrator, SqliteMigrator, migrate
 
 from mm.db.backend import DatabaseBackend
-from mm.db.models import SchemaMigrationModel, SmartAlbumModel
+from mm.db.models import FileSyncStateModel, SchemaMigrationModel, SmartAlbumModel
 
 
 class Migrator(Protocol):
@@ -113,7 +113,12 @@ def _normalize_smart_album_schema(db: Database, migrator: Migrator) -> None:
             SmartAlbumModel.update({field: value}).where(field.is_null()).execute()
 
 
+def _create_file_sync_state(db: Database, migrator: Migrator) -> None:
+    db.create_tables([FileSyncStateModel], safe=True)
+
+
 _MIGRATIONS: tuple[tuple[str, Migration], ...] = (
     ("0001_add_media_deleted_at", _add_media_deleted_at),
     ("0002_normalize_smart_album_schema", _normalize_smart_album_schema),
+    ("0003_create_file_sync_state", _create_file_sync_state),
 )

@@ -401,7 +401,7 @@ async def _build_smart_albums_uncached(db: AsyncDBClient) -> dict[str, Any]:
     year_map: dict[str, int] = {}
     timeline_dates: set[str] = set()
     for entry in timeline:
-        d = entry["date"]
+        d = entry["period"]
         timeline_dates.add(d)
         yr = d[:4]
         year_map[yr] = year_map.get(yr, 0) + entry["count"]

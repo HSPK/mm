@@ -64,10 +64,10 @@ Copy new media into the library:
 mm import ~/Downloads/Camera
 ```
 
-If files changed on disk and MM should update its index:
+If files changed inside the active library and MM should update its index:
 
 ```bash
-mm db sync ~/Photos
+mm db sync
 ```
 
 ## Learn more

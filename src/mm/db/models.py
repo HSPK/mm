@@ -7,6 +7,7 @@ from enum import Enum
 
 from peewee import (
     AutoField,
+    BigIntegerField,
     CharField,
     CompositeKey,
     DatabaseProxy,
@@ -75,6 +76,24 @@ class MediaModel(BaseModel):
             (("media_type",), False),
             (("rating",), False),
             (("deleted_at",), False),
+        )
+
+
+class FileSyncStateModel(BaseModel):
+    id = AutoField()
+    path = TextField(unique=True)
+    media = ForeignKeyField(MediaModel, null=True, default=None, on_delete="SET NULL")
+    file_size = BigIntegerField(default=0)
+    mtime_ns = BigIntegerField(default=0)
+    file_hash = CharField(max_length=64, default="")
+    last_seen_scan_id = CharField(max_length=64, default="")
+    last_scanned_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = "file_sync_state"
+        indexes = (
+            (("media",), False),
+            (("last_seen_scan_id",), False),
         )
 
 
@@ -211,6 +230,7 @@ class SchemaMigrationModel(BaseModel):
 
 ALL_TABLES = [
     MediaModel,
+    FileSyncStateModel,
     MetadataModel,
     TagModel,
     MediaTagModel,

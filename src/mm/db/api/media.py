@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 from peewee import fn
 
 from mm.db.api._source import DbApi
-from mm.db.dto import Media
-from mm.db.helpers import to_media
+from mm.db.dto import Media, MediaSyncSnapshot
+from mm.db.helpers import to_media, to_media_sync_snapshot
 from mm.db.models import MediaModel, MediaTagModel, MetadataModel, TagModel
 
 
@@ -47,6 +47,20 @@ class MediaApi(DbApi):
             MediaModel.select(MediaModel.id, MediaModel.path).order_by(MediaModel.path)
         )
         return [(row.id, row.path) for row in rows]
+
+    async def sync_snapshot(self) -> list[MediaSyncSnapshot]:
+        rows = await self.objects.fetchall(
+            MediaModel.select(
+                MediaModel.id,
+                MediaModel.path,
+                MediaModel.filename,
+                MediaModel.extension,
+                MediaModel.file_size,
+                MediaModel.file_hash,
+                MediaModel.modified_at,
+            ).order_by(MediaModel.path)
+        )
+        return [to_media_sync_snapshot(row) for row in rows]
 
     async def existing_hashes(self, hashes: list[str]) -> set[str]:
         unique_hashes = list({digest for digest in hashes if digest})

@@ -54,9 +54,9 @@ configured folder template.
 mm import ~/Downloads/Camera
 ```
 
-Use `mm db sync` when files already changed on disk and the database should catch
-up.
+Use `mm db sync` when files already changed inside the active library and the
+database should catch up.
 
 ```bash
-mm db sync ~/Photos
+mm db sync
 ```

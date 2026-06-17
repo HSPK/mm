@@ -173,6 +173,8 @@ def scan_files(
     backend: MapBackend = "process",
     metadata_mode: MetadataMode = "exiftool",
     on_progress: Callable[[ScanResult], None] | None = None,
+    on_scan_progress: Callable[[ScanResult], None] | None = None,
+    on_metadata_progress: Callable[[int], None] | None = None,
     on_error: Callable[[ScanResult], None] | None = None,
 ) -> tuple[list[ScanResult], int]:
     """Scan files with configurable map backend and return results plus error count."""
@@ -196,6 +198,8 @@ def scan_files(
                 on_progress(result)
         else:
             scanned.append(result)
+        if on_scan_progress:
+            on_scan_progress(result)
 
     map_items(
         scan_file_worker,
@@ -210,6 +214,7 @@ def scan_files(
             [Path(result.media.path) for result in scanned],
             [0] * len(scanned),
             mode=metadata_mode,
+            on_progress=on_metadata_progress,
         )
     except Exception as e:
         for result in scanned:

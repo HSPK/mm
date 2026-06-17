@@ -15,6 +15,7 @@ from mm.db.api import (
     MetadataApi,
     SmartAlbumsApi,
     StatsApi,
+    SyncStateApi,
     TagsApi,
     UsersApi,
 )
@@ -35,6 +36,7 @@ class AsyncDBClient:
     user: UsersApi
     media: MediaApi
     stats: StatsApi
+    sync_state: SyncStateApi
     tag: TagsApi
     metadata: MetadataApi
     album: AlbumsApi
@@ -60,6 +62,7 @@ class AsyncDBClient:
         self.user = UsersApi(self.source)
         self.media = MediaApi(self.source)
         self.stats = StatsApi(self.source)
+        self.sync_state = SyncStateApi(self.source)
         self.tag = TagsApi(self.source)
         self.metadata = MetadataApi(self.source)
         self.album = AlbumsApi(self.source)

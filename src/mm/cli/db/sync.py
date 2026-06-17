@@ -18,10 +18,10 @@ from mm.io import local_storage
     help="Metadata extraction mode. Pillow mode extracts basic photo metadata only.",
 )
 def db_sync(jobs: int, yes: bool, metadata_mode: str) -> None:
-    """Sync database with disk: remove stale entries and re-scan changed files.
+    """Sync database with disk: index new files, remove stale entries, and re-scan changes.
 
-    Scans the entire library, detects missing files and files whose size
-    has changed since last scan.
+    Scans the library root, compares persisted file state, and preserves media
+    rows when moved files can be matched by hash.
     """
     from mm.cli import active_library
     from mm.extractor.metadata import (
@@ -29,7 +29,7 @@ def db_sync(jobs: int, yes: bool, metadata_mode: str) -> None:
         normalize_metadata_mode,
         require_metadata_mode,
     )
-    from mm.library.maintenance import delete_stale_media, plan_library_sync, rescan_changed_media
+    from mm.library.maintenance import execute_library_sync, plan_library_sync
 
     try:
         normalized_metadata_mode = normalize_metadata_mode(metadata_mode)
@@ -43,20 +43,30 @@ def db_sync(jobs: int, yes: bool, metadata_mode: str) -> None:
         db = active.db
         library_root = str(active.config.library_root)
 
-        plan = plan_library_sync(db, library_root, storage=local_storage)
+        ui.info("Discovering library files and reading sync state...")
+        with ui.progress("Planning sync", None) as bar:
+            plan = plan_library_sync(
+                db,
+                library_root,
+                storage=local_storage,
+                jobs=jobs,
+                on_progress=lambda checked, total: bar.update(completed=checked, total=total),
+            )
 
         ui.key_values(
             "Sync Plan",
             [
                 ("Library", ui.path(library_root)),
                 ("DB records", f"{plan.total_records:,}"),
+                ("Disk files", f"{plan.disk_files:,}"),
                 ("Stale", f"{len(plan.stale_ids):,}"),
                 ("Changed", f"{len(plan.changed_ids):,}"),
+                ("New", f"{len(plan.new_paths):,}"),
                 ("Metadata", normalized_metadata_mode),
             ],
         )
 
-        if not plan.stale_ids and not plan.changed_ids:
+        if not plan.stale_ids and not plan.changed_ids and not plan.new_paths:
             ui.success("Everything is in sync — nothing to do.")
             return
 
@@ -66,38 +76,61 @@ def db_sync(jobs: int, yes: bool, metadata_mode: str) -> None:
         if plan.changed_paths:
             ui.bullet_list("Changed Files (will be re-scanned)", plan.changed_paths, limit=10)
 
+        if plan.new_paths:
+            ui.bullet_list("New Files (will be indexed)", plan.new_paths, limit=10)
+
         if not yes:
             ui.confirm(
-                f"Delete {len(plan.stale_ids)} stale record(s) and re-scan "
-                f"{len(plan.changed_ids)} file(s)?",
+                f"Delete {len(plan.stale_ids)} stale record(s), re-scan "
+                f"{len(plan.changed_ids)} changed file(s), and index "
+                f"{len(plan.new_paths)} new file(s)?",
                 abort=True,
             )
 
-        if plan.stale_ids:
-            deleted, orphan_tags = delete_stale_media(db, plan.stale_ids)
-            ui.success(f"Deleted {deleted:,} stale record(s).")
-            if orphan_tags:
-                ui.success(f"Removed {orphan_tags:,} orphan tag(s).")
-
-        if plan.changed_ids:
-            ui.info(f"Re-scanning {len(plan.changed_paths):,} file(s)...")
-            with ui.progress("Scanning", len(plan.changed_paths)) as bar:
-                rescan = rescan_changed_media(
+        scan_total = len(plan.changed_paths) + len(plan.new_paths)
+        if scan_total:
+            progress = ui.make_progress()
+            with progress:
+                scan_task = progress.add_task("Scanning files", total=scan_total)
+                metadata_task = progress.add_task("Reading metadata", total=scan_total)
+                save_task = progress.add_task("Saving database", total=scan_total)
+                sync = execute_library_sync(
                     db,
-                    plan.changed_ids,
-                    plan.changed_paths,
+                    plan,
                     jobs=jobs,
                     storage=local_storage,
                     metadata_mode=normalized_metadata_mode,
-                    on_progress=lambda _result: bar.advance(),
+                    on_scan_progress=lambda _result: progress.advance(scan_task),
+                    on_metadata_progress=lambda count: progress.advance(metadata_task, count),
+                    on_save_progress=lambda: progress.advance(save_task),
                     on_error=lambda result: ui.warning(
                         f"{result.media.path}: {result.error}", stderr=True
                     ),
                 )
+                metadata_total = max(0, scan_total - sync.errors)
+                progress.update(metadata_task, completed=metadata_total, total=metadata_total)
+                progress.update(save_task, completed=sync.indexed, total=sync.indexed)
+        else:
+            with ui.status("Applying database changes"):
+                sync = execute_library_sync(
+                    db,
+                    plan,
+                    jobs=jobs,
+                    storage=local_storage,
+                    metadata_mode=normalized_metadata_mode,
+                )
 
-            if rescan.errors:
-                ui.warning(f"Re-scanned {rescan.scanned:,} file(s); {rescan.errors:,} error(s).")
-            else:
-                ui.success(f"Re-scanned {rescan.scanned:,} file(s).")
+        if sync.deleted:
+            ui.success(f"Deleted {sync.deleted:,} stale record(s).")
+        if sync.orphan_tags:
+            ui.success(f"Removed {sync.orphan_tags:,} orphan tag(s).")
+        if sync.moved:
+            ui.success(f"Updated {sync.moved:,} moved file path(s).")
+        if sync.indexed:
+            ui.success(f"Indexed {sync.indexed:,} file(s).")
+        if sync.errors:
+            ui.warning(f"Completed with {sync.errors:,} scan error(s).")
+        else:
+            ui.success("Sync complete.")
     finally:
         active.close()

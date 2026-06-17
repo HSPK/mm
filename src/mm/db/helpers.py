@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import secrets
 
-from mm.db.dto import Media, Metadata, Tag, User
+from mm.db.dto import FileSyncState, Media, MediaSyncSnapshot, Metadata, Tag, User
 from mm.db.models import (
     MediaModel,
     MediaType,
+    FileSyncStateModel,
     MetadataModel,
     TagModel,
     TagSource,
@@ -50,6 +51,30 @@ def to_media(row: MediaModel) -> Media:
         modified_at=row.modified_at,
         scanned_at=row.scanned_at,
         deleted_at=getattr(row, "deleted_at", None),
+    )
+
+
+def to_media_sync_snapshot(row: MediaModel) -> MediaSyncSnapshot:
+    return MediaSyncSnapshot(
+        id=row.id,
+        path=row.path,
+        filename=row.filename,
+        extension=row.extension,
+        file_size=row.file_size,
+        file_hash=row.file_hash,
+        modified_at=row.modified_at,
+    )
+
+
+def to_file_sync_state(row: FileSyncStateModel) -> FileSyncState:
+    return FileSyncState(
+        path=row.path,
+        media_id=row.media_id,
+        file_size=row.file_size,
+        mtime_ns=row.mtime_ns,
+        file_hash=row.file_hash,
+        last_seen_scan_id=row.last_seen_scan_id or "",
+        last_scanned_at=row.last_scanned_at,
     )
 
 

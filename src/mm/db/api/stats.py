@@ -309,7 +309,7 @@ class StatsApi(DbApi):
             .order_by(SQL("dt DESC"))
             .dicts()
         )
-        return [{"date": str(r["dt"])[:10], "count": r["cnt"]} for r in rows if r["dt"]]
+        return [{"period": str(r["dt"])[:10], "count": r["cnt"]} for r in rows if r["dt"]]
 
     async def random(self, count: int = 20, media_type: str | None = None) -> list[Media]:
         q = MediaModel.select().where(MediaModel.deleted_at.is_null())

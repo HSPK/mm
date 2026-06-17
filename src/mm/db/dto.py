@@ -27,6 +27,28 @@ class Media:
     deleted_at: dt.datetime | None = None
 
 
+@dataclass(frozen=True)
+class MediaSyncSnapshot:
+    id: int
+    path: str
+    filename: str
+    extension: str
+    file_size: int = 0
+    file_hash: str = ""
+    modified_at: dt.datetime | None = None
+
+
+@dataclass(frozen=True)
+class FileSyncState:
+    path: str
+    media_id: int | None = None
+    file_size: int = 0
+    mtime_ns: int = 0
+    file_hash: str = ""
+    last_seen_scan_id: str = ""
+    last_scanned_at: dt.datetime | None = None
+
+
 @dataclass
 class Metadata:
     id: int | None = None

@@ -33,13 +33,13 @@ Common fields include date parts, camera name, media type, and file extension.
 If files are moved or deleted outside MM, run:
 
 ```bash
-mm db sync ~/Photos
+mm db sync
 ```
 
 For a large library, increase workers:
 
 ```bash
-mm db sync ~/Photos -j 8
+mm db sync -j 8
 ```
 
 ## Find media by tag

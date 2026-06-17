@@ -7,6 +7,7 @@ from mm.db.api.media import MediaApi
 from mm.db.api.metadata import MetadataApi
 from mm.db.api.smart_albums import SmartAlbumsApi
 from mm.db.api.stats import StatsApi
+from mm.db.api.sync_state import SyncStateApi
 from mm.db.api.tags import TagsApi
 from mm.db.api.users import UsersApi
 
@@ -19,6 +20,7 @@ __all__ = [
     "MetadataApi",
     "SmartAlbumsApi",
     "StatsApi",
+    "SyncStateApi",
     "TagsApi",
     "UsersApi",
 ]

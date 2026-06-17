@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
-from mm.db.dto import Media
+from mm.db.dto import Media, Metadata
 from mm.db.models import MediaType, TagSource
 from mm.db.sync_client import DBClient
 from mm.library.settings import LibraryConfig
@@ -104,12 +105,14 @@ def test_count_and_stats(db: DBClient):
         file_size=2048,
         file_hash="ghi789",
     )
-    db.media.upsert(m)
+    media_id = db.media.upsert(m)
+    db.metadata.upsert(Metadata(media_id=media_id, date_taken=datetime(2026, 6, 17)))
     assert db.media.count() == 1
     assert db.stats.total_size() == 2048
 
     dist = db.stats.type_distribution()
     assert dist["video"] == 1
+    assert db.stats.timeline() == [{"period": "2026-06-17", "count": 1}]
 
 
 def test_db_client_migrates_legacy_schema(tmp_path: Path):
@@ -161,16 +164,21 @@ def test_db_client_migrates_legacy_schema(tmp_path: Path):
 
     with sqlite3.connect(db_path) as conn:
         media_columns = {row[1] for row in conn.execute("PRAGMA table_info(media)")}
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
         color = conn.execute("SELECT color FROM smart_albums WHERE key = 'legacy'").fetchone()[0]
         migrations = {
             row[0] for row in conn.execute("SELECT name FROM schema_migrations ORDER BY name")
         }
 
     assert "deleted_at" in media_columns
+    assert "file_sync_state" in tables
     assert color == ""
     assert migrations == {
         "0001_add_media_deleted_at",
         "0002_normalize_smart_album_schema",
+        "0003_create_file_sync_state",
     }
 
 

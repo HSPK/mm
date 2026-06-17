@@ -121,7 +121,11 @@ def _extract_exiftool(path: Path) -> dict[str, Any]:
     return _extract_exiftool_many([path]).get(path.resolve(), {})
 
 
-def _extract_exiftool_many(paths: Sequence[Path]) -> dict[Path, dict[str, Any]]:
+def _extract_exiftool_many(
+    paths: Sequence[Path],
+    *,
+    on_progress: Callable[[int], None] | None = None,
+) -> dict[Path, dict[str, Any]]:
     require_metadata_mode("exiftool")
     assert _EXIFTOOL is not None
     result: dict[Path, dict[str, Any]] = {}
@@ -130,6 +134,8 @@ def _extract_exiftool_many(paths: Sequence[Path]) -> dict[Path, dict[str, Any]]:
         chunk = resolved[i : i + _EXIFTOOL_BATCH_SIZE]
         data = run_json_command([_EXIFTOOL, "-j", "-n", "-G", *[str(path) for path in chunk]])
         if not isinstance(data, list):
+            if on_progress:
+                on_progress(len(chunk))
             continue
         for item in data:
             if not isinstance(item, dict):
@@ -137,6 +143,8 @@ def _extract_exiftool_many(paths: Sequence[Path]) -> dict[Path, dict[str, Any]]:
             source = item.get("SourceFile")
             if source:
                 result[Path(str(source)).resolve()] = item
+        if on_progress:
+            on_progress(len(chunk))
     return result
 
 
@@ -426,17 +434,24 @@ def extract_metadata_many(
     media_ids: Sequence[int] | None = None,
     *,
     mode: MetadataMode = "exiftool",
+    on_progress: Callable[[int], None] | None = None,
 ) -> list[Metadata]:
     ids = list(media_ids) if media_ids is not None else [0] * len(paths)
     if len(paths) != len(ids):
         raise ValueError("paths and media_ids must have the same length")
 
     resolved_paths = [path.resolve() for path in paths]
-    exif_by_path = _extract_exiftool_many(resolved_paths) if mode == "exiftool" else {}
+    exif_by_path = (
+        _extract_exiftool_many(resolved_paths, on_progress=on_progress)
+        if mode == "exiftool"
+        else {}
+    )
     result: list[Metadata] = []
     for path, media_id in zip(resolved_paths, ids):
         metadata = _extract_metadata_for_mode(path, media_id, mode, exif_by_path.get(path, {}))
         result.append(MetadataExtractionResult(metadata=metadata).metadata)
+        if mode != "exiftool" and on_progress:
+            on_progress(1)
     return result
 
 

@@ -14,11 +14,12 @@ from mm.db.api import (
     MetadataApi,
     SmartAlbumsApi,
     StatsApi,
+    SyncStateApi,
     TagsApi,
     UsersApi,
 )
 from mm.db.client import AsyncDBClient
-from mm.db.dto import Media, Metadata, Tag, User
+from mm.db.dto import FileSyncState, Media, MediaSyncSnapshot, Metadata, Tag, User
 from mm.db.models import TagSource
 from mm.library.settings import LibraryConfig
 
@@ -82,6 +83,9 @@ class SyncMediaApi(_SyncApi):
 
     def paths(self) -> list[tuple[int, str]]:
         return self._run(self._api.paths())
+
+    def sync_snapshot(self) -> list[MediaSyncSnapshot]:
+        return self._run(self._api.sync_snapshot())
 
     def existing_hashes(self, hashes: list[str]) -> set[str]:
         return self._run(self._api.existing_hashes(hashes))
@@ -367,6 +371,21 @@ class SyncStatsApi(_SyncApi):
         return self._run(self._api.geo_media(limit))
 
 
+class SyncStateApiWrapper(_SyncApi):
+    def __init__(self, api: SyncStateApi, run: Callable[[Awaitable[T]], T]) -> None:
+        super().__init__(run)
+        self._api = api
+
+    def snapshot(self) -> dict[str, FileSyncState]:
+        return self._run(self._api.snapshot())
+
+    def upsert_many(self, states: list[FileSyncState], batch_size: int = 500) -> int:
+        return self._run(self._api.upsert_many(states, batch_size=batch_size))
+
+    def delete_paths(self, paths: list[str], batch_size: int = 500) -> int:
+        return self._run(self._api.delete_paths(paths, batch_size=batch_size))
+
+
 class SyncLibraryConfigApi(_SyncApi):
     def __init__(self, api: LibraryConfigApi, run: Callable[[Awaitable[T]], T]) -> None:
         super().__init__(run)
@@ -389,6 +408,7 @@ class DBClient:
     album: SyncAlbumApi
     smart_album: SyncSmartAlbumApi
     stats: SyncStatsApi
+    sync_state: SyncStateApiWrapper
     library_config: SyncLibraryConfigApi
 
     def __init__(self, database_target: str | Path) -> None:
@@ -407,6 +427,7 @@ class DBClient:
         self.album = SyncAlbumApi(self._client.album, self._run)
         self.smart_album = SyncSmartAlbumApi(self._client.smart_album, self._run)
         self.stats = SyncStatsApi(self._client.stats, self._run)
+        self.sync_state = SyncStateApiWrapper(self._client.sync_state, self._run)
         self.library_config = SyncLibraryConfigApi(self._client.library_config, self._run)
 
     def _run(self, awaitable: Awaitable[T]) -> T:
