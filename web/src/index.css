@@ -168,38 +168,3 @@ body {
 .leaflet-popup-tip {
   background: hsl(var(--background));
 }
-.mm-pin-wrap {
-  background: transparent;
-}
-.mm-pin {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: white;
-  border: 3px solid white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  cursor: pointer;
-  transition: transform 0.15s ease;
-}
-.mm-pin:hover {
-  transform: scale(1.1);
-}
-.mm-pin::after {
-  content: "";
-  position: absolute;
-  bottom: -7px;
-  left: 50%;
-  transform: translateX(-50%) rotate(45deg);
-  width: 10px;
-  height: 10px;
-  background: white;
-  z-index: -1;
-}
-.mm-pin img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}

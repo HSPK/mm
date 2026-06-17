@@ -12,20 +12,33 @@ export function usePinchZoom(
     max = 400,
 ) {
     const thumbSizeRef = useRef(thumbSize)
+    const targetSizeRef = useRef(thumbSize)
+    const frameRef = useRef<number | null>(null)
     useEffect(() => {
         thumbSizeRef.current = thumbSize
+        targetSizeRef.current = thumbSize
     }, [thumbSize])
 
     useEffect(() => {
         const el = galleryRef.current
         if (!el) return
 
+        const clampSize = (size: number) => Math.min(max, Math.max(min, Math.round(size)))
+        const commitSize = (size: number) => {
+            targetSizeRef.current = clampSize(size)
+            if (frameRef.current != null) return
+            frameRef.current = window.requestAnimationFrame(() => {
+                frameRef.current = null
+                thumbSizeRef.current = targetSizeRef.current
+                setThumbSize(targetSizeRef.current)
+            })
+        }
+
         const onWheel = (e: WheelEvent) => {
             if (!e.ctrlKey) return
             e.preventDefault()
-            const delta = -e.deltaY
-            const next = Math.round(thumbSizeRef.current + delta * 0.5)
-            setThumbSize(Math.min(max, Math.max(min, next)))
+            const next = targetSizeRef.current * Math.exp(-e.deltaY * 0.004)
+            commitSize(next)
         }
 
         let initDist = 0
@@ -38,14 +51,14 @@ export function usePinchZoom(
         const onTouchStart = (e: TouchEvent) => {
             if (e.touches.length === 2) {
                 initDist = dist(e.touches)
-                initSize = thumbSizeRef.current
+                initSize = targetSizeRef.current
             }
         }
         const onTouchMove = (e: TouchEvent) => {
-            if (e.touches.length === 2) {
+            if (e.touches.length === 2 && initDist > 0) {
                 e.preventDefault()
                 const scale = dist(e.touches) / initDist
-                setThumbSize(Math.min(max, Math.max(min, Math.round(initSize * scale))))
+                commitSize(initSize * scale)
             }
         }
 
@@ -53,6 +66,10 @@ export function usePinchZoom(
         el.addEventListener("touchstart", onTouchStart, { passive: true })
         el.addEventListener("touchmove", onTouchMove, { passive: false })
         return () => {
+            if (frameRef.current != null) {
+                window.cancelAnimationFrame(frameRef.current)
+                frameRef.current = null
+            }
             el.removeEventListener("wheel", onWheel)
             el.removeEventListener("touchstart", onTouchStart)
             el.removeEventListener("touchmove", onTouchMove)

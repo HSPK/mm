@@ -158,7 +158,7 @@ export function MediaDetailPanel({
         setShowInfo(true)
     }
 
-    useMediaPreload(currentIndex, items)
+    useMediaPreload(currentIndex, items, load.markMediaLoaded)
 
     const actions = useMediaViewerActions({
         currentItem,

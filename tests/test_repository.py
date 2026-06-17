@@ -107,8 +107,19 @@ def test_count_and_stats(db: DBClient):
     )
     media_id = db.media.upsert(m)
     db.metadata.upsert(Metadata(media_id=media_id, date_taken=datetime(2026, 6, 17)))
-    assert db.media.count() == 1
-    assert db.stats.total_size() == 2048
+    placeholder_id = db.media.upsert(
+        Media(
+            path="/tmp/placeholder.jpg",
+            filename="placeholder.jpg",
+            extension=".jpg",
+            media_type=MediaType.PHOTO,
+            file_size=512,
+            file_hash="placeholder",
+        )
+    )
+    db.metadata.upsert(Metadata(media_id=placeholder_id, date_taken=datetime(1980, 1, 1)))
+    assert db.media.count() == 2
+    assert db.stats.total_size() == 2560
 
     dist = db.stats.type_distribution()
     assert dist["video"] == 1

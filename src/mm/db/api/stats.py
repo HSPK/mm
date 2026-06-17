@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -23,6 +24,7 @@ from mm.db.models import (
 
 class StatsApi(DbApi):
     objects: peewee_aio.Manager
+    _MIN_TIMELINE_DATE = dt.datetime(1981, 1, 1)
 
     async def total_size(self) -> int:
         return (
@@ -304,7 +306,11 @@ class StatsApi(DbApi):
                 fn.COUNT(MetadataModel.id).alias("cnt"),
             )
             .join(MediaModel, on=(MetadataModel.media == MediaModel.id))
-            .where(MetadataModel.date_taken.is_null(False) & MediaModel.deleted_at.is_null())
+            .where(
+                MetadataModel.date_taken.is_null(False)
+                & (MetadataModel.date_taken >= self._MIN_TIMELINE_DATE)
+                & MediaModel.deleted_at.is_null()
+            )
             .group_by(SQL("dt"))
             .order_by(SQL("dt DESC"))
             .dicts()

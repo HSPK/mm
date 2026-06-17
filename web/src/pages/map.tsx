@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { CircleMarker, MapContainer, TileLayer, useMap } from "react-leaflet"
 import L, { type LatLngExpression } from "leaflet"
 import { MapPin } from "lucide-react"
 import "leaflet/dist/leaflet.css"
 import { statsRepo } from "@/api/stats"
-import { mediaUrl } from "@/lib/media-url"
 import type { GeoPoint, Media } from "@/api/types"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
@@ -110,8 +109,9 @@ export default function MapPage() {
 
 type Bounds = [[number, number], [number, number]]
 
-function MapBody({ points, onOpen }: { points: GeoPoint[]; onOpen: (id: number) => void }) {
+const MapBody = memo(function MapBody({ points, onOpen }: { points: GeoPoint[]; onOpen: (id: number) => void }) {
     const bounds = useMemo(() => computeBounds(points), [points])
+    const renderer = useMemo(() => L.canvas({ padding: 0.5 }), [])
     const center: LatLngExpression = useMemo(() => {
         if (!bounds) return [0, 0]
         const [[s, w], [n, e]] = bounds
@@ -123,6 +123,7 @@ function MapBody({ points, onOpen }: { points: GeoPoint[]; onOpen: (id: number) 
             center={center}
             zoom={3}
             scrollWheelZoom
+            preferCanvas
             className="h-full w-full"
             style={{ background: "#0b0d10" }}
         >
@@ -132,25 +133,18 @@ function MapBody({ points, onOpen }: { points: GeoPoint[]; onOpen: (id: number) 
             />
             <FitBounds bounds={bounds} />
             {points.map((p) => (
-                <Marker
+                <CircleMarker
                     key={p.id}
-                    position={[p.lat, p.lon]}
-                    icon={thumbIcon(p)}
+                    center={[p.lat, p.lon]}
+                    renderer={renderer}
+                    radius={markerRadius(p)}
+                    pathOptions={markerStyle(p)}
                     eventHandlers={{ click: () => onOpen(p.id) }}
-                >
-                    <Popup>
-                        <div className="text-xs">
-                            <p className="font-medium mb-1 truncate max-w-[200px]">{p.filename}</p>
-                            {p.city && (
-                                <p className="text-muted-foreground">{p.city}</p>
-                            )}
-                        </div>
-                    </Popup>
-                </Marker>
+                />
             ))}
         </MapContainer>
     )
-}
+})
 
 function FitBounds({ bounds }: { bounds: Bounds | null }) {
     const map = useMap()
@@ -172,24 +166,26 @@ function computeBounds(points: GeoPoint[]): Bounds | null {
     return [[s, w], [n, e]]
 }
 
-/** Cached map of media id → marker icon to avoid recreating divIcons on every render. */
-const iconCache = new Map<number, L.DivIcon>()
+const PHOTO_MARKER_STYLE: L.PathOptions = {
+    color: "#38bdf8",
+    fillColor: "#38bdf8",
+    fillOpacity: 0.72,
+    opacity: 0.9,
+    weight: 1,
+}
 
-function thumbIcon(p: GeoPoint): L.DivIcon {
-    const cached = iconCache.get(p.id)
-    if (cached) return cached
-    const html = `
-        <div class="mm-pin">
-            <img src="${mediaUrl.thumbnail(p.id, "sm")}" alt="" />
-        </div>
-    `
-    const icon = L.divIcon({
-        html,
-        className: "mm-pin-wrap",
-        iconSize: [44, 44],
-        iconAnchor: [22, 44],
-        popupAnchor: [0, -42],
-    })
-    iconCache.set(p.id, icon)
-    return icon
+const VIDEO_MARKER_STYLE: L.PathOptions = {
+    color: "#fb923c",
+    fillColor: "#fb923c",
+    fillOpacity: 0.78,
+    opacity: 0.95,
+    weight: 1,
+}
+
+function markerRadius(point: GeoPoint): number {
+    return point.media_type === "video" ? 5 : 4
+}
+
+function markerStyle(point: GeoPoint): L.PathOptions {
+    return point.media_type === "video" ? VIDEO_MARKER_STYLE : PHOTO_MARKER_STYLE
 }

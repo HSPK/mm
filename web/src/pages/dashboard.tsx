@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Camera, FileImage, Film, HardDrive, Images, RefreshCw, Tag } from "lucide-react"
 import { statsRepo } from "@/api/stats"
 import type { CameraStats, LibraryStats, TagStats, TimelineEntry } from "@/api/types"
@@ -7,6 +7,12 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { Spinner } from "@/components/ui/spinner"
 import { formatBytes } from "@/lib/format"
+import {
+    aggregateTimelineEntries,
+    timelineBins,
+    timelineWindowSize,
+    type TimelineBin,
+} from "@/lib/timeline-bins"
 
 export default function DashboardPage() {
     const [stats, setStats] = useState<LibraryStats | null>(null)
@@ -92,14 +98,7 @@ function DashboardBody({ stats, timeline }: { stats: LibraryStats; timeline: Tim
                 </CardContent>
             </Card>
 
-            {timeline.length > 0 && (
-                <Card>
-                    <CardContent className="pt-6">
-                        <h2 className="text-sm font-semibold tracking-wide text-muted-foreground/80 uppercase mb-4">Timeline</h2>
-                        <TimelineChart entries={timeline} />
-                    </CardContent>
-                </Card>
-            )}
+            <TimelineSection entries={timeline} />
 
             {stats.cameras.length > 0 && (
                 <Card>
@@ -209,28 +208,63 @@ function TagCloud({ tags }: { tags: TagStats[] }) {
     )
 }
 
-function TimelineChart({ entries }: { entries: TimelineEntry[] }) {
+function TimelineSection({ entries }: { entries: TimelineEntry[] }) {
+    const [bin, setBin] = useState<TimelineBin>("month")
+    const binned = useMemo(() => aggregateTimelineEntries(entries, bin), [bin, entries])
+    if (binned.length === 0) return null
+
+    return (
+        <Card>
+            <CardContent className="pt-6">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-sm font-semibold tracking-wide text-muted-foreground/80 uppercase">Timeline</h2>
+                    <div className="inline-flex rounded-full bg-secondary/60 p-0.5">
+                        {timelineBins.map((value) => (
+                            <button
+                                key={value}
+                                type="button"
+                                aria-pressed={bin === value}
+                                onClick={() => setBin(value)}
+                                className={`h-7 rounded-full px-3 text-xs font-medium capitalize transition-colors ${bin === value
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                {value}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <TimelineChart entries={binned} bin={bin} />
+            </CardContent>
+        </Card>
+    )
+}
+
+function TimelineChart({ entries, bin }: { entries: TimelineEntry[]; bin: TimelineBin }) {
     if (entries.length === 0) return null
-    const max = Math.max(...entries.map((e) => e.count), 1)
-    const recent = entries.slice(-36)
+    const recent = entries.slice(-timelineWindowSize(bin))
+    const max = Math.max(...recent.map((e) => e.count), 1)
     return (
         <div>
             <div className="flex items-end gap-1 h-32" role="img" aria-label="Media count per period">
                 {recent.map((entry) => {
                     const h = (entry.count / max) * 100
+                    const label = timelineHoverLabel(entry.period, bin)
                     return (
                         <div
                             key={entry.period}
-                            className="flex-1 relative group min-w-0"
-                            title={`${entry.period}: ${entry.count.toLocaleString()}`}
+                            className="relative flex h-full flex-1 items-end group min-w-0"
+                            title={`${label}: ${entry.count.toLocaleString()}`}
                         >
                             <div
                                 className="w-full bg-primary/80 hover:bg-primary rounded-t-sm transition-colors"
-                                style={{ height: `${h}%`, minHeight: entry.count > 0 ? "2px" : "0" }}
+                                style={{ height: `${h}%`, minHeight: "3px" }}
                             />
-                            <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                <span className="px-1.5 py-0.5 rounded bg-foreground text-background text-[10px] font-medium whitespace-nowrap tabular-nums">
-                                    {entry.count.toLocaleString()}
+                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                <span className="flex flex-col items-center gap-0.5 px-2 py-1 rounded bg-foreground text-background text-[10px] font-medium whitespace-nowrap tabular-nums shadow-lg">
+                                    <span>{label}</span>
+                                    <span className="opacity-75">{entry.count.toLocaleString()} items</span>
                                 </span>
                             </div>
                         </div>
@@ -243,4 +277,10 @@ function TimelineChart({ entries }: { entries: TimelineEntry[] }) {
             </div>
         </div>
     )
+}
+
+function timelineHoverLabel(period: string, bin: TimelineBin): string {
+    if (bin === "year") return `Year ${period}`
+    if (bin === "month") return `Month ${period}`
+    return `Day ${period}`
 }
