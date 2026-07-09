@@ -1392,40 +1392,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/player/video/hls/{key}/index.m3u8": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Player Video Hls Playlist */
-        get: operations["player_video_hls_playlist_api_player_video_hls__key__index_m3u8_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/player/video/hls/{key}/{segment}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Player Video Hls Segment */
-        get: operations["player_video_hls_segment_api_player_video_hls__key___segment__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/player/video/info": {
         parameters: {
             query?: never;
@@ -6570,72 +6536,6 @@ export interface operations {
             };
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    player_video_hls_playlist_api_player_video_hls__key__index_m3u8_get: {
-        parameters: {
-            query?: {
-                playback_id?: string;
-                audio_stream?: number | null;
-            };
-            header?: never;
-            path: {
-                key: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    player_video_hls_segment_api_player_video_hls__key___segment__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                key: string;
-                segment: string;
-            };
             cookie?: never;
         };
         requestBody?: never;

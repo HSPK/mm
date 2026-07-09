@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import mimetypes
 import json
-import re
 import shutil
 import subprocess
-import time
 import uuid
 from hashlib import sha256
 from pathlib import Path
@@ -19,11 +17,9 @@ from mm.config import load_cli_config
 from mm.io import local_storage
 from mm.server.utils import stream_file
 
-HLS_SEGMENT_RE = re.compile(r"^seg_\d{5}\.ts$")
 DIRECT_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".webm", ".ogv"}
 REMUX_VIDEO_CODECS = {"h264", "hevc", "h265", "av1"}
 TEXT_SUBTITLE_CODECS = {"subrip", "ass", "ssa", "webvtt", "mov_text"}
-HLS_PROCESSES: dict[str, subprocess.Popen] = {}
 _FFPROBE = shutil.which("ffprobe")
 
 
@@ -81,64 +77,9 @@ def video_playback_source(
             selected_audio_stream=selected_audio,
             preserves_video=True,
         )
-    if not ffmpeg:
-        raise HTTPException(422, "Video format is not browser playable and ffmpeg is unavailable")
-    key = hls_key(path, selected_audio)
-    playlist = hls_dir(key) / "index.m3u8"
-    if not playlist.exists():
-        start_hls_transcode(path, key, ffmpeg, selected_audio)
-        if not wait_for_playlist(playlist):
-            raise HTTPException(503, "Playback is still preparing")
-    params = f"playback_id={quote(playback_id)}"
-    if selected_audio is not None:
-        params += f"&audio_stream={selected_audio}"
-    return VideoPlaybackSource(
-        mode="hls",
-        url=f"/api/player/video/hls/{key}/index.m3u8?{params}",
-        mime_type="application/vnd.apple.mpegurl",
-        audio_tracks=audio_tracks,
-        subtitle_tracks=subtitle_tracks,
-        selected_audio_stream=selected_audio,
-        preserves_video=False,
-    )
-
-
-def hls_playlist_response(
-    path: Path,
-    playback_id: str,
-    key: str,
-    ffmpeg: str | None,
-    audio_stream: int | None = None,
-) -> FileResponse:
-    streams = probe_streams(path)
-    selected_audio = select_audio_stream(audio_track_options(streams), audio_stream)
-    if key != hls_key(path, selected_audio):
-        raise HTTPException(403, "Invalid playback session")
-    playlist = hls_dir(key) / "index.m3u8"
-    if not playlist.exists():
-        start_hls_transcode(path, key, ffmpeg, selected_audio)
-        if not wait_for_playlist(playlist):
-            raise HTTPException(503, "Playback is still preparing")
-    return FileResponse(
-        str(playlist),
-        media_type="application/vnd.apple.mpegurl",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Playback-Id": playback_id,
-        },
-    )
-
-
-def hls_segment_response(key: str, segment: str) -> FileResponse:
-    if not HLS_SEGMENT_RE.match(segment):
-        raise HTTPException(404, "Segment not found")
-    segment_path = hls_dir(key) / segment
-    if not segment_path.is_file():
-        raise HTTPException(404, "Segment not found")
-    return FileResponse(
-        str(segment_path),
-        media_type="video/mp2t",
-        headers={"Cache-Control": "public, max-age=3600"},
+    raise HTTPException(
+        422,
+        "Video is not browser-playable and cannot be remuxed without video transcoding",
     )
 
 
@@ -210,31 +151,8 @@ def subtitle_response(
     )
 
 
-def should_transcode_video(path: Path, ffmpeg: str | None) -> bool:
-    if not ffmpeg:
-        return False
-    return not can_direct_play_video(path)
-
-
 def can_direct_play_video(path: Path) -> bool:
     return path.suffix.lower() in DIRECT_VIDEO_EXTENSIONS
-
-
-async def transcode_video(path: Path, request: Request, ffmpeg: str | None):
-    if not ffmpeg:
-        raise HTTPException(422, "Video format is not browser playable and ffmpeg is unavailable")
-    cache_path = transcoded_video_cache_path(path)
-    if not cache_path.exists():
-        import asyncio
-
-        await asyncio.to_thread(build_transcoded_video_cache, path, cache_path, ffmpeg)
-    return stream_file(cache_path, request, storage=local_storage)
-
-
-def transcoded_video_cache_path(path: Path) -> Path:
-    stat = path.stat()
-    key = sha256(f"{path}:{stat.st_size}:{stat.st_mtime_ns}:video-v1".encode()).hexdigest()
-    return load_cli_config().paths.cache_dir / "player-video" / f"{key}.mp4"
 
 
 def remuxed_video_cache_path(path: Path, audio_stream: int | None) -> Path:
@@ -243,19 +161,6 @@ def remuxed_video_cache_path(path: Path, audio_stream: int | None) -> Path:
         f"{path}:{stat.st_size}:{stat.st_mtime_ns}:remux-v2:{audio_stream}".encode()
     ).hexdigest()
     return load_cli_config().paths.cache_dir / "player-video-remux" / f"{key}.mp4"
-
-
-def hls_key(path: Path, audio_stream: int | None = None) -> str:
-    stat = path.stat()
-    return sha256(
-        f"{path.expanduser().resolve()}:{stat.st_size}:{stat.st_mtime_ns}:hls-v2:{audio_stream}".encode()
-    ).hexdigest()
-
-
-def hls_dir(key: str) -> Path:
-    if not re.fullmatch(r"[a-f0-9]{64}", key):
-        raise HTTPException(404, "Playback session not found")
-    return load_cli_config().paths.cache_dir / "player-video-hls" / key
 
 
 def preview_frame_path(path: Path, playback_id: str, time_value: float) -> Path:
@@ -273,115 +178,6 @@ def subtitle_cache_path(path: Path, stream_index: int) -> Path:
         f"{path.expanduser().resolve()}:{stat.st_size}:{stat.st_mtime_ns}:subtitle-v1:{stream_index}".encode()
     ).hexdigest()
     return load_cli_config().paths.cache_dir / "player-video-subtitles" / f"{key}.vtt"
-
-
-def start_hls_transcode(source: Path, key: str, ffmpeg: str | None, audio_stream: int | None) -> None:
-    if not ffmpeg:
-        raise HTTPException(422, "ffmpeg is unavailable")
-    directory = hls_dir(key)
-    directory.mkdir(parents=True, exist_ok=True)
-    process = HLS_PROCESSES.get(key)
-    if process and process.poll() is None:
-        return
-    for file in directory.glob("seg_*.ts"):
-        file.unlink(missing_ok=True)
-    (directory / "index.m3u8").unlink(missing_ok=True)
-    audio_map = f"0:{audio_stream}" if audio_stream is not None else "0:a:0?"
-    command = [
-        ffmpeg,
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        str(source),
-        "-map",
-        "0:v:0",
-        "-map",
-        audio_map,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "18",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "384k",
-        "-ac",
-        "2",
-        "-f",
-        "hls",
-        "-hls_time",
-        "4",
-        "-hls_list_size",
-        "0",
-        "-hls_flags",
-        "independent_segments",
-        "-hls_segment_filename",
-        str(directory / "seg_%05d.ts"),
-        str(directory / "index.m3u8"),
-    ]
-    HLS_PROCESSES[key] = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-
-def wait_for_playlist(path: Path) -> bool:
-    deadline = time.monotonic() + 12
-    while time.monotonic() < deadline:
-        if path.exists() and path.stat().st_size > 0:
-            return True
-        time.sleep(0.2)
-    return False
-
-
-def build_transcoded_video_cache(source: Path, target: Path, ffmpeg: str) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f"{target.stem}.{uuid.uuid4().hex}.tmp.mp4")
-    try:
-        subprocess.run(
-            [
-                ffmpeg,
-                "-v",
-                "error",
-                "-y",
-                "-i",
-                str(source),
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a:0?",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
-                "-movflags",
-                "+faststart",
-                str(tmp),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        tmp.replace(target)
-    except subprocess.CalledProcessError as exc:
-        tmp.unlink(missing_ok=True)
-        detail = exc.stderr.strip() or "Video transcode failed"
-        raise HTTPException(500, detail) from exc
 
 
 def build_remuxed_video_cache(

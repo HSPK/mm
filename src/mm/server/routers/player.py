@@ -19,13 +19,9 @@ from mm.io import local_storage
 from mm.server.dependencies import get_current_user, get_db
 from mm.server.player_video import (
     VideoPlaybackSource,
-    hls_playlist_response,
-    hls_segment_response,
     preview_frame_response,
     remuxed_video_response,
-    should_transcode_video,
     subtitle_response,
-    transcode_video,
     video_playback_source,
 )
 from mm.server.utils import stream_file
@@ -75,8 +71,8 @@ async def player_video(
     playback_id: str = "",
 ):
     media_path = await _safe_video_playback_path(db, playback_id)
-    if should_transcode_video(media_path, _FFMPEG):
-        return await transcode_video(media_path, request, _FFMPEG)
+    if media_path.suffix.lower() not in {".mp4", ".m4v", ".mov", ".webm", ".ogv"}:
+        raise HTTPException(422, "Video is not directly playable; use /api/player/video/source")
     return stream_file(media_path, request, storage=local_storage)
 
 
@@ -101,27 +97,6 @@ async def player_video_remux(
 ):
     media_path = await _safe_video_playback_path(db, playback_id)
     return await remuxed_video_response(media_path, request, playback_id, audio_stream, _FFMPEG)
-
-
-@router.get("/video/hls/{key}/index.m3u8")
-async def player_video_hls_playlist(
-    key: str,
-    _u: User | None = Depends(get_current_user),
-    db: AsyncDBClient = Depends(get_db),
-    playback_id: str = "",
-    audio_stream: int | None = None,
-):
-    media_path = await _safe_video_playback_path(db, playback_id)
-    return hls_playlist_response(media_path, playback_id, key, _FFMPEG, audio_stream)
-
-
-@router.get("/video/hls/{key}/{segment}")
-async def player_video_hls_segment(
-    key: str,
-    segment: str,
-    _u: User | None = Depends(get_current_user),
-):
-    return hls_segment_response(key, segment)
 
 
 @router.get("/video/info")
