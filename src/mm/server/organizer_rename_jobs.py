@@ -242,6 +242,7 @@ async def refresh_after_rename(
         item = _light_item_from_parsed(refreshed, context)
         payload = item.model_dump(mode="json")
         payload["is_new"] = False
+        await delete_conflicting_target_row(db, source=str(source), target=item.path)
         affected = await db.objects.execute(
             OrganizerMediaModel.update(
                 path=item.path,
@@ -272,3 +273,21 @@ async def refresh_after_rename(
             fallback_items.append(item)
     if fallback_items:
         await persist_scan_items(db, fallback_items, mark_missing=False)
+
+
+async def delete_conflicting_target_row(db: AsyncDBClient, *, source: str, target: str) -> None:
+    if source == target:
+        return
+    source_rows = await db.objects.fetchall(
+        OrganizerMediaModel.select(OrganizerMediaModel.id)
+        .where(OrganizerMediaModel.path == source)
+        .limit(1)
+    )
+    if not source_rows:
+        return
+    await db.objects.execute(
+        OrganizerMediaModel.delete().where(
+            (OrganizerMediaModel.path == target)
+            & (OrganizerMediaModel.path != source)
+        )
+    )

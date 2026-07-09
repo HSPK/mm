@@ -4,8 +4,6 @@ import asyncio
 import datetime as dt
 import shutil
 import subprocess
-import uuid
-from hashlib import sha256
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -20,7 +18,6 @@ from mm.server.dependencies import get_current_user, get_db
 from mm.server.player_video import (
     VideoPlaybackSource,
     preview_frame_response,
-    remuxed_video_response,
     subtitle_response,
     video_playback_source,
 )
@@ -87,18 +84,6 @@ async def player_video_source(
     return await asyncio.to_thread(video_playback_source, media_path, playback_id, _FFMPEG, audio_stream)
 
 
-@router.get("/video/remux")
-async def player_video_remux(
-    request: Request,
-    _u: User | None = Depends(get_current_user),
-    db: AsyncDBClient = Depends(get_db),
-    playback_id: str = "",
-    audio_stream: int | None = None,
-):
-    media_path = await _safe_video_playback_path(db, playback_id)
-    return await remuxed_video_response(media_path, request, playback_id, audio_stream, _FFMPEG)
-
-
 @router.get("/video/info")
 async def player_video_info(
     _u: User | None = Depends(get_current_user),
@@ -146,8 +131,6 @@ async def player_audio(
     )
     if media_path.suffix.lower() not in AUDIO_EXTENSIONS:
         raise HTTPException(400, "Unsupported audio file")
-    if _should_transcode_audio(media_path):
-        return _transcode_audio(media_path, request)
     return stream_file(media_path, request, storage=local_storage)
 
 
@@ -334,12 +317,6 @@ def _is_relative_to(path: Path, root: Path) -> bool:
     return True
 
 
-def _should_transcode_audio(path: Path) -> bool:
-    if not _FFMPEG:
-        return False
-    return path.suffix.lower() in {".flac", ".aiff", ".wma", ".ape", ".alac"}
-
-
 def _media_duration(path: Path) -> float | None:
     if not _FFPROBE:
         return None
@@ -367,53 +344,3 @@ def _media_duration(path: Path) -> float | None:
     except ValueError:
         return None
     return duration if duration > 0 else None
-
-
-def _transcode_audio(path: Path, request: Request):
-    if not _FFMPEG:
-        raise HTTPException(500, "ffmpeg is not available")
-    cache_path = _transcoded_cache_path(path)
-    if not cache_path.exists():
-        _build_transcoded_cache(path, cache_path)
-    return stream_file(cache_path, request, storage=local_storage)
-
-
-def _transcoded_cache_path(path: Path) -> Path:
-    stat = path.stat()
-    key = sha256(f"{path}:{stat.st_size}:{stat.st_mtime_ns}".encode()).hexdigest()
-    return load_cli_config().paths.cache_dir / "player-audio" / f"{key}.mp3"
-
-
-def _build_transcoded_cache(source: Path, target: Path) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f"{target.stem}.{uuid.uuid4().hex}.tmp")
-    try:
-        subprocess.run(
-            [
-                _FFMPEG,
-                "-v",
-                "error",
-                "-y",
-                "-i",
-                str(source),
-                "-vn",
-                "-codec:a",
-                "libmp3lame",
-                "-b:a",
-                "192k",
-                "-f",
-                "mp3",
-                str(tmp),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        tmp.replace(target)
-    except subprocess.CalledProcessError as exc:
-        tmp.unlink(missing_ok=True)
-        detail = exc.stderr.strip() or "Audio transcode failed"
-        raise HTTPException(500, detail) from exc
-    except OSError as exc:
-        tmp.unlink(missing_ok=True)
-        raise HTTPException(500, "Audio transcode failed") from exc

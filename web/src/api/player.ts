@@ -30,7 +30,7 @@ export interface VideoTrack {
 }
 
 export interface VideoPlaybackSource {
-    mode: "direct" | "hls" | string
+    mode: "direct" | string
     url: string
     mime_type: string
     audio_tracks: VideoTrack[]

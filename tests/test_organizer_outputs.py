@@ -6,10 +6,12 @@ import pytest
 from PIL import Image
 
 from mm.config import OrganizerTemplates
+from mm.db.models import OrganizerMediaModel
+from mm.db.sync_client import DBClient
 from mm.organizer.artwork import plan_artwork
 from mm.organizer.filename import parse_media_filename
 from mm.organizer.nfo import build_nfo, write_nfo
-from mm.organizer.rename import apply_rename_plan, plan_renames
+from mm.organizer.rename import RenameOperation, apply_rename_plan, plan_renames
 from mm.organizer.scrape_writer import (
     album_track_metadata_by_path,
     write_album_metadata,
@@ -18,6 +20,9 @@ from mm.organizer.scrape_writer import (
 )
 from mm.organizer.scrapers import ScrapeCandidate
 from mm.server.routers.organizer import _item_from_parsed, _light_item_from_parsed
+from mm.server.organizer_metadata import OrganizerScanContext
+from mm.server.organizer_persistence import persist_scan_items
+from mm.server.organizer_rename_jobs import refresh_after_rename
 
 
 def must_parse(path: Path):
@@ -137,6 +142,33 @@ def test_apply_album_rename_dedupes_sidecars_and_removes_empty_folders(tmp_path:
     assert (out / "Radiohead" / "OK Computer" / "folder.jpg").read_text() == "cover"
     assert (out / "Radiohead" / "OK Computer" / "OK Computer.cue").read_text() == "cue"
     assert not album.exists()
+
+
+def test_refresh_after_rename_replaces_stale_target_row(tmp_path: Path, db: DBClient):
+    source = tmp_path / "Coldplay" / "A Head Full Of Dreams" / "01. A Head Full Of Dreams.flac"
+    target = tmp_path / "Coldplay" / "2015 - A Head Full Of Dreams" / "01. A Head Full Of Dreams.flac"
+    source.parent.mkdir(parents=True)
+    target.parent.mkdir(parents=True)
+    source.write_text("audio")
+    target.write_text("stale")
+    context = OrganizerScanContext.create()
+    source_item = _light_item_from_parsed(must_parse(source), context)
+    target_item = _light_item_from_parsed(must_parse(target), context)
+    db._run(persist_scan_items(db._client, [source_item, target_item], mark_missing=False))
+    source_row = db._run(db._client.objects.get(OrganizerMediaModel, path=str(source.resolve())))
+
+    db._run(refresh_after_rename(
+        db._client,
+        [must_parse(source)],
+        [RenameOperation(source.resolve(), target.resolve(), "track", "ready")],
+    ))
+
+    rows = db._run(db._client.objects.fetchall(
+        OrganizerMediaModel.select().where(
+            OrganizerMediaModel.path.in_([str(source.resolve()), str(target.resolve())])
+        )
+    ))
+    assert [(row.id, row.path) for row in rows] == [(source_row.id, str(target.resolve()))]
 
 
 def test_music_item_uses_track_nfo_for_display_fields(tmp_path: Path):

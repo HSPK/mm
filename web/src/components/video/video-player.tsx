@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react"
-import type Hls from "hls.js"
 import { Captions, Check, Expand, Gauge, Languages, Pause, Play, SkipForward, Volume2, VolumeX } from "lucide-react"
 import { playerRepo, type VideoPlaybackSource, type VideoTrack } from "@/api/player"
-import { browserTokenStorage } from "@/lib/token-storage"
 import { cn } from "@/lib/utils"
 
 const CONTROLS_IDLE_MS = 2200
@@ -31,7 +29,6 @@ export function VideoPlayer({
 }) {
     const videoRef = useRef<HTMLVideoElement | null>(null)
     const rootRef = useRef<HTMLDivElement | null>(null)
-    const hlsRef = useRef<Hls | null>(null)
     const lastProgressRef = useRef(0)
     const restoredRef = useRef(false)
     const draggingRef = useRef(false)
@@ -140,8 +137,6 @@ export function VideoPlayer({
         let cancelled = false
         const video = videoRef.current
         if (!video) return
-        hlsRef.current?.destroy()
-        hlsRef.current = null
         video.removeAttribute("src")
         video.load()
         setError("")
@@ -149,32 +144,6 @@ export function VideoPlayer({
             .then(async (source) => {
                 if (cancelled) return
                 applySourceTracks(source)
-                if (source.mode === "hls") {
-                    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                        video.src = source.url
-                        video.load()
-                        return
-                    }
-                    const { default: Hls } = await import("hls.js")
-                    if (cancelled) return
-                    if (!Hls.isSupported()) {
-                        setError("HLS playback is not supported in this browser")
-                        return
-                    }
-                    const hls = new Hls({
-                        xhrSetup: (xhr) => {
-                            const token = browserTokenStorage.get()
-                            if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`)
-                        },
-                    })
-                    hlsRef.current = hls
-                    hls.on(Hls.Events.ERROR, (_event, data) => {
-                        if (data.fatal) setError("Video playback failed")
-                    })
-                    hls.loadSource(source.url)
-                    hls.attachMedia(video)
-                    return
-                }
                 video.src = source.url
                 video.load()
             })
@@ -183,8 +152,6 @@ export function VideoPlayer({
             })
         return () => {
             cancelled = true
-            hlsRef.current?.destroy()
-            hlsRef.current = null
         }
     }, [applySourceTracks, playbackId, requestedAudioStream])
 

@@ -9,16 +9,13 @@ from hashlib import sha256
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from mm.config import load_cli_config
-from mm.io import local_storage
-from mm.server.utils import stream_file
 
 DIRECT_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".webm", ".ogv"}
-REMUX_VIDEO_CODECS = {"h264", "hevc", "h265", "av1"}
 TEXT_SUBTITLE_CODECS = {"subrip", "ass", "ssa", "webvtt", "mov_text"}
 _FFPROBE = shutil.which("ffprobe")
 
@@ -64,22 +61,9 @@ def video_playback_source(
             selected_audio_stream=selected_audio,
             preserves_video=True,
         )
-    if ffmpeg and can_remux_video_stream(streams):
-        params = f"playback_id={quote(playback_id)}"
-        if selected_audio is not None:
-            params += f"&audio_stream={selected_audio}"
-        return VideoPlaybackSource(
-            mode="remux",
-            url=f"/api/player/video/remux?{params}",
-            mime_type="video/mp4",
-            audio_tracks=audio_tracks,
-            subtitle_tracks=subtitle_tracks,
-            selected_audio_stream=selected_audio,
-            preserves_video=True,
-        )
     raise HTTPException(
         422,
-        "Video is not browser-playable and cannot be remuxed without video transcoding",
+        "Video is not browser-playable and automatic ffmpeg processing is disabled",
     )
 
 
@@ -99,34 +83,6 @@ def preview_frame_response(
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=31536000, immutable"},
     )
-
-
-async def remuxed_video_response(
-    path: Path,
-    request: Request,
-    playback_id: str,
-    audio_stream: int | None,
-    ffmpeg: str | None,
-):
-    if not ffmpeg:
-        raise HTTPException(422, "ffmpeg is unavailable")
-    streams = probe_streams(path)
-    if not can_remux_video_stream(streams):
-        raise HTTPException(422, "Video cannot be remuxed without transcoding")
-    selected_audio = select_audio_stream(audio_track_options(streams), audio_stream)
-    cache_path = remuxed_video_cache_path(path, selected_audio)
-    if not cache_path.exists():
-        import asyncio
-
-        await asyncio.to_thread(
-            build_remuxed_video_cache,
-            path,
-            cache_path,
-            ffmpeg,
-            selected_audio,
-            video_codec(streams),
-        )
-    return stream_file(cache_path, request, storage=local_storage)
 
 
 def subtitle_response(
@@ -155,14 +111,6 @@ def can_direct_play_video(path: Path) -> bool:
     return path.suffix.lower() in DIRECT_VIDEO_EXTENSIONS
 
 
-def remuxed_video_cache_path(path: Path, audio_stream: int | None) -> Path:
-    stat = path.stat()
-    key = sha256(
-        f"{path}:{stat.st_size}:{stat.st_mtime_ns}:remux-v2:{audio_stream}".encode()
-    ).hexdigest()
-    return load_cli_config().paths.cache_dir / "player-video-remux" / f"{key}.mp4"
-
-
 def preview_frame_path(path: Path, playback_id: str, time_value: float) -> Path:
     stat = path.stat()
     bucket = max(0, int(time_value // 10 * 10))
@@ -178,44 +126,6 @@ def subtitle_cache_path(path: Path, stream_index: int) -> Path:
         f"{path.expanduser().resolve()}:{stat.st_size}:{stat.st_mtime_ns}:subtitle-v1:{stream_index}".encode()
     ).hexdigest()
     return load_cli_config().paths.cache_dir / "player-video-subtitles" / f"{key}.vtt"
-
-
-def build_remuxed_video_cache(
-    source: Path,
-    target: Path,
-    ffmpeg: str,
-    audio_stream: int | None,
-    codec: str,
-) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f"{target.stem}.{uuid.uuid4().hex}.tmp.mp4")
-    command = [
-        ffmpeg,
-        "-v",
-        "error",
-        "-y",
-        "-i",
-        str(source),
-        "-map",
-        "0:v:0",
-    ]
-    if audio_stream is None:
-        command.append("-an")
-    else:
-        command.extend(["-map", f"0:{audio_stream}"])
-    command.extend(["-map_metadata", "0", "-c:v", "copy"])
-    if codec in {"hevc", "h265"}:
-        command.extend(["-tag:v", "hvc1"])
-    if audio_stream is not None:
-        command.extend(["-c:a", "aac", "-b:a", "384k"])
-    command.extend(["-sn", "-movflags", "+faststart", str(tmp)])
-    try:
-        subprocess.run(command, capture_output=True, text=True, check=True)
-        tmp.replace(target)
-    except subprocess.CalledProcessError as exc:
-        tmp.unlink(missing_ok=True)
-        detail = exc.stderr.strip() or "Video remux failed"
-        raise HTTPException(500, detail)
 
 
 def build_subtitle_cache(source: Path, target: Path, stream_index: int, ffmpeg: str) -> None:
@@ -327,17 +237,6 @@ def select_audio_stream(audio_tracks: list[VideoTrack], requested: int | None) -
     if default is not None:
         return default
     return audio_tracks[0].index if audio_tracks else None
-
-
-def can_remux_video_stream(streams: list[dict[str, object]]) -> bool:
-    return video_codec(streams) in REMUX_VIDEO_CODECS
-
-
-def video_codec(streams: list[dict[str, object]]) -> str:
-    for stream in streams:
-        if stream.get("codec_type") == "video":
-            return str(stream.get("codec_name") or "").lower()
-    return ""
 
 
 def build_preview_frame(source: Path, target: Path, time_value: float, ffmpeg: str) -> None:
