@@ -25,17 +25,17 @@ export const AuthImage = memo(function AuthImage({
     fallback,
     ...rest
 }: AuthImageProps) {
-    const [loaded, setLoaded] = useState(false)
-    const [error, setError] = useState(false)
+    const src = apiSrc?.startsWith("/") ? `${config.apiBaseUrl}${apiSrc}` : apiSrc
+    const [state, setState] = useState({ src: src ?? null, loaded: false, error: false })
+    const loaded = state.src === src && state.loaded
+    const error = state.src === src && state.error
 
-    if (!apiSrc || error) {
+    if (!src || error) {
         if (fallback !== undefined) {
             return <>{fallback}</>
         }
         return <div className={cn("bg-muted", className)} aria-hidden />
     }
-
-    const src = apiSrc.startsWith("/") ? `${config.apiBaseUrl}${apiSrc}` : apiSrc
 
     return (
         <>
@@ -58,8 +58,8 @@ export const AuthImage = memo(function AuthImage({
                 decoding="async"
                 crossOrigin={IS_CROSS_ORIGIN ? "use-credentials" : undefined}
                 className={cn(className, !loaded && "opacity-0")}
-                onLoad={() => setLoaded(true)}
-                onError={() => setError(true)}
+                onLoad={() => setState({ src: src ?? null, loaded: true, error: false })}
+                onError={() => setState({ src: src ?? null, loaded: false, error: true })}
                 {...rest}
             />
         </>

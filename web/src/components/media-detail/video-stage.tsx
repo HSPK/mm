@@ -6,6 +6,7 @@ const LazyVideoStage = lazy(() => import("./video-stage-impl"))
 
 interface VideoStageProps {
     item: Media
+    keyboardEnabled: boolean
     onLoaded: (id: number) => void
     onError: (id: number, message: string) => void
 }

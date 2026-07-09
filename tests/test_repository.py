@@ -190,6 +190,13 @@ def test_db_client_migrates_legacy_schema(tmp_path: Path):
         "0001_add_media_deleted_at",
         "0002_normalize_smart_album_schema",
         "0003_create_file_sync_state",
+        "0004_create_organizer_media",
+        "0005_create_organizer_rename_log",
+        "0006_create_organizer_jobs",
+        "0007_migrate_organizer_jobs_to_jobs",
+        "0008_create_job_events",
+        "0009_add_organizer_media_light_columns",
+        "0010_create_video_state",
     }
 
 

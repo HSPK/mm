@@ -76,7 +76,12 @@ export function InfoDialog({
     const fetchMedia = useMediaQueryStore((s) => s.fetchMedia)
 
     const { detail, loading, loadError, reload, setDetail } = useMediaDetail(mediaId, open)
-    const [isEditing, setIsEditing] = useState(initialEditMode)
+    const editStateKey = `${mediaId}:${open ? "open" : "closed"}:${initialEditMode ? "edit" : "view"}`
+    const [editState, setEditState] = useState({ key: editStateKey, isEditing: initialEditMode })
+    const isEditing = editState.key === editStateKey ? editState.isEditing : initialEditMode
+    const setIsEditing = useCallback((next: boolean) => {
+        setEditState({ key: editStateKey, isEditing: next })
+    }, [editStateKey])
     const editForm = useMediaEditForm(detail, isEditing)
     const [saving, setSaving] = useState(false)
     const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
@@ -97,8 +102,6 @@ export function InfoDialog({
             if (filters.tag || filters.search) void fetchMedia(true)
         },
     })
-
-    useEffect(() => { setIsEditing(initialEditMode) }, [initialEditMode, open])
 
     useEffect(() => {
         if (!open) return
@@ -138,7 +141,7 @@ export function InfoDialog({
         onDirtyChange?.(false)
         if (externalCloseRequested) onDiscardClose?.()
         else onClose()
-    }, [editForm, externalCloseRequested, onClose, onDirtyChange, onDiscardClose])
+    }, [editForm, externalCloseRequested, onClose, onDirtyChange, onDiscardClose, setIsEditing])
 
     useEffect(() => {
         onDirtyChange?.(editForm.isDirty)
@@ -279,7 +282,7 @@ export function InfoDialog({
                                         )
                                     }
 
-                                    <div className="h-px bg-white/[0.06] mb-4" />
+                                    <div className="mb-4 h-px bg-border" />
 
                                     <TagsSection
                                         detail={detail}
@@ -311,7 +314,7 @@ export function InfoDialog({
 function LoadingState() {
     return (
         <div className="flex items-center justify-center py-20">
-            <Spinner size="md" className="text-white/20" />
+            <Spinner size="md" className="text-muted-foreground" />
         </div>
     )
 }
@@ -319,12 +322,12 @@ function LoadingState() {
 function LoadErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
     return (
         <div className="flex flex-col items-center justify-center px-8 py-16 text-center">
-            <AlertTriangle className="mb-3 h-7 w-7 text-red-300/60" />
-            <div className="text-sm font-medium text-white/75">{message}</div>
+            <AlertTriangle className="mb-3 h-7 w-7 text-destructive/70" />
+            <div className="text-sm font-medium text-foreground/75">{message}</div>
             <button
                 type="button"
                 onClick={onRetry}
-                className="mt-4 rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white/75 transition hover:bg-white/15 hover:text-white"
+                className="mt-4 rounded-full bg-secondary px-4 py-2 text-xs font-semibold text-foreground/75 transition hover:bg-secondary/80 hover:text-foreground"
             >
                 Retry
             </button>
@@ -335,8 +338,8 @@ function LoadErrorState({ message, onRetry }: { message: string; onRetry: () => 
 function EmptyState() {
     return (
         <div className="flex flex-col items-center justify-center px-8 py-16 text-center">
-            <AlertTriangle className="mb-3 h-7 w-7 text-white/30" />
-            <div className="text-sm font-medium text-white/60">No details available</div>
+            <AlertTriangle className="mb-3 h-7 w-7 text-muted-foreground" />
+            <div className="text-sm font-medium text-muted-foreground">No details available</div>
         </div>
     )
 }

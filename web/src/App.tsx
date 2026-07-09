@@ -4,18 +4,20 @@ import type { ReactNode } from "react"
 import { useAuthStore } from "@/stores/auth"
 import AppLayout from "@/layouts/app-layout"
 import LoginPage from "@/pages/login"
-import { ToastViewport } from "@/components/ui/toast"
+import { NotificationViewport } from "@/components/ui/notifications"
 import { Spinner } from "@/components/ui/spinner"
 
 // Secondary pages are lazy-loaded — they're only reachable via overflow menus,
 // so the main Library + Albums tabs can ship in a smaller initial bundle.
 const DashboardPage = lazy(() => import("@/pages/dashboard"))
 const SettingsPage = lazy(() => import("@/pages/settings"))
-const ProfilePage = lazy(() => import("@/pages/profile"))
-const TagsPage = lazy(() => import("@/pages/tags"))
-const DuplicatesPage = lazy(() => import("@/pages/duplicates"))
 const AdminUsersPage = lazy(() => import("@/pages/admin-users"))
 const MapPage = lazy(() => import("@/pages/map"))
+const OrganizePage = lazy(() => import("@/pages/organize"))
+const ImportPage = lazy(() => import("@/pages/import"))
+const MoviesPage = lazy(() => import("@/pages/movies"))
+const TvSeriesPage = lazy(() => import("@/pages/tv-series"))
+const MusicPage = lazy(() => import("@/pages/music"))
 
 function PageLoading() {
     return <div className="flex h-screen items-center justify-center"><Spinner /></div>
@@ -52,18 +54,21 @@ export default function App() {
                     >
                         <Route path="/" element={<></>} />
                         <Route path="/albums" element={<></>} />
+                        <Route path="/movies" element={lazyRoute(<MoviesPage />)} />
+                        <Route path="/tv" element={lazyRoute(<TvSeriesPage />)} />
+                        <Route path="/music" element={lazyRoute(<MusicPage />)} />
                         <Route path="/dashboard" element={lazyRoute(<DashboardPage />)} />
                         <Route path="/map" element={lazyRoute(<MapPage />)} />
+                        <Route path="/organize" element={lazyRoute(<OrganizePage />)} />
+                        <Route path="/import" element={lazyRoute(<ImportPage />)} />
                         <Route path="/settings" element={lazyRoute(<SettingsPage />)} />
-                        <Route path="/profile" element={lazyRoute(<ProfilePage />)} />
-                        <Route path="/tags" element={lazyRoute(<TagsPage />)} />
-                        <Route path="/duplicates" element={lazyRoute(<DuplicatesPage />)} />
+                        <Route path="/profile" element={<Navigate to="/settings?section=account" replace />} />
                         <Route path="/admin/users" element={lazyRoute(<AdminUsersPage />)} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </HashRouter>
-            <ToastViewport />
+            <NotificationViewport />
         </>
     )
 }

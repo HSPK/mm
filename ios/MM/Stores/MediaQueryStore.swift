@@ -86,7 +86,7 @@ final class MediaQueryStore {
                 // Warm the image cache for the freshly-arrived rows so the
                 // grid renders instantly once they appear on screen.
                 ImageCache.shared.prefetch(
-                    res.items.map { MediaRepository.shared.thumbnailURL(for: $0.id, size: "md") }
+                    res.items.prefix(12).map { MediaRepository.shared.thumbnailURL(for: $0.id, size: "md") }
                 )
             } catch is CancellationError {
                 // navigated away; leave state alone

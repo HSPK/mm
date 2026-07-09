@@ -106,7 +106,7 @@ export default function MediaLibraryPage() {
 
     return (
         <div className="pb-20">
-            <div ref={galleryRef} className="px-2 sm:px-4 pt-2">
+            <div ref={galleryRef} className="px-2 pt-5 sm:px-4 sm:pt-7">
                 {error && (
                     <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
                         {error}

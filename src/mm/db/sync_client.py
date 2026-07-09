@@ -129,6 +129,9 @@ class SyncMediaApi(_SyncApi):
     def batch_soft_delete(self, media_ids: list[int]) -> int:
         return self._run(self._api.batch_soft_delete(media_ids))
 
+    def batch_restore(self, media_ids: list[int]) -> int:
+        return self._run(self._api.batch_restore(media_ids))
+
     def list_trash(self) -> list[Media]:
         return self._run(self._api.list_trash())
 

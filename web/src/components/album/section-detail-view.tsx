@@ -23,7 +23,7 @@ export function SectionDetailView({ section }: SectionDetailViewProps) {
     }, [section.items, search])
 
     return (
-        <div className="px-2 sm:px-4 pt-2 pb-24">
+        <div className="px-2 pt-5 pb-24 sm:px-4 sm:pt-7">
             {filtered.length === 0 ? (
                 <EmptyState
                     icon={ImageOff}

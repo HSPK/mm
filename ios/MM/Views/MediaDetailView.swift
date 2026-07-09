@@ -10,6 +10,8 @@ struct MediaDetailView: View {
     @State private var currentIndex: Int
     @State private var showShare = false
     @State private var showInfo = false
+    @State private var shareURL: URL?
+    @State private var preparingShare = false
     @State private var deleting = false
     @State private var restoring = false
     @State private var error: String?
@@ -38,14 +40,19 @@ struct MediaDetailView: View {
             Color.black.ignoresSafeArea()
 
             if let item = currentItem {
+                #if os(macOS)
+                PageContent(item: item)
+                    .id(item.id)
+                    .onAppear { store.loadMoreIfNeeded(currentItem: item) }
+                #else
                 TabView(selection: $currentIndex) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { idx, m in
+                    ForEach(items.indices, id: \.self) { idx in
+                        let m = items[idx]
                         PageContent(item: m)
                             .tag(idx)
                             .onAppear { store.loadMoreIfNeeded(currentItem: m) }
                     }
                 }
-                #if os(iOS)
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 #endif
 
@@ -53,10 +60,11 @@ struct MediaDetailView: View {
                     Chrome(
                         item: item,
                         inTrash: inTrash,
+                        preparingShare: preparingShare,
                         deleting: deleting,
                         restoring: restoring,
                         onClose: onClose,
-                        onShare: { showShare = true },
+                        onShare: { Task { await prepareShare() } },
                         onInfo: { showInfo = true },
                         onRestore: { Task { await restoreCurrent() } },
                         onDelete: { Task { await deleteCurrent() } },
@@ -81,9 +89,18 @@ struct MediaDetailView: View {
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
         #endif
-        .sheet(isPresented: $showShare) {
-            if let item = currentItem {
-                ShareSheet(items: [repo.fileURL(for: item.id)])
+        #if os(macOS)
+        .onMoveCommand { direction in
+            switch direction {
+            case .left: moveCurrent(by: -1)
+            case .right: moveCurrent(by: 1)
+            default: break
+            }
+        }
+        #endif
+        .sheet(isPresented: $showShare, onDismiss: cleanupShareURL) {
+            if let shareURL {
+                ShareSheet(items: [shareURL])
                     #if os(macOS)
                     .frame(minWidth: 320, minHeight: 200)
                     #endif
@@ -106,6 +123,33 @@ struct MediaDetailView: View {
                     #endif
             }
         }
+    }
+
+    private func prepareShare() async {
+        guard let item = currentItem, !preparingShare else { return }
+        preparingShare = true
+        defer { preparingShare = false }
+        do {
+            shareURL = try await repo.downloadFile(for: item)
+            showShare = true
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func cleanupShareURL() {
+        guard let shareURL else { return }
+        self.shareURL = nil
+        do {
+            try FileManager.default.removeItem(at: shareURL.deletingLastPathComponent())
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func moveCurrent(by delta: Int) {
+        guard !items.isEmpty else { return }
+        currentIndex = min(max(currentIndex + delta, 0), items.count - 1)
     }
 
     private func deleteCurrent() async {
@@ -138,15 +182,29 @@ struct MediaDetailView: View {
 
 private struct PageContent: View {
     let item: Media
-    private let repo = MediaRepository.shared
 
     var body: some View {
         if item.isVideo {
-            VideoPlayer(player: AVPlayer(url: repo.fileURL(for: item.id)))
-                .ignoresSafeArea()
+            VideoPageContent(item: item)
         } else {
-            ZoomableImage(url: repo.previewURL(for: item.id))
+            ZoomableImage(url: MediaRepository.shared.previewURL(for: item.id))
         }
+    }
+}
+
+private struct VideoPageContent: View {
+    let item: Media
+    @State private var player: AVPlayer
+
+    init(item: Media) {
+        self.item = item
+        self._player = State(initialValue: AVPlayer(url: MediaRepository.shared.fileURL(for: item.id)))
+    }
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .ignoresSafeArea()
+            .onDisappear { player.pause() }
     }
 }
 
@@ -203,6 +261,7 @@ private struct ZoomableImage: View {
 private struct Chrome: View {
     let item: Media
     let inTrash: Bool
+    let preparingShare: Bool
     let deleting: Bool
     let restoring: Bool
     let onClose: () -> Void
@@ -217,7 +276,7 @@ private struct Chrome: View {
             Spacer()
             HStack(spacing: 8) {
                 CircleButton(systemImage: "info.circle", action: onInfo, label: "Info")
-                CircleButton(systemImage: "square.and.arrow.up", action: onShare, label: "Share")
+                CircleButton(systemImage: "square.and.arrow.up", action: onShare, label: "Share", loading: preparingShare)
                 if inTrash {
                     CircleButton(systemImage: "arrow.uturn.backward.circle", action: onRestore, label: "Restore", loading: restoring)
                 }
@@ -289,10 +348,8 @@ private struct Footer: View {
 
     private var metadataLine: String? {
         var parts: [String] = []
-        if let date = item.dateTaken, let d = ISO8601DateFormatter().date(from: date) ?? parseLooseDate(date) {
-            let f = DateFormatter()
-            f.dateFormat = "MMM d, yyyy"
-            parts.append(f.string(from: d))
+        if let date = item.dateTaken, let d = DetailFormatters.iso.date(from: date) ?? DetailFormatters.loose.date(from: date) {
+            parts.append(DetailFormatters.footerDate.string(from: d))
         }
         if let camera = item.cameraModel, !camera.isEmpty { parts.append(camera) }
         if let w = item.width, let h = item.height, w > 0 && h > 0 {
@@ -300,12 +357,21 @@ private struct Footer: View {
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
+}
 
-    private func parseLooseDate(_ s: String) -> Date? {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        return f.date(from: s)
-    }
+private enum DetailFormatters {
+    static let iso = ISO8601DateFormatter()
+    static let loose: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return formatter
+    }()
+    static let footerDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
 }
 
 // MARK: - Share sheet bridges

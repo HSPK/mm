@@ -6,11 +6,28 @@ import datetime as dt
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from peewee import CharField, Database, DateTimeField, IntegerField, SmallIntegerField, TextField
+from peewee import (
+    CharField,
+    Database,
+    DateTimeField,
+    FloatField,
+    IntegerField,
+    SmallIntegerField,
+    TextField,
+)
 from playhouse.migrate import PostgresqlMigrator, SqliteMigrator, migrate
 
 from mm.db.backend import DatabaseBackend
-from mm.db.models import FileSyncStateModel, SchemaMigrationModel, SmartAlbumModel
+from mm.db.models import (
+    FileSyncStateModel,
+    JobEventModel,
+    JobModel,
+    OrganizerMediaModel,
+    OrganizerRenameLogModel,
+    SchemaMigrationModel,
+    SmartAlbumModel,
+    VideoStateModel,
+)
 
 
 class Migrator(Protocol):
@@ -117,8 +134,97 @@ def _create_file_sync_state(db: Database, migrator: Migrator) -> None:
     db.create_tables([FileSyncStateModel], safe=True)
 
 
+def _create_organizer_media(db: Database, migrator: Migrator) -> None:
+    db.create_tables([OrganizerMediaModel], safe=True)
+
+
+def _create_organizer_rename_log(db: Database, migrator: Migrator) -> None:
+    db.create_tables([OrganizerRenameLogModel], safe=True)
+
+
+def _create_organizer_jobs(db: Database, migrator: Migrator) -> None:
+    db.create_tables([JobModel], safe=True)
+
+
+def _migrate_organizer_jobs_to_jobs(db: Database, migrator: Migrator) -> None:
+    db.create_tables([JobModel], safe=True)
+    if not _has_table(db, "organizer_jobs"):
+        return
+    columns = (
+        "id",
+        "kind",
+        "status",
+        "progress",
+        "title",
+        "message",
+        "detail",
+        "payload",
+        "result",
+        "error",
+        "created_at",
+        "updated_at",
+    )
+    names = ", ".join(columns)
+    db.execute_sql(
+        f"""
+        INSERT INTO jobs ({names})
+        SELECT {names}
+        FROM organizer_jobs
+        WHERE NOT EXISTS (
+            SELECT 1 FROM jobs WHERE jobs.id = organizer_jobs.id
+        )
+        """
+    )
+    db.execute_sql("DROP TABLE IF EXISTS organizer_jobs")
+
+
+def _create_job_events(db: Database, migrator: Migrator) -> None:
+    db.create_tables([JobEventModel], safe=True)
+
+
+def _add_organizer_media_light_columns(db: Database, migrator: Migrator) -> None:
+    db.create_tables([OrganizerMediaModel], safe=True)
+    _add_column_if_missing(db, migrator, "organizer_media", "title", TextField(default=""))
+    _add_column_if_missing(db, migrator, "organizer_media", "artist", TextField(null=True))
+    _add_column_if_missing(db, migrator, "organizer_media", "album", TextField(null=True))
+    _add_column_if_missing(db, migrator, "organizer_media", "year", IntegerField(null=True))
+    _add_column_if_missing(db, migrator, "organizer_media", "season", IntegerField(null=True))
+    _add_column_if_missing(db, migrator, "organizer_media", "episode", IntegerField(null=True))
+    _add_column_if_missing(db, migrator, "organizer_media", "disc", IntegerField(null=True))
+    _add_column_if_missing(db, migrator, "organizer_media", "track", IntegerField(null=True))
+    _add_column_if_missing(db, migrator, "organizer_media", "parse_template", TextField(null=True))
+    _add_column_if_missing(
+        db, migrator, "organizer_media", "parse_relative_path", TextField(null=True)
+    )
+    _add_column_if_missing(db, migrator, "organizer_media", "confidence", FloatField(default=0.0))
+    _add_column_if_missing(db, migrator, "organizer_media", "is_new", SmallIntegerField(default=0))
+    _add_column_if_missing(
+        db, migrator, "organizer_media", "has_metadata", SmallIntegerField(default=0)
+    )
+    _add_column_if_missing(
+        db, migrator, "organizer_media", "has_images", SmallIntegerField(default=0)
+    )
+    _add_column_if_missing(
+        db, migrator, "organizer_media", "has_subtitles", SmallIntegerField(default=0)
+    )
+    _add_column_if_missing(
+        db, migrator, "organizer_media", "has_lyrics", SmallIntegerField(default=0)
+    )
+
+
+def _create_video_state(db: Database, migrator: Migrator) -> None:
+    db.create_tables([VideoStateModel], safe=True)
+
+
 _MIGRATIONS: tuple[tuple[str, Migration], ...] = (
     ("0001_add_media_deleted_at", _add_media_deleted_at),
     ("0002_normalize_smart_album_schema", _normalize_smart_album_schema),
     ("0003_create_file_sync_state", _create_file_sync_state),
+    ("0004_create_organizer_media", _create_organizer_media),
+    ("0005_create_organizer_rename_log", _create_organizer_rename_log),
+    ("0006_create_organizer_jobs", _create_organizer_jobs),
+    ("0007_migrate_organizer_jobs_to_jobs", _migrate_organizer_jobs_to_jobs),
+    ("0008_create_job_events", _create_job_events),
+    ("0009_add_organizer_media_light_columns", _add_organizer_media_light_columns),
+    ("0010_create_video_state", _create_video_state),
 )

@@ -7,7 +7,12 @@ from pathlib import Path
 from mm.config import get_config
 from mm.db.sync_client import DBClient
 from mm.io import FileStorage
-from mm.media.thumbnails import cache_dir_for_library, get_thumbnail
+from mm.media.thumbnails import (
+    cache_dir_for_library,
+    clear_failed_thumbnail_markers,
+    failed_thumbnail_count,
+    get_thumbnail,
+)
 from mm.utils.parallel import map_items
 from mm.utils.paths import resolve_media_path
 
@@ -17,6 +22,7 @@ class ThumbnailCacheStats:
     cache_dir: Path
     file_count: int
     total_size: int
+    failed_count: int
 
 
 @dataclass(frozen=True)
@@ -58,9 +64,16 @@ def thumbnail_cache_stats(
     file_count = 0
     total_size = 0
     for path in storage.rglob_files(cache_dir):
+        if path.suffix != ".webp":
+            continue
         file_count += 1
         total_size += storage.get_size(path)
-    return ThumbnailCacheStats(cache_dir=cache_dir, file_count=file_count, total_size=total_size)
+    return ThumbnailCacheStats(
+        cache_dir=cache_dir,
+        file_count=file_count,
+        total_size=total_size,
+        failed_count=failed_thumbnail_count(cache_dir, storage=storage),
+    )
 
 
 def build_thumbnail_cache(
@@ -71,6 +84,8 @@ def build_thumbnail_cache(
     sizes: list[str] | None = None,
     cache_base: Path | None = None,
     force: bool = False,
+    media_types: set[str] | None = None,
+    failed_only: bool = False,
     jobs: int = 0,
     storage: FileStorage,
     on_progress: Callable[[_ThumbnailTaskResult], None] | None = None,
@@ -82,9 +97,15 @@ def build_thumbnail_cache(
         raise ValueError(f"Unknown thumbnail size(s): {', '.join(unknown)}")
 
     cache_dir = thumbnail_cache_dir(library_id, cache_base)
+    allowed_media_types = media_types or {"photo", "video"}
     tasks: list[_ThumbnailTask] = []
     for media in db.media.list():
         if media.id is None or media.deleted_at is not None:
+            continue
+        media_type = media.media_type.value
+        if media_type not in allowed_media_types:
+            continue
+        if failed_only and not _has_failed_marker(cache_dir, media.id, storage=storage):
             continue
         source_path = resolve_media_path(media.path, library_root)
         if not storage.exists(source_path):
@@ -122,6 +143,8 @@ def _build_one_thumbnail(task: _ThumbnailTask) -> _ThumbnailTaskResult:
     if task.force and task.storage.exists(dest):
         task.storage.delete_file(dest, missing_ok=True)
         cached = False
+    if task.force:
+        clear_failed_thumbnail_markers(task.cache_dir, task.media_id, storage=task.storage)
     thumb = get_thumbnail(
         task.source_path,
         task.media_id,
@@ -141,3 +164,7 @@ def _is_fresh(dest: Path, source_path: str, storage: FileStorage) -> bool:
         return storage.get_mtime(source_path) <= storage.get_mtime(dest)
     except OSError:
         return False
+
+
+def _has_failed_marker(cache_dir: Path, media_id: int, *, storage: FileStorage) -> bool:
+    return storage.exists(cache_dir / "failed" / "poster" / f"{media_id}.txt")

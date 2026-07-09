@@ -23,8 +23,8 @@ describe("Button", () => {
     it("renders a spinner before children when loading", () => {
         render(<Button loading>Loading</Button>)
         const btn = screen.getByRole("button", { name: /Loading/ })
-        const spinner = btn.querySelector("svg")
-        expect(spinner?.classList.contains("animate-spin")).toBe(true)
+        const spinner = btn.querySelector('[role="status"]')
+        expect(spinner).toBeInTheDocument()
     })
 
     it("calls onClick when not loading", () => {

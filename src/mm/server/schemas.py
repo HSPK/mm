@@ -3,12 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel as PydanticBase, ConfigDict, Field
-
-
-# ---------------------------------------------------------------------------
-# Request bodies
-# ---------------------------------------------------------------------------
+from pydantic import BaseModel as PydanticBase
+from pydantic import ConfigDict, Field
 
 
 class LoginBody(PydanticBase):
@@ -138,11 +134,6 @@ class UpdateMetadataBody(PydanticBase):
     shutter_speed: str | None = None
     iso: int | None = None
     focal_length: float | None = None
-
-
-# ---------------------------------------------------------------------------
-# Response models — appear in openapi.json so clients can type their decoders
-# ---------------------------------------------------------------------------
 
 
 class MediaBrief(PydanticBase):
@@ -412,16 +403,15 @@ class StatusOk(PydanticBase):
     status: str = "ok"
 
 
-# ---------------------------------------------------------------------------
-# Serializers — return Pydantic instances; FastAPI emits the same JSON shape
-# ---------------------------------------------------------------------------
-
-
 def serialize_media_brief(m: Any, md: Any = None) -> MediaBrief:
     """Lightweight serialisation for list views (with optional metadata)."""
     deleted_at: str | None = None
     if m.deleted_at:
-        deleted_at = m.deleted_at.isoformat() if hasattr(m.deleted_at, "isoformat") else str(m.deleted_at)
+        deleted_at = (
+            m.deleted_at.isoformat()
+            if hasattr(m.deleted_at, "isoformat")
+            else str(m.deleted_at)
+        )
 
     payload: dict[str, Any] = {
         "id": m.id,

@@ -253,7 +253,7 @@ export function VideoGestures({
 }
 
 function GestureOverlay({ state, duration }: { state: NonNullable<ActiveGesture>; duration: number }) {
-    const wrapClass = "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-black/70 backdrop-blur-md text-white shadow-2xl"
+    const wrapClass = "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-black/70 text-white shadow-2xl"
 
     if (state.kind === "speed") {
         return (
@@ -302,7 +302,7 @@ function SideBar({
 }) {
     const positionClass = side === "left" ? "left-6" : "right-6"
     return (
-        <div className={`pointer-events-none absolute top-1/2 ${positionClass} -translate-y-1/2 flex flex-col items-center gap-3 rounded-full bg-black/65 backdrop-blur-md p-3 text-white shadow-2xl`}>
+        <div className={`pointer-events-none absolute top-1/2 ${positionClass} -translate-y-1/2 flex flex-col items-center gap-3 rounded-full bg-black/65 p-3 text-white shadow-2xl`}>
             <Icon className="h-5 w-5" />
             <div className="h-32 w-1.5 rounded-full bg-white/15 overflow-hidden">
                 <div

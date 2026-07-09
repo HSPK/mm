@@ -153,7 +153,7 @@ private struct MapPinThumb: View {
     let filename: String
 
     var body: some View {
-        AuthAsyncImage(url: MediaRepository.shared.thumbnailURL(for: id, size: "sm"))
+        AuthAsyncImage(url: MediaRepository.shared.thumbnailURL(for: id, size: "sm"), contentMode: .fill)
             .frame(width: 36, height: 36)
             .clipShape(.rect(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white, lineWidth: 2))

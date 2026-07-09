@@ -12,6 +12,7 @@ describe("Spinner", () => {
 
     it("applies size class", () => {
         const { getByRole } = render(<Spinner size="lg" />)
+        expect(getByRole("status").classList.contains("gap-2")).toBe(true)
         expect(getByRole("status").classList.contains("h-7")).toBe(true)
     })
 

@@ -33,14 +33,6 @@ export default function AdminUsersPage() {
         }
     }, [])
 
-    useEffect(() => {
-        if (me?.is_admin) void load()
-    }, [me?.is_admin, load])
-
-    if (me && !me.is_admin) {
-        return <Navigate to="/settings" replace />
-    }
-
     const handleDelete = useCallback(async (user: UserDetail) => {
         if (user.id === me?.id) {
             toast.error("Can't delete your own account")
@@ -56,12 +48,21 @@ export default function AdminUsersPage() {
         }
     }, [me?.id])
 
+    useEffect(() => {
+        if (!me?.is_admin) return
+        const id = window.setTimeout(() => { void load() }, 0)
+        return () => window.clearTimeout(id)
+    }, [me?.is_admin, load])
+
+    if (me && !me.is_admin) {
+        return <Navigate to="/settings" replace />
+    }
+
     return (
         <div className="pb-24 min-h-screen">
             <PageHeader
                 title="Users"
                 back
-                largeTitle
                 actions={
                     <Button
                         size="sm"

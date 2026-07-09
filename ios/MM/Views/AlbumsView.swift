@@ -168,18 +168,7 @@ struct AlbumCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
-                Group {
-                    if let cover = album.coverId {
-                        AuthAsyncImage(url: repo.thumbnailURL(for: cover, size: "lg"))
-                    } else {
-                        ZStack {
-                            Color.secondary.opacity(0.12)
-                            Image(systemName: iconName)
-                                .font(.system(size: 32))
-                                .foregroundStyle(.secondary.opacity(0.55))
-                        }
-                    }
-                }
+                coverView
                 .aspectRatio(1, contentMode: .fill)
                 .clipped()
                 .clipShape(.rect(cornerRadius: 14))
@@ -207,6 +196,20 @@ struct AlbumCard: View {
                 }
             }
             .padding(.horizontal, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var coverView: some View {
+        if let cover = album.coverId {
+            AuthAsyncImage(url: repo.thumbnailURL(for: cover, size: "lg"), contentMode: .fill)
+        } else {
+            ZStack {
+                Color.secondary.opacity(0.12)
+                Image(systemName: iconName)
+                    .font(.system(size: 32))
+                    .foregroundStyle(.secondary.opacity(0.55))
+            }
         }
     }
 

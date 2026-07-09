@@ -90,4 +90,24 @@ describe("createMediaRepository", () => {
         const out = await repo.batchDelete([1, 2, 3])
         expect(out.affected).toBe(3)
     })
+
+    it("batchRestore posts to /batch/restore", async () => {
+        const { mock, repo } = harness()
+        mock.onPost("/batch/restore").reply((config) => {
+            expect(JSON.parse(config.data)).toEqual({ media_ids: [4, 5] })
+            return [200, { affected: 2 }]
+        })
+        const out = await repo.batchRestore([4, 5])
+        expect(out.affected).toBe(2)
+    })
+
+    it("batchSetRating posts to /batch/rating", async () => {
+        const { mock, repo } = harness()
+        mock.onPost("/batch/rating").reply((config) => {
+            expect(JSON.parse(config.data)).toEqual({ media_ids: [7], rating: 4 })
+            return [200, { affected: 1 }]
+        })
+        const out = await repo.batchSetRating([7], 4)
+        expect(out.affected).toBe(1)
+    })
 })

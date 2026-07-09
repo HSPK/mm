@@ -4,11 +4,18 @@ import SwiftUI
 struct MMApp: App {
     @State private var auth = AuthStore()
 
+    @SceneBuilder
     var body: some Scene {
+        mainWindow
+        #if os(macOS)
+        menuBar
+        #endif
+    }
+
+    private var mainWindow: some Scene {
         WindowGroup {
             ContentView()
                 .environment(auth)
-                .preferredColorScheme(.dark)
                 .tint(.blue) // Apple systemBlue — matches the web theme accent
                 .symbolRenderingMode(.hierarchical) // depth & layered glyphs (HIG)
         }
@@ -19,4 +26,15 @@ struct MMApp: App {
         }
         #endif
     }
+
+    #if os(macOS)
+    private var menuBar: some Scene {
+        MenuBarExtra("MM", systemImage: "photo.stack") {
+            StatusBarSettingsView()
+                .environment(auth)
+                .frame(width: 380, height: 560)
+        }
+        .menuBarExtraStyle(.window)
+    }
+    #endif
 }

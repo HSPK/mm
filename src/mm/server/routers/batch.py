@@ -56,6 +56,26 @@ async def batch_delete(
     return BatchAffected(affected=count)
 
 
+@router.post("/delete/permanent", response_model=BatchAffected)
+async def batch_delete_permanent(
+    request: Request,
+    body: BatchDeleteBody,
+    _u: User | None = Depends(get_current_user),
+) -> BatchAffected:
+    count = await get_db(request).media.delete_rows(body.media_ids)
+    return BatchAffected(affected=count)
+
+
+@router.post("/restore", response_model=BatchAffected)
+async def batch_restore(
+    request: Request,
+    body: BatchDeleteBody,
+    _u: User | None = Depends(get_current_user),
+) -> BatchAffected:
+    count = await get_db(request).media.batch_restore(body.media_ids)
+    return BatchAffected(affected=count)
+
+
 @router.post("/metadata", response_model=BatchAffected)
 async def batch_update_metadata(
     request: Request,

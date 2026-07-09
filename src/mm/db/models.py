@@ -220,6 +220,119 @@ class LibraryConfigModel(BaseModel):
         table_name = "library_config"
 
 
+class OrganizerMediaModel(BaseModel):
+    id = AutoField()
+    path = TextField(unique=True)
+    source_kind = CharField(max_length=16)
+    media_type = CharField(max_length=16)
+    title = TextField(default="")
+    artist = TextField(null=True, default=None)
+    album = TextField(null=True, default=None)
+    year = IntegerField(null=True, default=None)
+    season = IntegerField(null=True, default=None)
+    episode = IntegerField(null=True, default=None)
+    disc = IntegerField(null=True, default=None)
+    track = IntegerField(null=True, default=None)
+    parse_template = TextField(null=True, default=None)
+    parse_relative_path = TextField(null=True, default=None)
+    confidence = FloatField(default=0.0)
+    is_new = SmallIntegerField(default=0)
+    has_metadata = SmallIntegerField(default=0)
+    has_images = SmallIntegerField(default=0)
+    has_subtitles = SmallIntegerField(default=0)
+    has_lyrics = SmallIntegerField(default=0)
+    payload = TextField(default="{}")
+    missing = SmallIntegerField(default=0)
+    first_seen_at = DateTimeField(default=dt.datetime.now)
+    last_seen_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "organizer_media"
+        indexes = (
+            (("source_kind",), False),
+            (("media_type",), False),
+            (("missing",), False),
+        )
+
+
+class OrganizerRenameLogModel(BaseModel):
+    id = AutoField()
+    batch_id = CharField(max_length=64, index=True)
+    source = TextField()
+    target = TextField()
+    media_type = CharField(max_length=16)
+    status = CharField(max_length=16, default="applied")
+    created_at = DateTimeField(default=dt.datetime.now)
+    undone_at = DateTimeField(null=True, default=None)
+
+    class Meta:
+        table_name = "organizer_rename_log"
+        indexes = (
+            (("batch_id",), False),
+            (("status",), False),
+        )
+
+
+class JobModel(BaseModel):
+    id = CharField(max_length=64, primary_key=True)
+    kind = CharField(max_length=32)
+    status = CharField(max_length=16, default="queued")
+    progress = IntegerField(default=0)
+    title = CharField(max_length=256, default="")
+    message = TextField(default="")
+    detail = TextField(default="")
+    payload = TextField(default="{}")
+    result = TextField(default="{}")
+    error = TextField(default="")
+    created_at = DateTimeField(default=dt.datetime.now)
+    updated_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "jobs"
+        indexes = (
+            (("kind",), False),
+            (("status",), False),
+            (("updated_at",), False),
+        )
+
+
+class JobEventModel(BaseModel):
+    id = AutoField()
+    job = ForeignKeyField(JobModel, backref="events", on_delete="CASCADE")
+    status = CharField(max_length=16, default="")
+    progress = IntegerField(default=0)
+    message = TextField(default="")
+    detail = TextField(default="")
+    error = TextField(default="")
+    created_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "job_events"
+        indexes = (
+            (("job",), False),
+            (("created_at",), False),
+        )
+
+
+class VideoStateModel(BaseModel):
+    id = AutoField()
+    owner = CharField(max_length=128, default="global")
+    path = TextField()
+    favorite = SmallIntegerField(default=0)
+    watched = SmallIntegerField(default=0)
+    notes = TextField(default="")
+    progress = FloatField(default=0.0)
+    duration = FloatField(default=0.0)
+    updated_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "video_state"
+        indexes = (
+            (("owner", "path"), True),
+            (("owner", "updated_at"), False),
+        )
+
+
 class SchemaMigrationModel(BaseModel):
     name = CharField(max_length=128, primary_key=True)
     applied_at = DateTimeField(default=dt.datetime.now)
@@ -239,5 +352,10 @@ ALL_TABLES = [
     AlbumMediaModel,
     SmartAlbumModel,
     LibraryConfigModel,
+    OrganizerMediaModel,
+    OrganizerRenameLogModel,
+    JobModel,
+    JobEventModel,
+    VideoStateModel,
     SchemaMigrationModel,
 ]

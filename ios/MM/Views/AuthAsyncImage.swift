@@ -56,7 +56,7 @@ final class ImageCache {
         if let task = inflight[url] {
             return try await task.value
         }
-        let task = Task<PlatformImage?, Error> { [weak self] in
+        let task: Task<PlatformImage?, Error> = Task.detached(priority: .utility) { [weak self] in
             defer { Task { @MainActor in self?.inflight[url] = nil } }
             var req = URLRequest(url: url)
             if let token = TokenStore.read() {
@@ -90,7 +90,8 @@ final class ImageCache {
 /// equal URLs.
 struct AuthAsyncImage<Placeholder: View, Failure: View>: View {
     let url: URL?
-    var transaction: Transaction = Transaction(animation: .easeOut(duration: 0.18))
+    var contentMode: ContentMode = .fit
+    var transaction: Transaction = Transaction()
     @ViewBuilder var placeholder: () -> Placeholder
     @ViewBuilder var failure: () -> Failure
 
@@ -112,9 +113,11 @@ struct AuthAsyncImage<Placeholder: View, Failure: View>: View {
                 #if os(macOS)
                 Image(nsImage: image)
                     .resizable()
+                    .aspectRatio(contentMode: contentMode)
                 #else
                 Image(uiImage: image)
                     .resizable()
+                    .aspectRatio(contentMode: contentMode)
                 #endif
             case .failure:
                 failure()
@@ -150,9 +153,10 @@ struct AuthAsyncImage<Placeholder: View, Failure: View>: View {
 }
 
 extension AuthAsyncImage where Placeholder == ShimmerPlaceholder, Failure == ImageFailurePlaceholder {
-    init(url: URL?) {
+    init(url: URL?, contentMode: ContentMode = .fit) {
         self.init(
             url: url,
+            contentMode: contentMode,
             placeholder: { ShimmerPlaceholder() },
             failure: { ImageFailurePlaceholder() },
         )
@@ -160,61 +164,9 @@ extension AuthAsyncImage where Placeholder == ShimmerPlaceholder, Failure == Ima
 }
 
 struct ShimmerPlaceholder: View {
-    @State private var on = false
     var body: some View {
         Rectangle()
-            .fill(Color.secondary.opacity(0.18))
-            .overlay(
-                LinearGradient(
-                    colors: [.clear, .white.opacity(0.06), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing,
-                )
-                .offset(x: on ? 200 : -200)
-                .blendMode(.overlay)
-                .clipped()
-            )
-            .onAppear { withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { on = true } }
-    }
-}
-
-struct ImageFailurePlaceholder: View {
-    var body: some View {
-        ZStack {
-            Color.secondary.opacity(0.12)
-            Image(systemName: "photo")
-                .foregroundStyle(.secondary)
-                .imageScale(.large)
-        }
-    }
-}
-
-extension AuthAsyncImage where Placeholder == ShimmerPlaceholder, Failure == ImageFailurePlaceholder {
-    init(url: URL?) {
-        self.init(
-            url: url,
-            placeholder: { ShimmerPlaceholder() },
-            failure: { ImageFailurePlaceholder() },
-        )
-    }
-}
-
-struct ShimmerPlaceholder: View {
-    @State private var on = false
-    var body: some View {
-        Rectangle()
-            .fill(Color.secondary.opacity(0.18))
-            .overlay(
-                LinearGradient(
-                    colors: [.clear, .white.opacity(0.06), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing,
-                )
-                .offset(x: on ? 200 : -200)
-                .blendMode(.overlay)
-                .clipped()
-            )
-            .onAppear { withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { on = true } }
+            .fill(Color.secondary.opacity(0.14))
     }
 }
 

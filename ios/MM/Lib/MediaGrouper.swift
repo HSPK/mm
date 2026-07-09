@@ -3,6 +3,7 @@ import Foundation
 /// User-facing toggle for grouping the LibraryView grid by date.
 enum DateGroupMode: String, CaseIterable, Identifiable, Sendable {
     case none
+    case year
     case month
     case day
 
@@ -10,15 +11,17 @@ enum DateGroupMode: String, CaseIterable, Identifiable, Sendable {
 
     var label: String {
         switch self {
-        case .none: return "No grouping"
-        case .month: return "By month"
-        case .day: return "By day"
+        case .none: return "All"
+        case .year: return "Years"
+        case .month: return "Months"
+        case .day: return "Days"
         }
     }
 
     var systemImage: String {
         switch self {
         case .none: return "square.grid.2x2"
+        case .year: return "calendar"
         case .month: return "calendar"
         case .day: return "calendar.day.timeline.left"
         }
@@ -47,6 +50,14 @@ enum MediaGrouper {
         return f
     }()
 
+    private static let isoDateTimeNoFraction = ISO8601DateFormatter()
+
+    private static let yearHeader: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy"
+        return f
+    }()
+
     private static let monthHeader: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "MMMM yyyy"
@@ -64,8 +75,7 @@ enum MediaGrouper {
     /// fractional seconds).
     static func parseDate(_ s: String) -> Date? {
         if let d = isoDateTime.date(from: s) { return d }
-        let f = ISO8601DateFormatter()
-        if let d = f.date(from: s) { return d }
+        if let d = isoDateTimeNoFraction.date(from: s) { return d }
         isoDate.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         if let d = isoDate.date(from: s) { return d }
         isoDate.dateFormat = "yyyy-MM-dd"
@@ -76,7 +86,7 @@ enum MediaGrouper {
         switch mode {
         case .none:
             return [MediaDateGroup(id: "all", title: "", items: items)]
-        case .month, .day:
+        case .year, .month, .day:
             var keyTitles: [(key: String, title: String)] = []
             var bucket: [String: [Media]] = [:]
             for item in items {
@@ -96,6 +106,10 @@ enum MediaGrouper {
         guard let d = date else { return ("unknown", "Unknown date") }
         let cal = Calendar.current
         switch mode {
+        case .year:
+            let year = cal.component(.year, from: d)
+            let key = String(format: "%04d", year)
+            return (key, yearHeader.string(from: d))
         case .month:
             let comps = cal.dateComponents([.year, .month], from: d)
             let key = String(format: "%04d-%02d", comps.year ?? 0, comps.month ?? 0)

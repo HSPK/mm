@@ -25,17 +25,17 @@ interface ListGroupProps {
 
 export function ListGroup({ label, footer, children, className }: ListGroupProps) {
     return (
-        <section className={cn("space-y-2", className)}>
+        <section className={cn("space-y-2.5", className)}>
             {label && (
-                <h3 className="px-4 text-[13px] uppercase tracking-wider text-muted-foreground/80 font-medium">
+                <h3 className="px-1 text-[12px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/55 sm:px-2">
                     {label}
                 </h3>
             )}
-            <div className="bg-card rounded-2xl overflow-hidden elevation-1">
-                <ul className="divide-y divide-border">{children}</ul>
+            <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm">
+                <ul className="divide-y divide-border/50">{children}</ul>
             </div>
             {footer && (
-                <p className="px-4 text-[12px] text-muted-foreground/70 leading-snug">
+                <p className="px-1 text-[12px] leading-snug text-muted-foreground/65 sm:px-2">
                     {footer}
                 </p>
             )}
@@ -78,14 +78,14 @@ export function ListRow({
     const iconNode = icon != null && (typeof icon === "object" && "icon" in icon && (icon as RowIcon).icon != null
         ? (
             <span
-                className="flex h-7 w-7 items-center justify-center rounded-[7px] text-white shrink-0"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
                 style={{ background: (icon as RowIcon).tint ?? "var(--color-primary)" }}
             >
                 {(icon as RowIcon).icon}
             </span>
         )
         : (
-            <span className="flex h-7 w-7 items-center justify-center text-muted-foreground/80 shrink-0">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-secondary/45 text-muted-foreground">
                 {icon as ReactNode}
             </span>
         )
@@ -98,9 +98,9 @@ export function ListRow({
                 onClick={onClick}
                 disabled={disabled}
                 className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 text-left",
+                    "flex w-full items-center gap-3.5 px-4 py-3.5 text-left",
                     "text-[15px] leading-tight",
-                    isInteractive && "hover:bg-secondary/40 active:bg-secondary/60 transition-colors cursor-pointer",
+                    isInteractive && "cursor-pointer transition-colors hover:bg-secondary/45 active:bg-secondary/65",
                     destructive ? "text-destructive" : "text-foreground",
                     disabled && "opacity-50 pointer-events-none",
                     className,
@@ -108,15 +108,15 @@ export function ListRow({
             >
                 {iconNode}
                 <div className="flex-1 min-w-0">
-                    <div className="truncate">{label}</div>
+                    <div className="truncate font-medium">{label}</div>
                     {sublabel && (
-                        <div className="text-[13px] text-muted-foreground/70 truncate mt-0.5">
+                        <div className="mt-1 truncate text-[13px] leading-snug text-muted-foreground/65">
                             {sublabel}
                         </div>
                     )}
                 </div>
                 {trailing != null && (
-                    <div className="text-muted-foreground text-[15px] flex items-center gap-2 shrink-0">
+                    <div className="flex shrink-0 items-center gap-2 text-[14px] text-muted-foreground">
                         {trailing}
                     </div>
                 )}
@@ -130,5 +130,5 @@ export function ListRow({
 
 /** Page container that places sections on the secondary system background. */
 export function ListPage({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-    return <div className={cn("max-w-2xl mx-auto p-4 sm:p-6 space-y-7", className)} {...props} />
+    return <div className={cn("mx-auto max-w-3xl space-y-7 p-4 sm:p-6", className)} {...props} />
 }

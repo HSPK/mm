@@ -104,10 +104,6 @@ def get_metadata_extractor(path: Path) -> MetadataExtractor:
     return _DEFAULT_METADATA_EXTRACTOR
 
 
-# ---------------------------------------------------------------------------
-# exiftool-based extraction
-# ---------------------------------------------------------------------------
-
 _EXIFTOOL: str | None = shutil.which("exiftool")
 
 
@@ -240,10 +236,6 @@ def extract_photo_metadata_pillow(path: Path, media_id: int) -> Metadata:
     return _metadata_from_photo_sources(media_id, {}, _extract_pillow_photo(path))
 
 
-# ---------------------------------------------------------------------------
-# ffprobe-based extraction
-# ---------------------------------------------------------------------------
-
 _FFPROBE: str | None = shutil.which("ffprobe")
 
 
@@ -280,13 +272,9 @@ def _metadata_from_video_sources(path: Path, media_id: int, exif: dict[str, Any]
     ff = _extract_ffprobe(path)
     ff_tags = ff.get("tags", {})
 
-    # ffprobe 'tags' is often from format. Also check first video/audio stream tags.
-    # _extract_ffprobe already merges stream tags into 'tags', so we are good there.
-    # But let's check explicit keys in prioritized order.
-
     date_candidates = [
-        ff_tags.get("creation_time"),  # Standard QuickTime/MP4 creation time
-        ff_tags.get("date"),  # Sometimes just 'date'
+        ff_tags.get("creation_time"),
+        ff_tags.get("date"),
         exif.get("QuickTime:CreateDate"),
         exif.get("QuickTime:CreationDate"),
         exif.get("QuickTime:MediaCreateDate"),
@@ -295,22 +283,18 @@ def _metadata_from_video_sources(path: Path, media_id: int, exif: dict[str, Any]
         exif.get("Keys:CreationDate"),
         exif.get("EXIF:DateTimeOriginal"),
         exif.get("XMP:DateCreated"),
-        exif.get("UserData:DateTimeOriginal"),  # Some cameras put it here
+        exif.get("UserData:DateTimeOriginal"),
     ]
 
     date_taken = None
     for cand in date_candidates:
         if not cand:
             continue
-        # Sometimes creation_time is 1904-01-01 (epoch for MP4) which is invalid/default
-        # Filter out obvious bad dates after parsing.
-        # We'll parse first.
         dt = parse_datetime(cand)
-        if dt and dt.year > 1904:  # 1904 is mp4 epoch start, often default value
+        if dt and dt.year > 1904:
             date_taken = dt
             break
 
-    # Try to extract GPS from QuickTime/Keys tags
     gps_lat: float | None = None
     gps_lon: float | None = None
 
@@ -327,16 +311,10 @@ def _metadata_from_video_sources(path: Path, media_id: int, exif: dict[str, Any]
         or exif.get("Keys:GPSCoordinates-lon")
     )
 
-    # Some tools return signed float directly (e.g. "30.123 120.456").
-    # But usually exiftool -n -j gives decimal degrees.
-    # If not using -n (which we use), we might get "30 deg 12' 34""
-    # But we use -n in _extract_exiftool, so values should be decimal.
-
-    # QuickTime:GPSCoordinates sometimes is "lat, lon, alt" string
     if lat_val is None and lon_val is None:
         coords = exif.get("QuickTime:GPSCoordinates")
         if coords and isinstance(coords, str):
-            parts = coords.replace("+", "").split()  # "30.1234 120.5678"
+            parts = coords.replace("+", "").split()
             if len(parts) >= 2:
                 lat_val = safe_float(parts[0])
                 lon_val = safe_float(parts[1])
@@ -347,7 +325,6 @@ def _metadata_from_video_sources(path: Path, media_id: int, exif: dict[str, Any]
     if lon_val is not None:
         gps_lon = lon_val
 
-    # (0, 0) is the Gulf of Guinea — treat as "no GPS data"
     if gps_lat == 0.0 and gps_lon == 0.0:
         gps_lat = None
         gps_lon = None
@@ -396,11 +373,6 @@ def extract_audio_metadata(path: Path, media_id: int) -> Metadata:
         date_taken=parse_datetime(tags.get("date") or tags.get("creation_time")),
         duration=safe_float(ff.get("duration")),
     )
-
-
-# ---------------------------------------------------------------------------
-# Tool availability check
-# ---------------------------------------------------------------------------
 
 
 def check_tools() -> list[str]:

@@ -12,8 +12,24 @@ from fastapi.staticfiles import StaticFiles
 
 from mm.db.client import AsyncDBClient
 from mm.io import local_storage
-from mm.server.routers import albums, auth, batch, library, media, stats, tags, users
+from mm.server.routers import (
+    albums,
+    auth,
+    batch,
+    files,
+    importer,
+    jobs,
+    library,
+    media,
+    organizer,
+    player,
+    stats,
+    tags,
+    users,
+    videos,
+)
 from mm.server.routers import smart_albums as smart_albums_router
+from mm.server.routers.jobs import resume_jobs
 
 
 @asynccontextmanager
@@ -23,6 +39,7 @@ async def lifespan(app: FastAPI):
     await db.init_db()
     app.state.db = db
     app.state.config = await db.library_config.get()
+    await resume_jobs(db)
     yield
 
 
@@ -47,9 +64,15 @@ def create_app(db_path: str | Path) -> FastAPI:
         tags,
         stats,
         batch,
+        files,
         albums,
         smart_albums_router,
         library,
+        organizer,
+        player,
+        videos,
+        importer,
+        jobs,
     ):
         app.include_router(r.router)
 

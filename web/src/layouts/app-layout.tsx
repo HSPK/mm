@@ -1,12 +1,15 @@
-import { useRef, useState, useEffect, useLayoutEffect, useCallback, type TouchEvent } from "react"
+import { useRef, useState, useEffect, useCallback, type TouchEvent } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { cn } from "@/lib/utils"
-import { FloatingSearchBar } from "@/components/floating-search-bar"
 import { useMediaQueryStore } from "@/stores/media-query"
 import { useSelectionStore } from "@/stores/media-selection"
 import { useAlbumSectionStore } from "@/stores/album-section"
 import { BottomBar } from "@/components/bottom-bar"
+import { HeaderProvider } from "@/components/navigation/header-provider"
+import { AppSidebar } from "@/components/navigation/sidebar"
+import { TopHeaderBar } from "@/components/navigation/top-header-bar"
 import { navItems } from "@/components/navigation/nav-items"
+import { GlobalMusicPlayer } from "@/components/player/global-music-player"
+import { usePlayerStore } from "@/stores/player"
 import MediaLibraryPage from "@/pages/media-library"
 import AlbumsPage from "@/pages/albums"
 
@@ -26,19 +29,14 @@ function isInteractiveSwipeTarget(target: EventTarget | null) {
 
 export default function AppLayout() {
     const location = useLocation()
-    const navRef = useRef<HTMLElement>(null)
-    const itemRefs = useRef<(HTMLAnchorElement | null)[]>([])
-    const [indicator, setIndicator] = useState({ left: 0, width: 0 })
     const isTabRoute = TAB_ROUTES.includes(location.pathname)
     const activeTabIndex = getActiveIndex(location.pathname)
+    const hasPlayer = usePlayerStore((state) => state.queue.length > 0 && state.index >= 0)
+    const playerBottomPadding = hasPlayer ? " pb-28" : ""
 
     const libraryScrollRef = useRef<HTMLDivElement | null>(null)
-    const [libraryScrollEl, setLibraryScrollEl] = useState<HTMLDivElement | null>(null)
-    const [albumsScrollEl, setAlbumsScrollEl] = useState<HTMLDivElement | null>(null)
-    const [outletScrollEl, setOutletScrollEl] = useState<HTMLDivElement | null>(null)
     const setLibraryScrollNode = useCallback((el: HTMLDivElement | null) => {
         libraryScrollRef.current = el
-        setLibraryScrollEl(el)
     }, [])
 
     const { activeLabel: currentLabel, filters, resetFilters } = useMediaQueryStore()
@@ -58,49 +56,6 @@ export default function AppLayout() {
             libraryScrollRef.current.scrollTop = 0
         }
     }, [currentLabel])
-
-    const activeScrollEl = isTabRoute
-        ? (activeTabIndex === 0 ? libraryScrollEl : albumsScrollEl)
-        : outletScrollEl
-
-    const activeViewKey = isTabRoute ? `tab:${activeTabIndex}` : `route:${location.pathname}`
-    const [navVisibility, setNavVisibility] = useState({ key: activeViewKey, visible: true })
-    const navVisible = navVisibility.key === activeViewKey ? navVisibility.visible : true
-    const lastScrollY = useRef(0)
-
-    useEffect(() => {
-        const el = activeScrollEl
-        if (!el) return
-        lastScrollY.current = el.scrollTop
-        const handle = () => {
-            const y = el.scrollTop
-            setNavVisibility({ key: activeViewKey, visible: !(y > lastScrollY.current && y > 60) })
-            lastScrollY.current = y
-        }
-        el.addEventListener("scroll", handle, { passive: true })
-        return () => el.removeEventListener("scroll", handle)
-    }, [activeScrollEl, activeViewKey])
-
-    const updateIndicator = useCallback(() => {
-        const el = itemRefs.current[activeTabIndex]
-        const nav = navRef.current
-        if (!el || !nav) return
-        const navRect = nav.getBoundingClientRect()
-        const elRect = el.getBoundingClientRect()
-        setIndicator({
-            left: elRect.left - navRect.left,
-            width: elRect.width,
-        })
-    }, [activeTabIndex])
-
-    useLayoutEffect(() => {
-        updateIndicator()
-    }, [updateIndicator])
-
-    useEffect(() => {
-        window.addEventListener("resize", updateIndicator)
-        return () => window.removeEventListener("resize", updateIndicator)
-    }, [updateIndicator])
 
     const navigate = useNavigate()
     const inAlbumView = currentLabel
@@ -172,69 +127,57 @@ export default function AppLayout() {
         resetSwipe()
     }, [activeTabIndex, navigate, resetSwipe, swipeOffset, swiping])
 
-    const hasFilterTags = !!(currentLabel || isDeletedView ||
-        filters.type || filters.camera ||
-        filters.date_from || filters.date_to ||
-        filters.min_rating ||
-        (filters.lat != null && filters.lon != null) ||
-        filters.search
-    )
-    const hasAlbumSectionTags = !!albumSectionLabel
-
     return (
-        <div className="flex h-screen flex-col overflow-hidden bg-background">
-            {isTabRoute && <FloatingSearchBar scrollContainer={activeScrollEl} />}
+        <div className="flex h-screen overflow-hidden bg-background">
+            <AppSidebar />
 
-            <div className="flex-1 relative overflow-hidden">
-                {isTabRoute && (
-                    <div
-                        className="absolute inset-0 flex"
-                        style={{
-                            transform: `translateX(calc(${-activeTabIndex * 100}% + ${swiping ? swipeOffset : 0}px))`,
-                            transition: swiping ? "none" : "transform 300ms ease",
-                            willChange: "transform",
-                        }}
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                        onTouchCancel={resetSwipe}
-                    >
-                        <div
-                            ref={setLibraryScrollNode}
-                            className={cn("w-full h-full shrink-0 overflow-y-auto", hasFilterTags ? "pt-[5.5rem]" : "pt-16")}
-                            aria-hidden={activeTabIndex !== 0}
-                            inert={activeTabIndex === 0 ? undefined : true}
-                        >
-                            <MediaLibraryPage />
-                        </div>
-                        <div
-                            ref={setAlbumsScrollEl}
-                            className={cn("w-full h-full shrink-0 overflow-y-auto", hasAlbumSectionTags ? "pt-[5.5rem]" : "pt-16")}
-                            aria-hidden={activeTabIndex !== 1}
-                            inert={activeTabIndex === 1 ? undefined : true}
-                        >
-                            <AlbumsPage />
-                        </div>
+            <HeaderProvider>
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                    <TopHeaderBar
+                        key={isTabRoute ? "tab-header" : `route-header:${location.pathname}`}
+                        isTabRoute={isTabRoute}
+                    />
+
+                    <div className="relative min-h-0 flex-1 overflow-hidden">
+                        {isTabRoute && (
+                            <div
+                                className="absolute inset-0"
+                                onTouchStart={handleTouchStart}
+                                onTouchMove={handleTouchMove}
+                                onTouchEnd={handleTouchEnd}
+                                onTouchCancel={resetSwipe}
+                            >
+                                <div
+                                    ref={setLibraryScrollNode}
+                                    className={`absolute inset-0 overflow-y-auto transition-opacity duration-150 ease-out ${activeTabIndex === 0 ? "opacity-100" : "pointer-events-none opacity-0"}${playerBottomPadding}`}
+                                    aria-hidden={activeTabIndex !== 0}
+                                    inert={activeTabIndex === 0 ? undefined : true}
+                                >
+                                    <MediaLibraryPage />
+                                </div>
+                                <div
+                                    className={`absolute inset-0 overflow-y-auto transition-opacity duration-150 ease-out ${activeTabIndex === 1 ? "opacity-100" : "pointer-events-none opacity-0"}${playerBottomPadding}`}
+                                    aria-hidden={activeTabIndex !== 1}
+                                    inert={activeTabIndex === 1 ? undefined : true}
+                                >
+                                    <AlbumsPage />
+                                </div>
+                            </div>
+                        )}
+
+                        {!isTabRoute && (
+                            <div
+                                className={`absolute inset-0 z-10 overflow-y-auto bg-background${playerBottomPadding}`}
+                            >
+                                <Outlet />
+                            </div>
+                        )}
                     </div>
-                )}
 
-                {!isTabRoute && (
-                    <div
-                        ref={setOutletScrollEl}
-                        className="absolute inset-0 overflow-y-auto bg-background z-10"
-                    >
-                        <Outlet />
-                    </div>
-                )}
-            </div>
-
-            <BottomBar
-                isTabRoute={isTabRoute}
-                navVisible={navVisible}
-                navRef={navRef}
-                itemRefs={itemRefs}
-                indicator={indicator}
-            />
+                    <GlobalMusicPlayer />
+                    <BottomBar isTabRoute={isTabRoute} />
+                </div>
+            </HeaderProvider>
         </div>
     )
 }

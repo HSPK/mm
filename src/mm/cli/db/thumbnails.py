@@ -11,9 +11,19 @@ from mm.utils.formatting import fmt_size
 
 @db.command("thumbnails")
 @click.option("--size", "sizes", multiple=True, help="Thumbnail size to build. Repeatable.")
+@click.option("--missing", is_flag=True, help="Build missing/stale thumbnails (default).")
+@click.option("--videos", is_flag=True, help="Only build video thumbnails.")
+@click.option("--failed", is_flag=True, help="Only retry thumbnails with failed markers.")
 @click.option("--force", is_flag=True, help="Regenerate existing thumbnails.")
 @click.option("-j", "--jobs", type=int, default=0, help="Worker count (0 = auto).")
-def db_thumbnails(sizes: tuple[str, ...], force: bool, jobs: int) -> None:
+def db_thumbnails(
+    sizes: tuple[str, ...],
+    missing: bool,
+    videos: bool,
+    failed: bool,
+    force: bool,
+    jobs: int,
+) -> None:
     """Build thumbnail cache for the active library."""
     from mm.cli import active_library
     from mm.library.thumbnails import build_thumbnail_cache, thumbnail_cache_stats
@@ -30,13 +40,23 @@ def db_thumbnails(sizes: tuple[str, ...], force: bool, jobs: int) -> None:
                     ("Database", ui.path(active.database)),
                     ("Cache", ui.path(before.cache_dir)),
                     ("Sizes", ", ".join(selected_sizes or ["all"])),
-                    ("Mode", "force" if force else "missing/stale"),
+                    ("Mode", _mode_label(missing=missing, failed=failed, force=force)),
+                    ("Media", "videos" if videos else "all"),
+                    ("Failed markers", f"{before.failed_count:,}"),
                 ],
             )
 
-            progress_total = active.db.media.count() * len(
-                selected_sizes or get_config().thumbnails.sizes
-            )
+            media_count = len([
+                media
+                for media in active.db.media.list()
+                if media.deleted_at is None
+                and (
+                    media.media_type.value == "video"
+                    if videos
+                    else media.media_type.value in {"photo", "video"}
+                )
+            ])
+            progress_total = media_count * len(selected_sizes or get_config().thumbnails.sizes)
             with ui.progress("Building thumbnails", progress_total) as bar:
                 result = build_thumbnail_cache(
                     active.db,
@@ -44,6 +64,8 @@ def db_thumbnails(sizes: tuple[str, ...], force: bool, jobs: int) -> None:
                     active.config.library_id,
                     sizes=selected_sizes,
                     force=force,
+                    media_types={"video"} if videos else None,
+                    failed_only=failed,
                     jobs=jobs,
                     storage=local_storage,
                     on_progress=lambda _result: bar.advance(),
@@ -61,9 +83,20 @@ def db_thumbnails(sizes: tuple[str, ...], force: bool, jobs: int) -> None:
             "Thumbnail Cache",
             [
                 ("Files", f"{after.file_count:,}"),
+                ("Failed markers", f"{after.failed_count:,}"),
                 ("Size", fmt_size(after.total_size)),
                 ("Delta", fmt_size(after.total_size - before.total_size)),
             ],
         )
     finally:
         active.close()
+
+
+def _mode_label(*, missing: bool, failed: bool, force: bool) -> str:
+    if failed:
+        return "failed"
+    if force:
+        return "force"
+    if missing:
+        return "missing/stale"
+    return "missing/stale"

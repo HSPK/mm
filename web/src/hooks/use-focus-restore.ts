@@ -10,11 +10,11 @@ export function useFocusRestore<T extends HTMLElement>(ref: RefObject<T | null>)
             ? document.activeElement
             : null
         const frame = window.requestAnimationFrame(() => {
-            ref.current?.focus()
+            ref.current?.focus({ preventScroll: true })
         })
         return () => {
             window.cancelAnimationFrame(frame)
-            previous?.focus()
+            previous?.focus({ preventScroll: true })
         }
     }, [ref])
 }

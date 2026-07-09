@@ -145,7 +145,7 @@ export default function AlbumsPage() {
 
     return (
         <div ref={rootRef} className="pb-24">
-            <div className="px-4 pt-1 space-y-10">
+            <div className="space-y-10 px-4 pt-5 sm:pt-7">
                 {libraryItems.length > 0 && (
                     <section>
                         <SectionHeader icon={Images} title="Library" />

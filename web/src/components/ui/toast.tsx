@@ -40,7 +40,7 @@ export function ToastViewport() {
                         key={t.id}
                         role={t.variant === "error" ? "alert" : "status"}
                         className={cn(
-                            "pointer-events-auto flex max-w-sm items-start gap-2.5 rounded-full border px-4 py-2.5 text-sm font-medium shadow-2xl backdrop-blur-xl",
+                            "pointer-events-auto flex max-w-sm items-start gap-2.5 rounded-full border px-4 py-2.5 text-sm font-medium shadow-2xl",
                             "animate-[toast-in_200ms_cubic-bezier(0.16,1,0.3,1)]",
                             variantStyles[t.variant],
                         )}

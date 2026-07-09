@@ -16,13 +16,13 @@ function colorFor(color?: FilterTagColor): string {
 export function ActiveFilterTags({ tags }: { tags: FilterTag[] }) {
     if (tags.length === 0) return null
     return (
-        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 px-0.5">
+        <div className="mt-2 flex max-h-[4.75rem] flex-wrap items-center gap-1.5 overflow-y-auto px-0.5">
             {tags.map((tag) => (
                 <span
                     key={tag.key}
                     className={cn(
-                        "inline-flex items-center gap-1 py-[3px] rounded-full text-[10px] font-medium border backdrop-blur-md shadow-sm transition-colors",
-                        tag.removable ? "pl-2 pr-1" : "px-2",
+                        "inline-flex items-center gap-1 rounded-full border py-1 text-[11px] font-medium shadow-sm transition-colors",
+                        tag.removable ? "pl-2.5 pr-1" : "px-2.5",
                         colorFor(tag.color),
                     )}
                 >

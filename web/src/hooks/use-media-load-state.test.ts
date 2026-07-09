@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { useMediaLoadState } from "./use-media-load-state"
 
 describe("useMediaLoadState", () => {
@@ -49,15 +49,9 @@ describe("useMediaLoadState", () => {
         expect(result.current.mediaError).toBeNull()
     })
 
-    it("markMediaLoaded eventually inserts via double-rAF", async () => {
-        // happy-dom provides rAF as a setTimeout shim; use fake timers to run it.
-        vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] })
+    it("markMediaLoaded inserts immediately", () => {
         const { result } = renderHook(() => useMediaLoadState())
         act(() => result.current.markMediaLoaded(3))
-        await act(async () => {
-            vi.runAllTimers()
-        })
         expect(result.current.loadedMediaIds.has(3)).toBe(true)
-        vi.useRealTimers()
     })
 })

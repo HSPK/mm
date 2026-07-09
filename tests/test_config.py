@@ -92,7 +92,49 @@ def test_section_defaults_match_legacy_constants():
     assert cfg.server.token_cache.ttl == 300
     assert cfg.server.token_cache.max == 256
     assert cfg.server.media_path_cache.ttl == 600
+    assert cfg.scrapers.language == "zh-CN"
+    assert cfg.scrapers.order == [
+        "tmdb",
+        "omdb",
+        "tvdb",
+        "musicbrainz",
+        "itunes",
+        "netease",
+        "qqmusic",
+    ]
+    assert cfg.scrapers.sources["tmdb"].credentials == {"api_key": "", "access_token": ""}
+    assert cfg.scrapers.sources["omdb"].enabled is False
+    assert cfg.scrapers.sources["musicbrainz"].credentials["user_agent"].startswith("litemm/")
+    assert cfg.scrapers.sources["itunes"].credentials == {}
+    assert cfg.scrapers.sources["netease"].credentials == {}
+    assert cfg.scrapers.sources["qqmusic"].credentials == {}
     assert cfg.server.media_path_cache.max == 4096
+
+
+def test_load_cli_config_merges_new_default_scraper_sources(tmp_path: Path, monkeypatch):
+    import yaml
+
+    monkeypatch.setattr(app_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(app_config, "CONFIG_PATH", tmp_path / "mm.yaml")
+    (tmp_path / "mm.yaml").write_text(
+        yaml.safe_dump({
+            "scrapers": {
+                "order": ["tmdb", "musicbrainz", "itunes"],
+                "sources": {
+                    "tmdb": {"base_url": "https://api.themoviedb.org/3"},
+                    "musicbrainz": {"base_url": "https://musicbrainz.org/ws/2"},
+                    "itunes": {"base_url": "https://itunes.apple.com/search"},
+                },
+            },
+        })
+    )
+
+    cfg = app_config.load_cli_config()
+
+    assert "netease" in cfg.scrapers.sources
+    assert "qqmusic" in cfg.scrapers.sources
+    assert "netease" in cfg.scrapers.order
+    assert "qqmusic" in cfg.scrapers.order
 
 
 def test_yaml_override_round_trip(tmp_path: Path, monkeypatch):
@@ -109,6 +151,14 @@ def test_yaml_override_round_trip(tmp_path: Path, monkeypatch):
                 "thumbnails": {"sizes": {"sm": [100, 100]}},
                 "server": {"token_cache": {"ttl": 60, "max": 8}},
                 "import": {"db_name": "library.db", "template": "{year}{ext}"},
+                "scrapers": {
+                    "language": "en-US",
+                    "sources": {
+                        "tmdb": {
+                            "credentials": {"api_key": "abc"},
+                        },
+                    },
+                },
             }
         )
     )
@@ -124,6 +174,8 @@ def test_yaml_override_round_trip(tmp_path: Path, monkeypatch):
     assert cfg.server.token_cache.ttl == 60
     assert cfg.import_.db_name == "library.db"
     assert cfg.import_.template == "{year}{ext}"
+    assert cfg.scrapers.language == "en-US"
+    assert cfg.scrapers.sources["tmdb"].credentials["api_key"] == "abc"
 
 
 def test_get_config_is_cached_and_reload_invalidates(tmp_path: Path, monkeypatch):

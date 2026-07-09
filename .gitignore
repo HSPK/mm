@@ -1,6 +1,7 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+.DS_Store
 build/
 dist/
 wheels/
@@ -11,6 +12,7 @@ node_modules/
 /ssd
 _web_dist/
 /site/
+ios/build-*/
 # Virtual environments
 .venv
 *.db

@@ -31,7 +31,7 @@ export function DeleteConfirmDialog({
 
     return (
         <div
-            className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
+            className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-6"
             role="presentation"
             onClick={onCancel}
         >

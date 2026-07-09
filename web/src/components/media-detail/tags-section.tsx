@@ -25,15 +25,15 @@ export function TagsSection({
     return (
         <div className="pb-4">
             <div className="flex flex-wrap items-center gap-1.5">
-                <Tag className="h-[13px] w-[13px] text-white/20 shrink-0 mr-0.5" />
+                <Tag className="h-[13px] w-[13px] text-muted-foreground shrink-0 mr-0.5" />
                 {detail.tags.map((t) => (
                     <span
                         key={t.name}
-                        className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-[5px] bg-white/[0.07] text-white/65 rounded-full text-xs font-medium group"
+                        className="group inline-flex items-center gap-1 rounded-full bg-secondary/55 py-[5px] pl-2.5 pr-1.5 text-xs font-medium text-foreground/75"
                     >
                         <button
                             onClick={() => onClickTag(t.name)}
-                            className="hover:text-white transition-colors cursor-pointer"
+                            className="cursor-pointer transition-colors hover:text-primary"
                             title={`Filter by tag: ${t.name}`}
                         >
                             {t.name}
@@ -41,7 +41,7 @@ export function TagsSection({
                         <button
                             onClick={() => onRemoveTag(t.name)}
                             disabled={removingTag != null}
-                            className="p-0.5 rounded-full hover:bg-white/15 text-white/25 hover:text-white/60 transition-colors disabled:pointer-events-none disabled:opacity-40"
+                            className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
                             title={`Remove tag: ${t.name}`}
                         >
                             {removingTag === t.name
@@ -57,17 +57,17 @@ export function TagsSection({
                     }}
                     className="inline-flex"
                 >
-                    <div className="flex items-center border border-dashed border-white/[0.08] rounded-full overflow-hidden hover:border-white/20 focus-within:border-white/25 transition-colors">
+                    <div className="flex items-center overflow-hidden rounded-full border border-dashed border-border transition-colors hover:border-border/80 focus-within:border-ring/40">
                         {submitting
-                            ? <Loader2 className="h-3 w-3 text-white/25 ml-2 shrink-0 animate-spin" />
-                            : <Plus className="h-3 w-3 text-white/15 ml-2 shrink-0" />}
+                            ? <Loader2 className="h-3 w-3 text-muted-foreground ml-2 shrink-0 animate-spin" />
+                            : <Plus className="h-3 w-3 text-muted-foreground/60 ml-2 shrink-0" />}
                         <input
                             type="text"
                             value={addInput}
                             onChange={(e) => onAddInputChange(e.target.value)}
                             disabled={submitting}
                             placeholder={detail.tags.length === 0 ? "Add tag…" : "Add…"}
-                            className="bg-transparent text-white text-xs pl-1 pr-2.5 py-[5px] w-16 focus:w-24 focus:outline-none transition-all placeholder:text-white/15 disabled:opacity-50"
+                            className="w-16 bg-transparent py-[5px] pl-1 pr-2.5 text-xs text-foreground transition-all placeholder:text-muted-foreground/45 focus:w-24 focus:outline-none disabled:opacity-50"
                         />
                     </div>
                 </form>

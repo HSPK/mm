@@ -81,11 +81,39 @@ final class APIClient {
         return data
     }
 
-    /// Returns an absolute URL for a server path (e.g. `/media/1/file`). Used
-    /// by AuthAsyncImage and Share to point at the server's raw file endpoint.
-    func absoluteURL(forPath path: String) -> URL {
-        URL(string: path, relativeTo: AppConfig.apiBaseURL)?.absoluteURL
-            ?? AppConfig.apiBaseURL.appendingPathComponent(path)
+    func download(_ path: String, suggestedFilename: String) async throws -> URL {
+        let url = buildURL(path: path, query: [:])
+        let (temporaryURL, response) = try await dispatchDownload(URLRequest(url: url))
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            let body = (try? String(contentsOf: temporaryURL, encoding: .utf8)) ?? ""
+            try ensureSuccess(response: response, data: Data(body.utf8))
+        } else {
+            try ensureSuccess(response: response, data: Data())
+        }
+
+        let destinationDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mm-share", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+        let destinationURL = destinationDirectory.appendingPathComponent(Self.safeFilename(suggestedFilename))
+        try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
+        return destinationURL
+    }
+
+    /// Returns an absolute URL for a server path (e.g. `/media/1/file`).
+    /// When `includeToken` is true, the current auth token is attached as a
+    /// query parameter so system consumers like AVPlayer can access protected
+    /// endpoints that don't let us inject custom headers.
+    func absoluteURL(
+        forPath path: String,
+        query: [String: String] = [:],
+        includeToken: Bool = false,
+    ) -> URL {
+        var resolvedQuery = query
+        if includeToken, let token = TokenStore.read(), !token.isEmpty {
+            resolvedQuery["token"] = token
+        }
+        return buildURL(path: path, query: resolvedQuery)
     }
 
     // MARK: - Core
@@ -128,6 +156,18 @@ final class APIClient {
         }
     }
 
+    private func dispatchDownload(_ original: URLRequest) async throws -> (URL, URLResponse) {
+        var req = original
+        if let token = TokenStore.read() {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        do {
+            return try await session.download(for: req)
+        } catch {
+            throw APIError.transport(error)
+        }
+    }
+
     private func ensureSuccess(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else {
             throw APIError.http(status: 0, body: nil)
@@ -154,6 +194,14 @@ final class APIClient {
         }
         components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
         return components.url ?? base
+    }
+
+    private static func safeFilename(_ filename: String) -> String {
+        let fallback = "media-file"
+        let lastPathComponent = URL(fileURLWithPath: filename).lastPathComponent
+        let candidate = lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty, candidate != "." else { return fallback }
+        return candidate
     }
 }
 

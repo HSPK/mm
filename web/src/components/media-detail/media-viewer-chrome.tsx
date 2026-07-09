@@ -26,9 +26,9 @@ interface MediaViewerChromeProps {
 }
 
 const actionBtnClass = (active = false) =>
-    `flex items-center justify-center w-11 h-11 rounded-full transition-all duration-100 active:scale-90 ${active
-        ? "text-white bg-white/20"
-        : "text-white/70 hover:text-white hover:bg-white/10"
+    `flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-100 active:scale-90 ${active
+        ? "bg-white/22 text-white shadow-lg shadow-black/20"
+        : "bg-black/42 text-white/78 shadow-lg shadow-black/20 hover:bg-black/62 hover:text-white"
     }`
 
 /**
@@ -59,35 +59,35 @@ export function MediaViewerChrome({
             inert={controlsVisible ? undefined : true}
             style={{
                 paddingTop: "max(env(safe-area-inset-top, 0px), 12px)",
-                background: "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.25) 60%, transparent 100%)",
+                background: "linear-gradient(to bottom, rgba(0,0,0,0.46) 0%, rgba(0,0,0,0.18) 62%, transparent 100%)",
             }}
         >
             <button
                 type="button"
                 onClick={onClose}
-                className="flex items-center justify-center w-11 h-11 rounded-full text-white/80 hover:text-white hover:bg-white/10 active:scale-90 transition-all duration-100"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/42 text-white/82 shadow-lg shadow-black/20 transition-all duration-100 hover:bg-black/62 hover:text-white active:scale-90"
                 aria-label="Back"
             >
-                <ChevronLeft className="h-6 w-6" />
+                <ChevronLeft className="h-5 w-5" strokeWidth={2.2} />
             </button>
 
             <div className="flex items-center gap-1">
                 <ChromeButton onClick={onOpenInfo} active={showInfo && !isEditing} label="Info">
-                    <Info className="h-[1.2rem] w-[1.2rem]" strokeWidth={showInfo && !isEditing ? 2.2 : 1.8} />
+                    <Info className="h-5 w-5" strokeWidth={2} />
                 </ChromeButton>
                 <ChromeButton onClick={onOpenEdit} active={showInfo && isEditing} label="Edit">
-                    <Pencil className="h-[1.2rem] w-[1.2rem]" strokeWidth={showInfo && isEditing ? 2.2 : 1.8} />
+                    <Pencil className="h-5 w-5" strokeWidth={2} />
                 </ChromeButton>
                 <ChromeButton onClick={onShare} label="Share">
-                    <Share2 className="h-[1.2rem] w-[1.2rem]" strokeWidth={1.8} />
+                    <Share2 className="h-5 w-5" strokeWidth={2} />
                 </ChromeButton>
                 <ChromeButton onClick={onOpenOriginal} label="Open original in new tab">
-                    <ExternalLink className="h-[1.2rem] w-[1.2rem]" strokeWidth={1.8} />
+                    <ExternalLink className="h-5 w-5" strokeWidth={2} />
                 </ChromeButton>
                 <ChromeButton onClick={onDownload} label="Download" disabled={downloading}>
                     {downloading
                         ? <Spinner size="sm" />
-                        : <Download className="h-[1.2rem] w-[1.2rem]" strokeWidth={1.8} />}
+                        : <Download className="h-5 w-5" strokeWidth={2} />}
                 </ChromeButton>
                 <ChromeButton
                     onClick={onDelete}
@@ -96,7 +96,7 @@ export function MediaViewerChrome({
                 >
                     {deleting
                         ? <Spinner size="sm" />
-                        : <Trash2 className="h-[1.2rem] w-[1.2rem]" strokeWidth={1.8} />}
+                        : <Trash2 className="h-5 w-5" strokeWidth={2} />}
                 </ChromeButton>
             </div>
         </div>

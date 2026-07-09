@@ -24,8 +24,6 @@ export interface MediaLoadState {
  *   - the active id, written by the caller and read back via ref so async
  *     image-load callbacks know whether they're stale.
  *
- * The reveal-frames map double-rAFs setState so the browser has a frame to
- * paint the image before React removes the loading shimmer.
  */
 export function useMediaLoadState(): MediaLoadState {
     const [loadedMediaIds, setLoadedMediaIds] = useState<Set<number>>(() => new Set())
@@ -34,43 +32,22 @@ export function useMediaLoadState(): MediaLoadState {
     const [mediaError, setMediaError] = useState<{ id: number; message: string } | null>(null)
 
     const activeMediaIdRef = useRef<number | null>(null)
-    const revealFramesRef = useRef<Map<number, number[]>>(new Map())
 
     const setActiveMediaId = useCallback((id: number | null) => {
         activeMediaIdRef.current = id
     }, [])
 
-    const clearRevealFrames = useCallback((id?: number) => {
-        if (id != null) {
-            const frames = revealFramesRef.current.get(id) ?? []
-            for (const frame of frames) window.cancelAnimationFrame(frame)
-            revealFramesRef.current.delete(id)
-            return
-        }
-        for (const frames of revealFramesRef.current.values()) {
-            for (const frame of frames) window.cancelAnimationFrame(frame)
-        }
-        revealFramesRef.current.clear()
-    }, [])
+    const clearRevealFrames = useCallback(() => undefined, [])
 
     const markMediaLoaded = useCallback((id: number) => {
-        clearRevealFrames(id)
-        const first = window.requestAnimationFrame(() => {
-            const second = window.requestAnimationFrame(() => {
-                setLoadedMediaIds((prev) => (prev.has(id) ? prev : addBoundedId(prev, id)))
-                setMediaError((prev) => (prev?.id === id ? null : prev))
-                revealFramesRef.current.delete(id)
-            })
-            revealFramesRef.current.set(id, [second])
-        })
-        revealFramesRef.current.set(id, [first])
-    }, [clearRevealFrames])
+        setLoadedMediaIds((prev) => (prev.has(id) ? prev : addBoundedId(prev, id)))
+        setMediaError((prev) => (prev?.id === id ? null : prev))
+    }, [])
 
     const markMediaError = useCallback((id: number, message: string) => {
         if (activeMediaIdRef.current !== id) return
-        clearRevealFrames(id)
         setMediaError({ id, message })
-    }, [clearRevealFrames])
+    }, [])
 
     const markOriginalLoaded = useCallback((id: number) => {
         setOriginalLoadedIds((prev) => addBoundedId(prev, id))

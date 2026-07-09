@@ -24,7 +24,7 @@ import { InfoDialog } from "./info-dialog"
 import { MediaViewerChrome } from "./media-viewer-chrome"
 import { MediaViewerContent } from "./media-viewer-content"
 import { ShortcutsOverlay } from "./shortcuts-overlay"
-import { markShortcutsSeen, shouldAutoShowShortcuts } from "./shortcuts-preferences"
+import { markShortcutsSeen } from "./shortcuts-preferences"
 
 interface Props {
     items: Media[]
@@ -44,6 +44,28 @@ interface Props {
 }
 
 const SETTLE_DELAY_MS = 320
+const CONTROLS_IDLE_MS = 2400
+const VIDEO_PLAYER_KEYS = new Set([
+    " ",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "c",
+    "C",
+    "f",
+    "F",
+    "i",
+    "I",
+    "j",
+    "J",
+    "k",
+    "K",
+    "l",
+    "L",
+    "m",
+    "M",
+])
 
 export function MediaDetailPanel({
     items,
@@ -63,10 +85,11 @@ export function MediaDetailPanel({
 }: Props) {
     const [showInfo, setShowInfo] = useState(false)
     const [initialEditMode, setInitialEditMode] = useState(false)
-    const [chromeVisible, setChromeVisible] = useState(true)
-    const [shortcutsOpen, setShortcutsOpen] = useState(() => shouldAutoShowShortcuts())
+    const [chromeState, setChromeState] = useState({ mediaId: null as number | null, visible: true })
+    const [shortcutsOpen, setShortcutsOpen] = useState(false)
     const panelRef = useRef<HTMLDivElement>(null)
     const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const touchRef = useRef<{ x: number; y: number; time: number } | null>(null)
     const lastSwipeAtRef = useRef(0)
     const scaleRef = useRef(1)
@@ -146,11 +169,10 @@ export function MediaDetailPanel({
         }
     }, [currentItem, displayMediaId, load.activeMediaIdRef, load.loadedMediaIds, setDisplayMediaId])
 
-    // Reset transient state on every navigation.
+    // Reset non-React transient state on every navigation.
     useEffect(() => {
         scaleRef.current = 1
         load.clearForReset()
-        setChromeVisible(true)
     }, [currentMediaId, load])
 
     const openInfo = (edit = false) => {
@@ -173,10 +195,59 @@ export function MediaDetailPanel({
         notify,
     })
 
-    const controlsVisible = isVideo || showInfo || actions.confirmDeleteOpen || chromeVisible
+    const chromeVisible = chromeState.mediaId === currentMediaId ? chromeState.visible : true
+    const setChromeVisible = useCallback((next: boolean | ((visible: boolean) => boolean)) => {
+        setChromeState((state) => {
+            const current = state.mediaId === currentMediaId ? state.visible : true
+            const visible = typeof next === "function" ? next(current) : next
+            return { mediaId: currentMediaId, visible }
+        })
+    }, [currentMediaId])
+    const controlsPinned = showInfo || actions.confirmDeleteOpen || shortcutsOpen
+    const controlsVisible = controlsPinned || chromeVisible
+
+    const clearIdleTimer = useCallback(() => {
+        if (idleTimerRef.current) {
+            window.clearTimeout(idleTimerRef.current)
+            idleTimerRef.current = null
+        }
+    }, [])
+
+    const scheduleControlHide = useCallback(() => {
+        clearIdleTimer()
+        if (controlsPinned) return
+        idleTimerRef.current = window.setTimeout(() => {
+            setChromeVisible(false)
+            idleTimerRef.current = null
+        }, CONTROLS_IDLE_MS)
+    }, [clearIdleTimer, controlsPinned, setChromeVisible])
+
+    const revealControls = useCallback(() => {
+        setChromeVisible(true)
+        scheduleControlHide()
+    }, [scheduleControlHide, setChromeVisible])
+
+    useEffect(() => {
+        const id = window.setTimeout(revealControls, 0)
+        return () => {
+            window.clearTimeout(id)
+            clearIdleTimer()
+        }
+    }, [clearIdleTimer, currentMediaId, revealControls])
+
+    useEffect(() => {
+        if (controlsPinned) {
+            clearIdleTimer()
+            const id = window.setTimeout(() => setChromeVisible(true), 0)
+            return () => window.clearTimeout(id)
+        } else {
+            scheduleControlHide()
+        }
+    }, [clearIdleTimer, controlsPinned, scheduleControlHide, setChromeVisible])
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
+            if (e.defaultPrevented) return
             if (showInfo) return
             if (shortcutsOpen) {
                 if (e.key === "Escape") {
@@ -197,13 +268,14 @@ export function MediaDetailPanel({
                 setShortcutsOpen(true)
                 return
             }
+            if (isVideo && VIDEO_PLAYER_KEYS.has(e.key)) return
             if (e.key === "ArrowLeft") goPrev()
             else if (e.key === "ArrowRight") goNext()
             else if (e.key === "Escape") onClose()
         }
         window.addEventListener("keydown", onKey)
         return () => window.removeEventListener("keydown", onKey)
-    }, [actions, goPrev, goNext, onClose, showInfo, shortcutsOpen])
+    }, [actions, goPrev, goNext, isVideo, onClose, showInfo, shortcutsOpen])
 
     useBodyScrollLock()
     useFocusRestore(panelRef)
@@ -216,13 +288,14 @@ export function MediaDetailPanel({
     }, [load])
 
     const handleTouchStart = useCallback((e: TouchEvent) => {
+        revealControls()
         if (showInfo || isVideo || e.touches.length !== 1 || scaleRef.current > 1.02) {
             touchRef.current = null
             return
         }
         const t = e.touches[0]
         touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now() }
-    }, [isVideo, showInfo])
+    }, [isVideo, revealControls, showInfo])
 
     const handleTouchEnd = useCallback((e: TouchEvent) => {
         const start = touchRef.current
@@ -255,7 +328,7 @@ export function MediaDetailPanel({
         if (isVideo || showInfo || actions.confirmDeleteOpen || Date.now() - lastSwipeAtRef.current < 350) return
         if (e.target instanceof HTMLElement && e.target.closest("button, video, input, textarea, select, a")) return
         setChromeVisible((visible) => !visible)
-    }, [actions.confirmDeleteOpen, isVideo, showInfo])
+    }, [actions.confirmDeleteOpen, isVideo, setChromeVisible, showInfo])
 
     const onDeleteClicked = () => {
         setChromeVisible(true)
@@ -271,7 +344,8 @@ export function MediaDetailPanel({
             aria-modal="true"
             aria-label={currentItem.media_type === "video" ? "Video viewer" : "Photo viewer"}
             tabIndex={-1}
-            className="fixed inset-0 z-[9999] flex flex-col bg-black select-none"
+            className={`fixed inset-0 z-[9999] flex flex-col select-none ${isVideo ? "bg-black text-white" : "bg-background text-foreground"}`}
+            onMouseMove={revealControls}
             onTouchStart={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
             onTouchEnd={(e) => e.stopPropagation()}
@@ -305,6 +379,7 @@ export function MediaDetailPanel({
                 currentImageSrc={currentImageSrc}
                 shouldLoadOriginalImage={shouldLoadOriginalImage}
                 controlsVisible={controlsVisible}
+                playerKeyboardEnabled={!showInfo && !actions.confirmDeleteOpen && !shortcutsOpen}
                 requestingMore={requestingMore}
                 loadingMore={loadingMore}
                 scaleRef={scaleRef}

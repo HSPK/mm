@@ -37,6 +37,11 @@ export interface MediaRepository {
     deleteOne(id: number, opts?: { permanent?: boolean }): Promise<void>
     restoreOne(id: number): Promise<void>
     batchDelete(ids: number[]): Promise<{ affected: number }>
+    batchDeletePermanently(ids: number[]): Promise<{ affected: number }>
+    batchRestore(ids: number[]): Promise<{ affected: number }>
+    batchSetRating(ids: number[], rating: number): Promise<{ affected: number }>
+    batchAddTags(ids: number[], tags: string[]): Promise<{ affected: number }>
+    batchRemoveTags(ids: number[], tags: string[]): Promise<{ affected: number }>
     batchUpdateMetadata(ids: number[], patch: Record<string, unknown>): Promise<{ affected: number }>
     downloadBlob(id: number): Promise<Blob>
     listTrash(): Promise<Media[]>
@@ -70,6 +75,16 @@ export function createMediaRepository(api: AxiosInstance = defaultApi): MediaRep
         },
         batchDelete: async (ids) =>
             (await api.post<{ affected: number }>("/batch/delete", { media_ids: ids })).data,
+        batchDeletePermanently: async (ids) =>
+            (await api.post<{ affected: number }>("/batch/delete/permanent", { media_ids: ids })).data,
+        batchRestore: async (ids) =>
+            (await api.post<{ affected: number }>("/batch/restore", { media_ids: ids })).data,
+        batchSetRating: async (ids, rating) =>
+            (await api.post<{ affected: number }>("/batch/rating", { media_ids: ids, rating })).data,
+        batchAddTags: async (ids, tags) =>
+            (await api.post<{ affected: number }>("/batch/tags", { media_ids: ids, tags })).data,
+        batchRemoveTags: async (ids, tags) =>
+            (await api.post<{ affected: number }>("/batch/tags/remove", { media_ids: ids, tags })).data,
         batchUpdateMetadata: async (ids, patch) =>
             (await api.post<{ affected: number }>("/batch/metadata", { media_ids: ids, ...patch })).data,
         downloadBlob: async (id) =>

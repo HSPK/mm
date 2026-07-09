@@ -40,6 +40,7 @@ def _register() -> None:
     from mm.cli.importer import import_cmd  # noqa: F811
     from mm.cli.info import info  # noqa: F811
     from mm.cli.init import init  # noqa: F811
+    from mm.cli.media import media  # noqa: F811
     from mm.cli.search import search  # noqa: F811
     from mm.cli.server import server  # noqa: F811
 
@@ -51,6 +52,7 @@ def _register() -> None:
     cli.add_command(server)
     cli.add_command(db)
     cli.add_command(geo)
+    cli.add_command(media)
 
 
 _register()

@@ -18,7 +18,29 @@ struct LibraryView: View {
         DateGroupMode(rawValue: dateGroupRaw) ?? .none
     }
 
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
+    private var columns: [GridItem] {
+        #if os(macOS)
+        [GridItem(.adaptive(minimum: 118, maximum: 146), spacing: tileSpacing)]
+        #else
+        [GridItem(.adaptive(minimum: 100), spacing: tileSpacing)]
+        #endif
+    }
+
+    private var tileSpacing: CGFloat {
+        #if os(macOS)
+        2
+        #else
+        2
+        #endif
+    }
+
+    private var gridPadding: CGFloat {
+        #if os(macOS)
+        18
+        #else
+        6
+        #endif
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -35,6 +57,7 @@ struct LibraryView: View {
             .task {
                 if store.items.isEmpty { store.reload() }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             if selection.isActive {
                 SelectionActionBar(
@@ -53,6 +76,29 @@ struct LibraryView: View {
         .animation(.easeInOut(duration: 0.18), value: selection.isActive)
         .navigationTitle(title)
         .toolbar { toolbarItems }
+        #if os(macOS)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            MacLibraryHeader(
+                total: store.total,
+                dateGroup: dateGroup,
+                hasFilters: store.filters.hasActive,
+                showingTrash: store.filters.deleted,
+                onChangeDateGroup: { dateGroupRaw = $0.rawValue },
+                onShowFilters: { showFilterSheet = true },
+                onShowTrash: {
+                    var next = store.filters
+                    next.deleted = true
+                    store.filters = next
+                },
+                onClearFilters: {
+                    var cleared = Filters()
+                    cleared.sort = store.filters.sort
+                    cleared.order = store.filters.order
+                    store.filters = cleared
+                }
+            )
+        }
+        #endif
         #if os(iOS)
         .searchable(text: $searchDraft, isPresented: $showSearch, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search media")
         #else
@@ -141,6 +187,33 @@ struct LibraryView: View {
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            #if os(macOS)
+            if selection.isActive {
+                Button("Cancel") { selection.exit() }
+                Button {
+                    selection.selectAll(in: store.items.map(\.id))
+                } label: {
+                    Label("Select All", systemImage: "checkmark.circle")
+                }
+                .disabled(store.items.isEmpty)
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label(store.filters.deleted ? "Delete" : "Trash", systemImage: "trash")
+                }
+            } else if store.filters.deleted {
+                Menu {
+                    Button(role: .destructive) {
+                        Task { await emptyTrash() }
+                    } label: {
+                        Label("Empty trash", systemImage: "trash.slash")
+                    }
+                    Button("Done") { store.filters.deleted = false }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+            #else
             if selection.isActive {
                 EmptyView()
             } else if store.filters.deleted {
@@ -155,53 +228,59 @@ struct LibraryView: View {
                     Image(systemName: "ellipsis.circle")
                 }
             } else {
-                Menu {
-                    Button { showFilterSheet = true } label: {
-                        Label("Filters", systemImage: "slider.horizontal.3")
-                    }
-                    Menu {
-                        ForEach(DateGroupMode.allCases) { mode in
-                            Button {
-                                dateGroupRaw = mode.rawValue
-                            } label: {
-                                if dateGroup == mode {
-                                    Label(mode.label, systemImage: "checkmark")
-                                } else {
-                                    Text(mode.label)
-                                }
-                            }
-                        }
-                    } label: {
-                        Label("Group by date", systemImage: dateGroup.systemImage)
-                    }
+                libraryMenu
+            }
+            #endif
+        }
+    }
+
+    @ViewBuilder
+    private var libraryMenu: some View {
+        Menu {
+            Button { showFilterSheet = true } label: {
+                Label("Filters", systemImage: "slider.horizontal.3")
+            }
+            Menu {
+                ForEach(DateGroupMode.allCases) { mode in
                     Button {
-                        selection.selectAll(in: store.items.map(\.id))
+                        dateGroupRaw = mode.rawValue
                     } label: {
-                        Label("Select", systemImage: "checkmark.circle")
-                    }
-                    .disabled(store.items.isEmpty)
-                    Button {
-                        var f = store.filters
-                        f.deleted = true
-                        store.filters = f
-                    } label: {
-                        Label("Recently Deleted", systemImage: "trash")
-                    }
-                    if store.filters.hasActive {
-                        Divider()
-                        Button(role: .destructive) {
-                            var cleared = Filters()
-                            cleared.sort = store.filters.sort
-                            cleared.order = store.filters.order
-                            store.filters = cleared
-                        } label: {
-                            Label("Clear filters", systemImage: "xmark.circle")
+                        if dateGroup == mode {
+                            Label(mode.label, systemImage: "checkmark")
+                        } else {
+                            Text(mode.label)
                         }
                     }
+                }
+            } label: {
+                Label("Group by date", systemImage: dateGroup.systemImage)
+            }
+            Button {
+                selection.selectAll(in: store.items.map(\.id))
+            } label: {
+                Label("Select", systemImage: "checkmark.circle")
+            }
+            .disabled(store.items.isEmpty)
+            Button {
+                var f = store.filters
+                f.deleted = true
+                store.filters = f
+            } label: {
+                Label("Recently Deleted", systemImage: "trash")
+            }
+            if store.filters.hasActive {
+                Divider()
+                Button(role: .destructive) {
+                    var cleared = Filters()
+                    cleared.sort = store.filters.sort
+                    cleared.order = store.filters.order
+                    store.filters = cleared
                 } label: {
-                    Image(systemName: store.filters.hasActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    Label("Clear filters", systemImage: "xmark.circle")
                 }
             }
+        } label: {
+            Image(systemName: store.filters.hasActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
         }
     }
 
@@ -209,7 +288,7 @@ struct LibraryView: View {
     private var content: some View {
         if store.items.isEmpty && store.loading {
             LoadingGridPlaceholder()
-                .padding(.horizontal, 6)
+                .padding(.horizontal, gridPadding)
         } else if store.items.isEmpty, let error = store.error {
             EmptyState(
                 systemImage: "exclamationmark.triangle",
@@ -220,14 +299,19 @@ struct LibraryView: View {
             )
             .padding(.top, 64)
         } else if store.items.isEmpty {
+            let emptySystemImage = store.filters.deleted ? "trash" : "photo.on.rectangle.angled"
+            let emptyTitle = store.filters.deleted ? "Trash is empty" : (store.filters.hasActive ? "No matches" : "No media yet")
+            let emptyMessage = store.filters.hasActive
+                ? "Try adjusting or clearing filters."
+                : "Import photos and videos from the server to see them here."
+            let emptyActionLabel = store.filters.hasActive ? "Clear filters" : nil
+            let emptyAction = store.filters.hasActive ? { store.filters = Filters() } : nil
             EmptyState(
-                systemImage: store.filters.deleted ? "trash" : "photo.on.rectangle.angled",
-                title: store.filters.deleted ? "Trash is empty" : (store.filters.hasActive ? "No matches" : "No media yet"),
-                message: store.filters.hasActive
-                    ? "Try adjusting or clearing filters."
-                    : "Import photos and videos from the server to see them here.",
-                actionLabel: store.filters.hasActive ? "Clear filters" : nil,
-                action: store.filters.hasActive ? { store.filters = Filters() } : nil,
+                systemImage: emptySystemImage,
+                title: emptyTitle,
+                message: emptyMessage,
+                actionLabel: emptyActionLabel,
+                action: emptyAction,
             )
             .padding(.top, 64)
         } else {
@@ -236,7 +320,7 @@ struct LibraryView: View {
             LazyVStack(alignment: .leading, spacing: 8, pinnedViews: pinned) {
                 ForEach(groups) { group in
                     Section {
-                        LazyVGrid(columns: columns, spacing: 2) {
+                        LazyVGrid(columns: columns, spacing: tileSpacing) {
                             ForEach(group.items) { item in
                                 MediaTile(
                                     item: item,
@@ -253,13 +337,16 @@ struct LibraryView: View {
                                 .contextMenu {
                                     tileContextMenu(for: item)
                                 } preview: {
-                                    AuthAsyncImage(url: MediaRepository.shared.thumbnailURL(for: item.id, size: "xl"))
+                                    AuthAsyncImage(
+                                        url: MediaRepository.shared.thumbnailURL(for: item.id, size: "xl"),
+                                        contentMode: .fit,
+                                    )
                                         .frame(width: 240, height: 240)
                                 }
                                 .onAppear { store.loadMoreIfNeeded(currentItem: item) }
                             }
                         }
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, gridPadding)
                     } header: {
                         if dateGroup != .none {
                             DateGroupHeader(title: group.title, count: group.items.count)
@@ -435,18 +522,81 @@ struct DateGroupHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title.isEmpty ? "Unknown" : title)
-                .font(.headline)
+                .font(.system(size: 18, weight: .semibold))
             Spacer()
             Text("\(count)")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
+        .background(.bar)
     }
 }
+
+#if os(macOS)
+private struct MacLibraryHeader: View {
+    let total: Int
+    let dateGroup: DateGroupMode
+    let hasFilters: Bool
+    let showingTrash: Bool
+    let onChangeDateGroup: (DateGroupMode) -> Void
+    let onShowFilters: () -> Void
+    let onShowTrash: () -> Void
+    let onClearFilters: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(showingTrash ? "Recently Deleted" : "Library")
+                        .font(.title2.weight(.semibold))
+                    Text(showingTrash ? "Recover or permanently remove items." : "\(total.formatted(.number)) items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("Group", selection: Binding(
+                    get: { dateGroup },
+                    set: onChangeDateGroup
+                )) {
+                    ForEach(DateGroupMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 300)
+
+                Button(action: onShowFilters) {
+                    Label("Filters", systemImage: hasFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+
+                if hasFilters {
+                    Button("Clear", action: onClearFilters)
+                        .buttonStyle(.plain)
+                }
+
+                if !showingTrash {
+                    Button(action: onShowTrash) {
+                        Label("Trash", systemImage: "trash")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+
+            Divider()
+        }
+        .background(.ultraThinMaterial)
+    }
+}
+#endif
 
 // MARK: - Active filter chips
 
@@ -608,15 +758,38 @@ private struct BarButton: View {
 // MARK: - Helpers
 
 private struct LoadingGridPlaceholder: View {
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
+    private var columns: [GridItem] {
+        #if os(macOS)
+        [GridItem(.adaptive(minimum: 118, maximum: 146), spacing: spacing)]
+        #else
+        [GridItem(.adaptive(minimum: 100), spacing: spacing)]
+        #endif
+    }
+
+    private var spacing: CGFloat {
+        #if os(macOS)
+        2
+        #else
+        2
+        #endif
+    }
+
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 2) {
+        LazyVGrid(columns: columns, spacing: spacing) {
             ForEach(0..<18, id: \.self) { _ in
                 ShimmerPlaceholder()
                     .aspectRatio(1, contentMode: .fill)
-                    .clipShape(.rect(cornerRadius: 4))
+                    .clipShape(.rect(cornerRadius: cornerRadius))
             }
         }
+    }
+
+    private var cornerRadius: CGFloat {
+        #if os(macOS)
+        8
+        #else
+        4
+        #endif
     }
 }
 

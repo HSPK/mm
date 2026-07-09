@@ -208,6 +208,13 @@ class MediaApi(DbApi):
             )
         )
 
+    async def batch_restore(self, media_ids: list[int]) -> int:
+        return await self.objects.execute(
+            MediaModel.update(deleted_at=None).where(
+                MediaModel.id.in_(media_ids) & MediaModel.deleted_at.is_null(False)
+            )
+        )
+
     async def list_trash(self) -> list[Media]:
         return [
             to_media(m)

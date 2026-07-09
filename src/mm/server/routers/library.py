@@ -2,29 +2,75 @@
 
 from __future__ import annotations
 
+import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 from mm.config import get_config
 from mm.db.backend import DatabaseTarget
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
+from mm.db.models import JobModel
+from mm.db.sync_client import DBClient
 from mm.io import local_storage
 from mm.library.settings import LibraryConfig
+from mm.library.thumbnails import build_thumbnail_cache, thumbnail_cache_stats
+from mm.media.thumbnails import ffmpeg_available
 from mm.server.dependencies import (
     get_current_user,
     get_db,
     invalidate_media_path_cache,
     invalidate_token_cache,
 )
+from mm.server.job_utils import update_job
 from mm.server.schemas import (
     LibraryInfo,
     SwitchLibraryBody,
     SwitchLibraryResponse,
 )
+from mm.server.utility_schemas import (
+    ThumbnailBuildBody,
+    ThumbnailBuildResponse,
+    ThumbnailStatusResponse,
+    ThumbnailTypeStatus,
+)
 
 router = APIRouter(prefix="/api/library", tags=["library"])
+
+
+async def _run_thumbnail_job(db: AsyncDBClient, job_id: str) -> None:
+    try:
+        row = await db.objects.get(JobModel, id=job_id)
+        body = ThumbnailBuildBody.model_validate_json(row.payload)
+        await update_job(
+            db,
+            job_id,
+            status="running",
+            progress=10,
+            message="Building thumbnail cache",
+        )
+        result = await run_in_threadpool(_build_thumbnails_sync, db.database, body)
+        await update_job(
+            db,
+            job_id,
+            status="done",
+            progress=100,
+            title="Thumbnails complete",
+            message=result.message,
+            result=json.dumps(result.model_dump(mode="json")),
+        )
+    except Exception as exc:  # noqa: BLE001
+        await update_job(
+            db,
+            job_id,
+            status="error",
+            progress=100,
+            title="Thumbnails failed",
+            message=str(exc),
+            error=str(exc),
+        )
 
 
 @router.get("", response_model=LibraryInfo)
@@ -134,3 +180,108 @@ async def update_library_config(
     config = LibraryConfig.model_validate({**current, **body})
     await db.library_config.set(config)
     return config.model_dump(mode="json")
+
+
+@router.get("/thumbnails", response_model=ThumbnailStatusResponse)
+async def thumbnail_status(
+    db: AsyncDBClient = Depends(get_db),
+    user: User | None = Depends(get_current_user),
+) -> ThumbnailStatusResponse:
+    config = await db.library_config.get()
+    stats = thumbnail_cache_stats(config.library_id, storage=local_storage)
+    media_rows = [
+        media
+        for media in await db.media.list()
+        if media.id is not None and not media.deleted_at
+    ]
+    valid_sizes = get_config().thumbnails.sizes
+    cache_dir = stats.cache_dir
+    return ThumbnailStatusResponse(
+        ffmpeg_available=ffmpeg_available(),
+        cache_dir=str(stats.cache_dir),
+        file_count=stats.file_count,
+        total_size=stats.total_size,
+        failed_count=stats.failed_count,
+        by_type=[
+            _thumbnail_type_status(
+                "photo",
+                [media for media in media_rows if media.media_type.value == "photo"],
+                cache_dir,
+                len(valid_sizes),
+            ),
+            _thumbnail_type_status(
+                "video",
+                [media for media in media_rows if media.media_type.value == "video"],
+                cache_dir,
+                len(valid_sizes),
+            ),
+        ],
+    )
+
+
+@router.post("/thumbnails/build", response_model=ThumbnailBuildResponse)
+async def build_thumbnails(
+    body: ThumbnailBuildBody,
+    request: Request,
+    user: User | None = Depends(get_current_user),
+) -> ThumbnailBuildResponse:
+    return await run_in_threadpool(_build_thumbnails_sync, request.app.state.db_path, body)
+
+
+def _build_thumbnails_sync(db_path: str, body: ThumbnailBuildBody) -> ThumbnailBuildResponse:
+    db = DBClient(db_path)
+    try:
+        config = db.library_config.get()
+        result = build_thumbnail_cache(
+            db,
+            config.library_root,
+            config.library_id,
+            sizes=body.sizes,
+            force=body.force,
+            media_types={"video"} if body.videos_only else None,
+            failed_only=body.failed_only,
+            storage=local_storage,
+        )
+        stats = thumbnail_cache_stats(config.library_id, storage=local_storage)
+        return ThumbnailBuildResponse(
+            total=result.total,
+            generated=result.generated,
+            cached=result.cached,
+            failed=result.failed,
+            failed_count=stats.failed_count,
+            message=(
+                f"{result.generated} generated, {result.cached} cached, "
+                f"{result.failed} failed."
+            ),
+        )
+    finally:
+        db.close()
+
+
+def _thumbnail_type_status(
+    media_type: str,
+    media_rows: list,
+    cache_dir,
+    size_count: int,
+) -> ThumbnailTypeStatus:
+    cached_files = 0
+    failed_count = 0
+    sizes = get_config().thumbnails.sizes
+    for media in media_rows:
+        media_id = media.id
+        if media_id is None:
+            continue
+        for size in sizes:
+            if local_storage.exists(cache_dir / size / f"{media_id}.webp"):
+                cached_files += 1
+        if media_type == "video" and local_storage.exists(
+            cache_dir / "failed" / "poster" / f"{media_id}.txt"
+        ):
+            failed_count += 1
+    return ThumbnailTypeStatus(
+        media_type=media_type,
+        media_count=len(media_rows),
+        expected_files=len(media_rows) * size_count,
+        cached_files=cached_files,
+        failed_count=failed_count,
+    )

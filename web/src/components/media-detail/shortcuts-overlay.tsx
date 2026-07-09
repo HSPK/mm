@@ -33,7 +33,7 @@ export function ShortcutsOverlay({ open, onClose }: ShortcutsOverlayProps) {
 
     return (
         <div
-            className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 p-6"
             onClick={onClose}
             role="presentation"
         >

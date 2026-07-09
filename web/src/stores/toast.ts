@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { notify } from "@/stores/notifications"
 
 export type ToastVariant = "default" | "success" | "error"
 
@@ -6,7 +7,6 @@ export interface Toast {
     id: number
     message: string
     variant: ToastVariant
-    /** Auto-dismiss in ms; 0 = sticky until dismissed. */
     duration: number
 }
 
@@ -19,30 +19,27 @@ interface ToastState {
 
 let nextId = 1
 
-export const useToastStore = create<ToastState>((set, get) => ({
+export const useToastStore = create<ToastState>((set) => ({
     toasts: [],
     push: (message, opts) => {
         const id = nextId++
+        const variant = opts?.variant ?? "default"
         const toast: Toast = {
             id,
             message,
-            variant: opts?.variant ?? "default",
+            variant,
             duration: opts?.duration ?? 2600,
         }
-        set((s) => ({ toasts: [...s.toasts, toast] }))
-        if (toast.duration > 0) {
-            window.setTimeout(() => get().dismiss(id), toast.duration)
-        }
+        set((state) => ({ toasts: [...state.toasts, toast] }))
+        if (variant === "error") notify.error("Error", message)
+        else if (variant === "success") notify.success("Done", message)
+        else notify.info("Notice", message)
         return id
     },
-    dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+    dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
     clear: () => set({ toasts: [] }),
 }))
 
-/**
- * Imperative helpers — use from event handlers + async logic where calling a
- * React hook isn't an option.
- */
 export const toast = {
     show: (message: string, opts?: { variant?: ToastVariant; duration?: number }) =>
         useToastStore.getState().push(message, opts),

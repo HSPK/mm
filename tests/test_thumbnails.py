@@ -15,6 +15,8 @@ from mm.library.settings import LibraryConfig
 from mm.library.thumbnails import build_thumbnail_cache, thumbnail_cache_stats
 from mm.media.thumbnails import (
     cache_dir_for_library,
+    clear_failed_thumbnail_markers,
+    failed_thumbnail_count,
     get_thumbnail,
 )
 
@@ -149,3 +151,21 @@ def test_build_thumbnail_cache_reuses_fresh_cache(tmp_path: Path, db: DBClient) 
     assert result.generated == 0
     assert result.cached == 1
     assert result.failed == 0
+
+
+def test_video_thumbnail_without_ffmpeg_writes_failed_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src = tmp_path / "video.mp4"
+    src.write_bytes(b"not really a video")
+    cache = tmp_path / "thumbs"
+    monkeypatch.setattr("mm.media.thumbnails._FFMPEG", None)
+
+    thumb = get_thumbnail(str(src), media_id=7, size="md", cache_dir=cache, storage=local_storage)
+
+    assert thumb is None
+    assert failed_thumbnail_count(cache, storage=local_storage) == 1
+
+    assert clear_failed_thumbnail_markers(cache, storage=local_storage) == 1
+    assert failed_thumbnail_count(cache, storage=local_storage) == 0

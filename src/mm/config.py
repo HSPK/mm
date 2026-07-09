@@ -163,6 +163,103 @@ class ServerConfig(BaseModel):
     media_path_cache: CacheLimits = Field(default_factory=lambda: CacheLimits(ttl=600, max=4096))
 
 
+class ScraperSourceConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    base_url: str = ""
+    language: str | None = None
+    priority: int = 100
+    credentials: dict[str, str] = Field(default_factory=dict)
+
+
+def _default_scraper_sources() -> dict[str, ScraperSourceConfig]:
+    return {
+        "tmdb": ScraperSourceConfig(
+            base_url="https://api.themoviedb.org/3",
+            priority=10,
+            credentials={"api_key": "", "access_token": ""},
+        ),
+        "omdb": ScraperSourceConfig(
+            enabled=False,
+            base_url="https://www.omdbapi.com/",
+            priority=20,
+            credentials={"api_key": ""},
+        ),
+        "tvdb": ScraperSourceConfig(
+            enabled=False,
+            base_url="https://api4.thetvdb.com/v4",
+            priority=30,
+            credentials={"api_key": "", "pin": ""},
+        ),
+        "musicbrainz": ScraperSourceConfig(
+            base_url="https://musicbrainz.org/ws/2",
+            priority=40,
+            credentials={
+                "user_agent": "litemm/0.1 (https://github.com/HSPK/mm)",
+                "oauth_client_id": "",
+                "oauth_client_secret": "",
+            },
+        ),
+        "itunes": ScraperSourceConfig(
+            base_url="https://itunes.apple.com/search",
+            priority=50,
+            credentials={},
+        ),
+        "netease": ScraperSourceConfig(
+            base_url="https://music.163.com/api/search/get/web",
+            priority=60,
+            credentials={},
+        ),
+        "qqmusic": ScraperSourceConfig(
+            base_url="https://c.y.qq.com/soso/fcgi-bin/client_search_cp",
+            priority=70,
+            credentials={},
+        ),
+    }
+
+
+class ScrapersConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    language: str = "zh-CN"
+    timeout: float = 15.0
+    order: list[str] = Field(
+        default_factory=lambda: [
+            "tmdb",
+            "omdb",
+            "tvdb",
+            "musicbrainz",
+            "itunes",
+            "netease",
+            "qqmusic",
+        ]
+    )
+    sources: dict[str, ScraperSourceConfig] = Field(default_factory=_default_scraper_sources)
+
+
+class OrganizerTemplates(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    movie: str = "{title} ({year})/{title} ({year}){ext}"
+    tv: str = "{title}/Season {season:02d}/{title} - S{season:02d}E{episode:02d}{ext}"
+    track: str = "{artist}/{album}/{disc_folder}/{track:02d} - {title}{ext}"
+
+
+class OrganizerConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    templates: OrganizerTemplates = Field(default_factory=OrganizerTemplates)
+    chinese_script: str = "simplified"
+    lyrics_source: str = "lrclib"
+    default_scrapers: dict[str, str] = Field(
+        default_factory=lambda: {"movies": "tmdb", "tv": "tmdb", "music": "musicbrainz"}
+    )
+    media_sources: dict[str, list[str]] = Field(
+        default_factory=lambda: {"movies": [], "tv": [], "music": []}
+    )
+
+
 class RegisteredDatabase(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -184,6 +281,8 @@ class CliConfig(BaseModel):
     hashing: HashingConfig = Field(default_factory=HashingConfig)
     import_: ImportConfig = Field(default_factory=ImportConfig, alias="import")
     server: ServerConfig = Field(default_factory=ServerConfig)
+    scrapers: ScrapersConfig = Field(default_factory=ScrapersConfig)
+    organizer: OrganizerConfig = Field(default_factory=OrganizerConfig)
 
     @property
     def active_database(self) -> RegisteredDatabase | None:
@@ -207,9 +306,20 @@ def load_cli_config() -> CliConfig:
     if not isinstance(data, dict):
         return CliConfig()
     try:
-        return CliConfig.model_validate(data)
+        cfg = CliConfig.model_validate(data)
+        _merge_default_scraper_sources(cfg)
+        return cfg
     except ValidationError:
         return CliConfig()
+
+
+def _merge_default_scraper_sources(cfg: CliConfig) -> None:
+    default_sources = _default_scraper_sources()
+    for name, source in default_sources.items():
+        cfg.scrapers.sources.setdefault(name, source)
+    for name in default_sources:
+        if name not in cfg.scrapers.order:
+            cfg.scrapers.order.append(name)
 
 
 def save_cli_config(cfg: CliConfig) -> None:

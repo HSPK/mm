@@ -4,9 +4,9 @@ function toDateTimeLocalValue(value: unknown) {
     return value ? String(value).replace(/Z$/, "").slice(0, 16) : ""
 }
 
-const inputClass = "w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-white text-xs px-2.5 py-2 focus:outline-none focus:border-white/20 transition-colors"
-const legendClass = "text-[10px] uppercase tracking-wider text-white/30 font-semibold"
-const labelClass = "text-[9px] uppercase tracking-wider text-white/20 font-medium block pl-0.5"
+const inputClass = "w-full rounded-lg border border-border/70 bg-secondary/35 px-2.5 py-2 text-xs text-foreground transition-colors placeholder:text-muted-foreground/45 focus:border-ring/40 focus:outline-none focus:ring-2 focus:ring-ring/15"
+const legendClass = "text-[10px] uppercase tracking-wider text-muted-foreground font-semibold"
+const labelClass = "text-[9px] uppercase tracking-wider text-muted-foreground/70 font-medium block pl-0.5"
 
 interface FieldSpec {
     key: keyof MetadataForm
@@ -135,5 +135,5 @@ function FieldGrid({
 }
 
 function Divider() {
-    return <div className="h-px bg-white/[0.05]" />
+    return <div className="h-px bg-border/70" />
 }

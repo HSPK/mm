@@ -25,15 +25,20 @@ private struct WindowBackground: View {
 }
 
 private struct SignedInRoot: View {
+    #if os(macOS)
+    @State private var selection: Sidebar.SidebarItem? = .library
+    #endif
+
     var body: some View {
         #if os(macOS)
         NavigationSplitView {
-            Sidebar()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 220)
+            Sidebar(selection: $selection)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } detail: {
             NavigationStack {
-                LibraryView()
+                sidebarDetail
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         #else
         TabView {
@@ -64,42 +69,66 @@ private struct SignedInRoot: View {
         }
         #endif
     }
+
+    #if os(macOS)
+    @ViewBuilder
+    private var sidebarDetail: some View {
+        switch selection ?? .library {
+        case .library: MacLibraryView()
+        case .albums: AlbumsView()
+        case .map: MapView()
+        case .stats: StatsView()
+        }
+    }
+    #endif
 }
 
 #if os(macOS)
 private struct Sidebar: View {
-    @State private var selection: SidebarItem? = .library
+    @Binding var selection: SidebarItem?
 
     var body: some View {
         List(selection: $selection) {
-            NavigationLink(value: SidebarItem.library) {
-                Label("Library", systemImage: "photo.on.rectangle")
+            Section("Library") {
+                sidebarRow(.library)
+                sidebarRow(.albums)
             }
-            NavigationLink(value: SidebarItem.albums) {
-                Label("Albums", systemImage: "rectangle.stack")
-            }
-            NavigationLink(value: SidebarItem.map) {
-                Label("Map", systemImage: "map")
-            }
-            NavigationLink(value: SidebarItem.stats) {
-                Label("Stats", systemImage: "chart.bar")
-            }
-            NavigationLink(value: SidebarItem.settings) {
-                Label("Settings", systemImage: "gear")
+            Section("Explore") {
+                sidebarRow(.map)
+                sidebarRow(.stats)
             }
         }
+        .listStyle(.sidebar)
         .navigationTitle("MM")
-        .navigationDestination(for: SidebarItem.self) { item in
-            switch item {
-            case .library: LibraryView()
-            case .albums: AlbumsView()
-            case .map: MapView()
-            case .stats: StatsView()
-            case .settings: SettingsView()
+    }
+
+    private func sidebarRow(_ item: SidebarItem) -> some View {
+        Label(item.title, systemImage: item.systemImage)
+            .tag(item)
+    }
+
+    enum SidebarItem: String, CaseIterable, Identifiable {
+        case library, albums, map, stats
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .library: return "All Photos"
+            case .albums: return "Albums"
+            case .map: return "Places"
+            case .stats: return "Insights"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .library: return "photo.stack"
+            case .albums: return "rectangle.stack"
+            case .map: return "map"
+            case .stats: return "chart.xyaxis.line"
             }
         }
     }
-
-    enum SidebarItem: Hashable { case library, albums, map, stats, settings }
 }
 #endif

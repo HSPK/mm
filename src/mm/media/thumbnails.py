@@ -14,6 +14,12 @@ from mm.config import VIDEO_EXTENSIONS, get_config
 from mm.io import FileStorage
 
 _FFMPEG: str | None = shutil.which("ffmpeg")
+_FAILED_REASON_FFMPEG_MISSING = "ffmpeg-missing"
+_FAILED_REASON_GENERATION_FAILED = "generation-failed"
+
+
+def ffmpeg_available() -> bool:
+    return _FFMPEG is not None
 
 
 def cache_dir_for_library(library_id: str | None, base: Path | None = None) -> Path:
@@ -47,8 +53,41 @@ def get_thumbnail(
 
     ext = Path(source_path).suffix.lower()
     if ext in VIDEO_EXTENSIONS:
-        return _generate_video(source_path, dest, cfg.sizes[size], storage=storage)
+        return _get_video_thumbnail(source_path, media_id, size, cache_dir, storage=storage)
     return _generate_image(source_path, dest, cfg.sizes[size], storage=storage)
+
+
+def failed_thumbnail_count(
+    cache_dir: Path | None = None,
+    *,
+    storage: FileStorage,
+) -> int:
+    cache_dir = cache_dir or get_config().paths.thumbs_dir
+    failed_dir = cache_dir / "failed"
+    if not storage.exists(failed_dir):
+        return 0
+    return sum(1 for path in storage.rglob_files(failed_dir) if path.suffix == ".txt")
+
+
+def clear_failed_thumbnail_markers(
+    cache_dir: Path | None = None,
+    media_id: int | None = None,
+    *,
+    storage: FileStorage,
+) -> int:
+    cache_dir = cache_dir or get_config().paths.thumbs_dir
+    failed_dir = cache_dir / "failed"
+    if not storage.exists(failed_dir):
+        return 0
+    removed = 0
+    for path in list(storage.rglob_files(failed_dir)):
+        if path.suffix != ".txt":
+            continue
+        if media_id is not None and path.stem != str(media_id):
+            continue
+        storage.delete_file(path, missing_ok=True)
+        removed += 1
+    return removed
 
 
 def clear_cache(
@@ -192,6 +231,100 @@ def _generate_video(
             storage.delete_file(tmp_png)
         except OSError:
             pass
+
+
+def _get_video_thumbnail(
+    source_path: str,
+    media_id: int,
+    size: str,
+    cache_dir: Path,
+    *,
+    storage: FileStorage,
+) -> Path | None:
+    cfg = get_config().thumbnails
+    dest = cache_dir / size / f"{media_id}.webp"
+    poster = cache_dir / "poster" / f"{media_id}.webp"
+    failed = _failed_marker(cache_dir, media_id)
+
+    if _is_fresh(dest, source_path, storage=storage):
+        return dest
+    if _failed_is_fresh(failed, source_path, storage=storage):
+        return None
+    if not _is_fresh(poster, source_path, storage=storage):
+        if _FFMPEG is None:
+            _write_failed_marker(
+                failed,
+                _FAILED_REASON_FFMPEG_MISSING,
+                storage=storage,
+            )
+            return None
+        generated = _generate_video(
+            source_path,
+            poster,
+            cfg.sizes.get("xl", (1920, 1080)),
+            storage=storage,
+        )
+        if not generated:
+            _write_failed_marker(
+                failed,
+                _FAILED_REASON_GENERATION_FAILED,
+                storage=storage,
+            )
+            return None
+
+    if _resize_cached_image(poster, dest, cfg.sizes[size], storage=storage):
+        return dest
+    _write_failed_marker(failed, _FAILED_REASON_GENERATION_FAILED, storage=storage)
+    return None
+
+
+def _resize_cached_image(
+    source: Path,
+    dest: Path,
+    max_size: tuple[int, int],
+    *,
+    storage: FileStorage,
+) -> bool:
+    try:
+        with storage.open(source, "rb") as f:
+            img = Image.open(f)
+            img.load()
+        if img.mode not in ("RGB", "RGBA", "L"):
+            img = img.convert("RGB")
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+        _write_atomic(img, dest, storage=storage)
+        img.close()
+        return True
+    except Exception:
+        return False
+
+
+def _is_fresh(dest: Path, source_path: str, *, storage: FileStorage) -> bool:
+    if not storage.exists(dest):
+        return False
+    try:
+        return storage.get_mtime(source_path) <= storage.get_mtime(dest)
+    except OSError:
+        return False
+
+
+def _failed_marker(cache_dir: Path, media_id: int) -> Path:
+    return cache_dir / "failed" / "poster" / f"{media_id}.txt"
+
+
+def _failed_is_fresh(marker: Path, source_path: str, *, storage: FileStorage) -> bool:
+    if not storage.exists(marker):
+        return False
+    try:
+        return storage.get_mtime(source_path) <= storage.get_mtime(marker)
+    except OSError:
+        return False
+
+
+def _write_failed_marker(marker: Path, reason: str, *, storage: FileStorage) -> None:
+    storage.mkdir(marker.parent)
+    with storage.open(marker, "w") as f:
+        f.write(reason)
 
 
 def _write_atomic(

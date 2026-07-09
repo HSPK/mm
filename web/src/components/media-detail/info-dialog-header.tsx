@@ -20,8 +20,8 @@ export function InfoDialogHeader({
     onClose,
 }: InfoDialogHeaderProps) {
     return (
-        <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
-            <span className="text-white/35 text-[11px] uppercase tracking-wider font-semibold">
+        <div className="flex shrink-0 items-center justify-between px-5 pb-2 pt-4">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {isEditing ? "Edit Metadata" : "Details"}
             </span>
             <div className="flex items-center gap-1">
@@ -30,7 +30,7 @@ export function InfoDialogHeader({
                         <button
                             onClick={onCancelEdit}
                             disabled={saving}
-                            className="p-1.5 rounded-full text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors"
+                            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                             title="Cancel"
                         >
                             <X className="h-4 w-4" />
@@ -38,7 +38,7 @@ export function InfoDialogHeader({
                         <button
                             onClick={onSave}
                             disabled={saving}
-                            className="p-1.5 rounded-full text-green-400/70 hover:text-green-400 hover:bg-white/10 transition-colors"
+                            className="rounded-full p-1.5 text-emerald-500 transition-colors hover:bg-emerald-500/10"
                             title="Save"
                         >
                             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
@@ -49,14 +49,14 @@ export function InfoDialogHeader({
                         <button
                             onClick={onEnterEdit}
                             disabled={!canEdit}
-                            className="p-1.5 rounded-full text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors disabled:pointer-events-none disabled:opacity-30"
+                            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                             title="Edit"
                         >
                             <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
                             onClick={onClose}
-                            className="p-1.5 rounded-full text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors"
+                            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                             title="Close"
                         >
                             <X className="h-4 w-4" />

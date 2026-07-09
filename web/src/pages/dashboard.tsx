@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
 import { PageHeader } from "@/components/ui/page-header"
 import { Spinner } from "@/components/ui/spinner"
+import { ThumbnailCacheCard } from "@/components/stats/thumbnail-cache-card"
 import { formatBytes } from "@/lib/format"
 import {
     aggregateTimelineEntries,
@@ -35,13 +36,14 @@ export default function DashboardPage() {
     }, [])
 
     useEffect(() => {
-        void load()
+        const id = window.setTimeout(() => { void load() }, 0)
+        return () => window.clearTimeout(id)
     }, [load])
 
     return (
         <div>
             <PageHeader
-                title="Dashboard"
+                title="Stats"
                 back
                 actions={
                     <button
@@ -99,6 +101,8 @@ function DashboardBody({ stats, timeline }: { stats: LibraryStats; timeline: Tim
             </Card>
 
             <TimelineSection entries={timeline} />
+
+            <ThumbnailCacheCard />
 
             {stats.cameras.length > 0 && (
                 <Card>
@@ -187,20 +191,16 @@ function CameraList({ cameras }: { cameras: CameraStats[] }) {
 }
 
 function TagCloud({ tags }: { tags: TagStats[] }) {
-    const max = Math.max(...tags.map((t) => t.count), 1)
     return (
         <div className="flex flex-wrap gap-2">
             {tags.map((tag) => {
-                const ratio = tag.count / max
-                const size = 0.75 + ratio * 0.5
                 return (
                     <span
                         key={tag.name}
-                        className="inline-flex items-baseline gap-1.5 px-2.5 py-1 rounded-full bg-secondary/60 hover:bg-secondary transition-colors"
-                        style={{ fontSize: `${size}rem` }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-secondary/60 px-2.5 py-1 text-xs font-medium text-foreground/85 transition-colors hover:bg-secondary"
                     >
-                        <span>{tag.name}</span>
-                        <span className="text-[0.65em] text-muted-foreground tabular-nums">{tag.count}</span>
+                        <span className="max-w-40 truncate">{tag.name}</span>
+                        <span className="text-[11px] text-muted-foreground tabular-nums">{tag.count}</span>
                     </span>
                 )
             })}

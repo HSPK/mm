@@ -88,7 +88,9 @@ export const MediaTile = memo(function MediaTile({
             onContextMenu={(e) => { e.preventDefault(); onLongPress(item.id) }}
         >
             <AuthImage
-                apiSrc={`/media/${item.id}/thumbnail`}
+                apiSrc={item.media_type === "video"
+                    ? `/media/${item.id}/thumbnail?size=md`
+                    : `/media/${item.id}/thumbnail`}
                 alt={item.filename}
                 loading="lazy"
                 className={cn(
@@ -97,6 +99,7 @@ export const MediaTile = memo(function MediaTile({
                     selectionMode && !selected && "scale-100",
                     !selectionMode && "group-hover:scale-[1.03]",
                 )}
+                fallback={item.media_type === "video" ? <VideoThumbFallback item={item} /> : undefined}
             />
             {!selectionMode && <Overlay item={item} />}
 
@@ -118,6 +121,19 @@ export const MediaTile = memo(function MediaTile({
         </div>
     )
 })
+
+function VideoThumbFallback({ item }: { item: Media }) {
+    return (
+        <div className="relative flex h-full w-full flex-col items-center justify-center gap-2 overflow-hidden bg-gradient-to-br from-muted to-secondary text-muted-foreground">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-background/70 shadow-sm">
+                <Film className="h-6 w-6" strokeWidth={1.8} />
+            </div>
+            <div className="max-w-[80%] truncate text-[10px] font-medium">
+                {item.filename}
+            </div>
+        </div>
+    )
+}
 
 // ─── Overlay (hover info + badges) ────────────────────────
 

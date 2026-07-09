@@ -50,6 +50,31 @@ struct MediaRepository {
         return try await client.post("/batch/delete", body: Body(media_ids: ids))
     }
 
+    func batchDeletePermanently(ids: [Int]) async throws -> BatchAffectedResponse {
+        struct Body: Encodable { let media_ids: [Int] }
+        return try await client.post("/batch/delete/permanent", body: Body(media_ids: ids))
+    }
+
+    func batchRestore(ids: [Int]) async throws -> BatchAffectedResponse {
+        struct Body: Encodable { let media_ids: [Int] }
+        return try await client.post("/batch/restore", body: Body(media_ids: ids))
+    }
+
+    func batchSetRating(ids: [Int], rating: Int) async throws -> BatchAffectedResponse {
+        struct Body: Encodable { let media_ids: [Int]; let rating: Int }
+        return try await client.post("/batch/rating", body: Body(media_ids: ids, rating: rating))
+    }
+
+    func batchAddTags(ids: [Int], tags: [String]) async throws -> BatchAffectedResponse {
+        struct Body: Encodable { let media_ids: [Int]; let tags: [String] }
+        return try await client.post("/batch/tags", body: Body(media_ids: ids, tags: tags))
+    }
+
+    func batchRemoveTags(ids: [Int], tags: [String]) async throws -> BatchAffectedResponse {
+        struct Body: Encodable { let media_ids: [Int]; let tags: [String] }
+        return try await client.post("/batch/tags/remove", body: Body(media_ids: ids, tags: tags))
+    }
+
     func listTrash() async throws -> [Media] {
         try await client.get("/media/trash")
     }
@@ -58,12 +83,25 @@ struct MediaRepository {
         try await client.delete("/media/trash")
     }
 
+    func downloadFile(for item: Media) async throws -> URL {
+        try await client.download("/media/\(item.id)/file", suggestedFilename: item.filename)
+    }
+
     // MARK: - URL helpers
 
-    func fileURL(for id: Int) -> URL { client.absoluteURL(forPath: "media/\(id)/file") }
-    func previewURL(for id: Int) -> URL { client.absoluteURL(forPath: "media/\(id)/preview") }
+    func fileURL(for id: Int) -> URL {
+        client.absoluteURL(forPath: "media/\(id)/file", includeToken: true)
+    }
+
+    func previewURL(for id: Int) -> URL {
+        client.absoluteURL(forPath: "media/\(id)/preview")
+    }
+
     func thumbnailURL(for id: Int, size: String = "md") -> URL {
-        client.absoluteURL(forPath: "media/\(id)/thumbnail?size=\(size)")
+        client.absoluteURL(
+            forPath: "media/\(id)/thumbnail",
+            query: ["size": size],
+        )
     }
 }
 
