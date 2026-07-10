@@ -238,12 +238,16 @@ class ScrapersConfig(BaseModel):
     sources: dict[str, ScraperSourceConfig] = Field(default_factory=_default_scraper_sources)
 
 
+OLD_DEFAULT_TRACK_TEMPLATE = "{artist}/{album}/{disc_folder}/{track:02d} - {title}{ext}"
+DEFAULT_TRACK_TEMPLATE = "{artist}/{year} - {album}/{disk_folder}/{track:02d} - {title}{ext}"
+
+
 class OrganizerTemplates(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     movie: str = "{title} ({year})/{title} ({year}){ext}"
     tv: str = "{title}/Season {season:02d}/{title} - S{season:02d}E{episode:02d}{ext}"
-    track: str = "{artist}/{album}/{disc_folder}/{track:02d} - {title}{ext}"
+    track: str = DEFAULT_TRACK_TEMPLATE
 
 
 class OrganizerConfig(BaseModel):
@@ -308,6 +312,7 @@ def load_cli_config() -> CliConfig:
     try:
         cfg = CliConfig.model_validate(data)
         _merge_default_scraper_sources(cfg)
+        _migrate_default_organizer_templates(cfg)
         return cfg
     except ValidationError:
         return CliConfig()
@@ -320,6 +325,11 @@ def _merge_default_scraper_sources(cfg: CliConfig) -> None:
     for name in default_sources:
         if name not in cfg.scrapers.order:
             cfg.scrapers.order.append(name)
+
+
+def _migrate_default_organizer_templates(cfg: CliConfig) -> None:
+    if cfg.organizer.templates.track == OLD_DEFAULT_TRACK_TEMPLATE:
+        cfg.organizer.templates.track = DEFAULT_TRACK_TEMPLATE
 
 
 def save_cli_config(cfg: CliConfig) -> None:

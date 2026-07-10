@@ -164,6 +164,9 @@ def _same_stem_sidecars(source: Path) -> list[Path]:
 def _standard_artwork_sidecars(directory: Path) -> list[Path]:
     if not directory.is_dir():
         return []
+    auxiliary_dirs = {
+        "tech.info",
+    }
     names = {
         "movie.nfo",
         "tvshow.nfo",
@@ -194,13 +197,18 @@ def _standard_artwork_sidecars(directory: Path) -> list[Path]:
     return [
         candidate.resolve()
         for candidate in directory.iterdir()
-        if candidate.is_file()
-        and not candidate.name.startswith("._")
+        if not candidate.name.startswith("._")
         and (
-            candidate.name.lower() in names
-            or candidate.stem.lower().startswith("season")
-            or candidate.suffix.lower() in {".cue", ".log", ".m3u", ".m3u8"}
-            or candidate.name.lower() in {"dynamic range.txt", "dr.txt"}
+            (
+                candidate.is_file()
+                and (
+                    candidate.name.lower() in names
+                    or candidate.stem.lower().startswith("season")
+                    or candidate.suffix.lower() in {".cue", ".log", ".m3u", ".m3u8"}
+                    or candidate.name.lower() in {"dynamic range.txt", "dr.txt"}
+                )
+            )
+            or (candidate.is_dir() and candidate.name.lower() in auxiliary_dirs)
         )
     ]
 

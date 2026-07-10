@@ -150,10 +150,11 @@ def _parse_audio_filename(file_path: Path) -> ParsedMediaFile | None:
     tags = _audio_tags(file_path)
     directory = _audio_directory_info(file_path)
     file_info = _audio_file_info(file_path.stem)
-    artist = tags.get("artist") or file_info.artist or directory.artist
+    track_artist = tags.get("artist") or file_info.artist
+    artist = tags.get("album_artist") or directory.artist or _album_artist_from_track_artist(track_artist)
     title = strip_redundant_artist_prefix(
         tags.get("title") or file_info.title,
-        artist,
+        track_artist or artist,
     )
     album = clean_music_title(tags.get("album") or file_info.album or directory.album)
     year = tags.get("year") or directory.year
@@ -222,6 +223,17 @@ def _release_folder_info(value: str) -> tuple[str | None, str | None, int | None
             _clean_title(dated_site.group("album")),
             int(dated_site.group("year")),
         )
+    dated_artist_album = re.match(
+        r"^\[(?P<year>19\d{2}|20\d{2}|2100)-\d{2}-\d{2}\]\s*"
+        r"(?P<artist>.+?)--(?P<album>.+)$",
+        value,
+    )
+    if dated_artist_album:
+        return (
+            _clean_artist(dated_artist_album.group("artist")),
+            clean_music_title(dated_artist_album.group("album")),
+            int(dated_artist_album.group("year")),
+        )
     dated = re.match(r"^\[(?P<year>19\d{2}|20\d{2}|2100)-\d{2}-\d{2}\]\s*(?P<album>.+)$", value)
     if dated:
         return None, clean_music_title(dated.group("album")), int(dated.group("year"))
@@ -270,12 +282,24 @@ def _audio_tags(file_path: Path) -> dict[str, str | int | None]:
         return {}
     return {
         "title": _first_tag(audio, "title"),
-        "artist": _first_tag(audio, "artist") or _first_tag(audio, "albumartist"),
+        "artist": _first_tag(audio, "artist"),
+        "album_artist": _first_tag(audio, "albumartist"),
         "album": _first_tag(audio, "album"),
         "year": _year_from_tag(_first_tag(audio, "date") or _first_tag(audio, "year")),
         "disc": _number_from_slash_tag(_first_tag(audio, "discnumber")),
         "track": _number_from_slash_tag(_first_tag(audio, "tracknumber")),
     }
+
+
+def _album_artist_from_track_artist(value: str | None) -> str | None:
+    if not value:
+        return None
+    return re.split(
+        r"\s*(?:&|,|，|、|\+)\s*|\s+(?:x|feat\.?|ft\.?|with|vs\.?)\s+",
+        value,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip() or None
 
 
 def _first_tag(audio: object, key: str) -> str | None:

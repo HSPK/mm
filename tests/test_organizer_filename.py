@@ -136,6 +136,27 @@ def test_parse_audio_track_strips_redundant_artist_prefix_from_album_folder():
     assert parsed.title == "I Forgot That You Existed"
 
 
+def test_parse_audio_uses_album_artist_for_compilation_album():
+    parsed = parse_media_filename(Path("Various Artists/Pop Mix/01. Artist A - Big Song.flac"))
+
+    assert parsed is not None
+    assert parsed.artist == "Various Artists"
+    assert parsed.album == "Pop Mix"
+    assert parsed.title == "Big Song"
+    assert parsed.track == 1
+
+
+def test_parse_audio_uses_primary_artist_when_track_has_featured_artist():
+    parsed = parse_media_filename(Path("Music/2010 - 跨时代/02. 周杰伦&浪花兄弟 - 免费教学录影带.flac"))
+
+    assert parsed is not None
+    assert parsed.artist == "周杰伦"
+    assert parsed.album == "跨时代"
+    assert parsed.year == 2010
+    assert parsed.title == "免费教学录影带"
+    assert parsed.track == 2
+
+
 def test_parse_audio_track_preserves_decimal_dot_title():
     parsed = parse_media_filename(
         Path("Coldplay/2003 - A Rush Of B-Sides To Your Head/17. 1.36.flac")
@@ -182,7 +203,7 @@ def test_parse_audio_dated_album_cd_folder_template():
 
     assert parsed is not None
     assert parsed.artist == "周杰伦"
-    assert parsed.album == "周杰伦--周杰伦2004无与伦比演唱会 Live CD"
+    assert parsed.album == "周杰伦2004无与伦比演唱会 Live CD"
     assert parsed.year == 2005
     assert parsed.disc == 1
     assert parsed.track == 1

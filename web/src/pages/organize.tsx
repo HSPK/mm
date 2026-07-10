@@ -25,6 +25,7 @@ import {
     mergeMatches,
     persistedViewState,
     pollOrganizerJob,
+    renameItemsForRows,
     scrapeEmptyMessage,
     scrapeItemsForRows,
     scrapeResultMessage,
@@ -92,7 +93,7 @@ export default function OrganizePage() {
         () => selectedRows,
         [selectedRows],
     )
-    const actionItems = useMemo(() => actionRows.flatMap((row) => row.files), [actionRows])
+    const actionItems = useMemo(() => renameItemsForRows(activeKind, actionRows), [activeKind, actionRows])
     const actionPlanKey = useMemo(
         () => actionRows.length > 0 ? actionKey(actionRows) : null,
         [actionRows],

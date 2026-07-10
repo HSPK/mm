@@ -150,6 +150,14 @@ export function firstMusicArtist(row: MediaRow | null) {
     return row?.files.find((file) => file.artist)?.artist || ""
 }
 
+export function renameItemsForRows(kind: OrganizerKind, rows: MediaRow[]): OrganizerItem[] {
+    if (kind !== "music") return rows.flatMap((row) => row.files)
+    return rows.flatMap((row) => {
+        const artist = firstMusicArtist(row)
+        return row.files.map((file) => artist ? { ...file, artist } : file)
+    })
+}
+
 export function candidateKey(candidate: OrganizerCandidate) {
     return `${candidate.source}:${candidate.source_id}`
 }

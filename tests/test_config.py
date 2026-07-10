@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from mm import config as app_config
-from mm.config import CliConfig, RegisteredDatabase
+from mm.config import CliConfig, DEFAULT_TRACK_TEMPLATE, OLD_DEFAULT_TRACK_TEMPLATE, RegisteredDatabase
 from mm.db.backend import DatabaseTarget
 
 
@@ -92,6 +92,7 @@ def test_section_defaults_match_legacy_constants():
     assert cfg.server.token_cache.ttl == 300
     assert cfg.server.token_cache.max == 256
     assert cfg.server.media_path_cache.ttl == 600
+    assert cfg.organizer.templates.track == DEFAULT_TRACK_TEMPLATE
     assert cfg.scrapers.language == "zh-CN"
     assert cfg.scrapers.order == [
         "tmdb",
@@ -135,6 +136,26 @@ def test_load_cli_config_merges_new_default_scraper_sources(tmp_path: Path, monk
     assert "qqmusic" in cfg.scrapers.sources
     assert "netease" in cfg.scrapers.order
     assert "qqmusic" in cfg.scrapers.order
+
+
+def test_load_cli_config_migrates_old_default_track_template(tmp_path: Path, monkeypatch):
+    import yaml
+
+    monkeypatch.setattr(app_config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(app_config, "CONFIG_PATH", tmp_path / "mm.yaml")
+    (tmp_path / "mm.yaml").write_text(
+        yaml.safe_dump({
+            "organizer": {
+                "templates": {
+                    "track": OLD_DEFAULT_TRACK_TEMPLATE,
+                },
+            },
+        })
+    )
+
+    cfg = app_config.load_cli_config()
+
+    assert cfg.organizer.templates.track == DEFAULT_TRACK_TEMPLATE
 
 
 def test_yaml_override_round_trip(tmp_path: Path, monkeypatch):

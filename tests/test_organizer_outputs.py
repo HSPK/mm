@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from mm.config import OrganizerTemplates
-from mm.db.models import OrganizerMediaModel
+from mm.db.models import OrganizerMediaModel, OrganizerRenameLogModel
 from mm.db.sync_client import DBClient
 from mm.organizer.artwork import plan_artwork
 from mm.organizer.filename import parse_media_filename
@@ -19,10 +20,17 @@ from mm.organizer.scrape_writer import (
     write_standard_metadata,
 )
 from mm.organizer.scrapers import ScrapeCandidate
+from mm.organizer.templates import render_media_path
 from mm.server.routers.organizer import _item_from_parsed, _light_item_from_parsed
 from mm.server.organizer_metadata import OrganizerScanContext
 from mm.server.organizer_persistence import persist_scan_items
-from mm.server.organizer_rename_jobs import refresh_after_rename
+from mm.server.organizer_rename_jobs import (
+    refresh_after_rename,
+    rename_complete_message,
+    rename_complete_title,
+    rename_log_entries,
+    undo_rename_batch,
+)
 
 
 def must_parse(path: Path):
@@ -102,7 +110,7 @@ def test_tv_rename_includes_episode_show_and_season_sidecars(tmp_path: Path):
 
 
 def test_apply_track_rename(tmp_path: Path):
-    src = tmp_path / "Radiohead" / "OK Computer" / "01 - Airbag.flac"
+    src = tmp_path / "Radiohead" / "1997 - OK Computer" / "01 - Airbag.flac"
     src.parent.mkdir(parents=True)
     src.write_text("audio")
     parsed = must_parse(src)
@@ -111,12 +119,42 @@ def test_apply_track_rename(tmp_path: Path):
     plan = plan_renames([parsed], root=out, templates=OrganizerTemplates())
     assert apply_rename_plan(plan) == 1
 
-    assert (out / "Radiohead" / "OK Computer" / "01 - Airbag.flac").read_text() == "audio"
+    assert (out / "Radiohead" / "1997 - OK Computer" / "01 - Airbag.flac").read_text() == "audio"
     assert not src.exists()
 
 
+def test_track_template_supports_disk_folder_alias():
+    parsed = must_parse(Path("Radiohead/1997 - OK Computer/CD2/01 - Airbag.flac"))
+
+    rendered = render_media_path(parsed, OrganizerTemplates())
+
+    assert rendered.relative_path == Path("Radiohead/1997 - OK Computer/CD2/01 - Airbag.flac")
+
+
+def test_rename_uses_provided_album_artist_for_featured_track_artists(tmp_path: Path):
+    album = tmp_path / "Music" / "2010 - 跨时代"
+    album.mkdir(parents=True)
+    first = album / "01. 周杰伦 - 烟花易冷.flac"
+    featured = album / "02. 周杰伦&浪花兄弟 - 免费教学录影带.flac"
+    first.write_text("one")
+    featured.write_text("two")
+    parsed = [
+        must_parse(first),
+        must_parse(featured),
+    ]
+    parsed = [replace(item, artist="周杰伦") for item in parsed]
+
+    plan = plan_renames(parsed, root=tmp_path / "out", templates=OrganizerTemplates())
+
+    targets = {operation.target.relative_to(tmp_path / "out") for operation in plan.operations}
+    assert targets == {
+        Path("周杰伦/2010 - 跨时代/01 - 烟花易冷.flac"),
+        Path("周杰伦/2010 - 跨时代/02 - 免费教学录影带.flac"),
+    }
+
+
 def test_apply_album_rename_dedupes_sidecars_and_removes_empty_folders(tmp_path: Path):
-    album = tmp_path / "Radiohead" / "OK Computer"
+    album = tmp_path / "Radiohead" / "1997 - OK Computer"
     album.mkdir(parents=True)
     first = album / "01 - Airbag.flac"
     second = album / "02 - Paranoid Android.flac"
@@ -125,22 +163,27 @@ def test_apply_album_rename_dedupes_sidecars_and_removes_empty_folders(tmp_path:
     (album / "album.nfo").write_text("album")
     (album / "folder.jpg").write_text("cover")
     (album / "OK Computer.cue").write_text("cue")
+    tech_info = album / "tech.info"
+    tech_info.mkdir()
+    (tech_info / "spectrum.txt").write_text("info")
 
     parsed = [must_parse(first), must_parse(second)]
     out = tmp_path / "organized"
     plan = plan_renames(parsed, root=out, templates=OrganizerTemplates())
 
     targets = [operation.target.relative_to(out) for operation in plan.actionable]
-    assert targets.count(Path("Radiohead/OK Computer/album.nfo")) == 1
-    assert targets.count(Path("Radiohead/OK Computer/folder.jpg")) == 1
-    assert targets.count(Path("Radiohead/OK Computer/OK Computer.cue")) == 1
+    assert targets.count(Path("Radiohead/1997 - OK Computer/album.nfo")) == 1
+    assert targets.count(Path("Radiohead/1997 - OK Computer/folder.jpg")) == 1
+    assert targets.count(Path("Radiohead/1997 - OK Computer/OK Computer.cue")) == 1
+    assert targets.count(Path("Radiohead/1997 - OK Computer/tech.info")) == 1
 
-    assert apply_rename_plan(plan) == 5
-    assert (out / "Radiohead" / "OK Computer" / "01 - Airbag.flac").read_text() == "one"
-    assert (out / "Radiohead" / "OK Computer" / "02 - Paranoid Android.flac").read_text() == "two"
-    assert (out / "Radiohead" / "OK Computer" / "album.nfo").read_text() == "album"
-    assert (out / "Radiohead" / "OK Computer" / "folder.jpg").read_text() == "cover"
-    assert (out / "Radiohead" / "OK Computer" / "OK Computer.cue").read_text() == "cue"
+    assert apply_rename_plan(plan) == 6
+    assert (out / "Radiohead" / "1997 - OK Computer" / "01 - Airbag.flac").read_text() == "one"
+    assert (out / "Radiohead" / "1997 - OK Computer" / "02 - Paranoid Android.flac").read_text() == "two"
+    assert (out / "Radiohead" / "1997 - OK Computer" / "album.nfo").read_text() == "album"
+    assert (out / "Radiohead" / "1997 - OK Computer" / "folder.jpg").read_text() == "cover"
+    assert (out / "Radiohead" / "1997 - OK Computer" / "OK Computer.cue").read_text() == "cue"
+    assert (out / "Radiohead" / "1997 - OK Computer" / "tech.info" / "spectrum.txt").read_text() == "info"
     assert not album.exists()
 
 
@@ -169,6 +212,63 @@ def test_refresh_after_rename_replaces_stale_target_row(tmp_path: Path, db: DBCl
         )
     ))
     assert [(row.id, row.path) for row in rows] == [(source_row.id, str(target.resolve()))]
+
+
+def test_rename_log_entries_count_full_batch(db: DBClient):
+    batch_id = "batch-many"
+    for index in range(30):
+        db._run(db._client.objects.create(
+            OrganizerRenameLogModel,
+            batch_id=batch_id,
+            source=f"/src/{index:02d}.flac",
+            target=f"/dst/{index:02d}.flac",
+            media_type="track",
+            status="applied",
+        ))
+
+    entries = db._run(rename_log_entries(db._client, limit=1))
+
+    assert len(entries) == 1
+    assert entries[0].batch_id == batch_id
+    assert entries[0].count == 30
+    assert entries[0].status == "applied"
+
+
+def test_undo_rename_batch_restores_db_and_removes_empty_target_dirs(tmp_path: Path, db: DBClient):
+    source = tmp_path / "Radiohead" / "OK Computer" / "01 - Airbag.flac"
+    target = tmp_path / "organized" / "Radiohead" / "OK Computer" / "01 - Airbag.flac"
+    target.parent.mkdir(parents=True)
+    target.write_text("audio")
+    item = _light_item_from_parsed(must_parse(target), OrganizerScanContext.create())
+    db._run(persist_scan_items(db._client, [item], mark_missing=False))
+    db._run(db._client.objects.create(
+        OrganizerRenameLogModel,
+        batch_id="undo-batch",
+        source=str(source.resolve()),
+        target=str(target.resolve()),
+        media_type="track",
+        status="applied",
+    ))
+
+    result = db._run(undo_rename_batch(db._client, "undo-batch"))
+
+    assert result.affected == 1
+    assert source.read_text() == "audio"
+    assert not target.exists()
+    assert not target.parent.exists()
+    rows = db._run(db._client.objects.fetchall(
+        OrganizerMediaModel.select().where(
+            OrganizerMediaModel.path.in_([str(source.resolve()), str(target.resolve())])
+        )
+    ))
+    assert [(row.path, row.media_type) for row in rows] == [(str(source.resolve()), "track")]
+
+
+def test_rename_complete_messages_are_user_facing():
+    assert rename_complete_title(0) == "Nothing to rename"
+    assert rename_complete_message(0) == "All selected files already match the target names."
+    assert rename_complete_message(1) == "Renamed 1 file."
+    assert rename_complete_message(2) == "Renamed 2 files."
 
 
 def test_music_item_uses_track_nfo_for_display_fields(tmp_path: Path):

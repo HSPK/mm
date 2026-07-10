@@ -16,7 +16,6 @@ from mm.organizer.filename import ParsedMediaFile, parse_media_filename
 from mm.organizer.rename import (
     RenameOperation,
     RenamePlan,
-    apply_rename_operations,
     plan_renames,
     plan_renames_with_source_roots,
     remove_empty_source_dirs,
@@ -77,10 +76,12 @@ async def apply_rename_body(
     plan = rename_plan_for_items(parsed, body.root)
     if plan.conflicts:
         raise HTTPException(409, "Rename plan has conflicts")
-    applied = apply_rename_operations(plan)
-    await refresh_after_rename(db, parsed, applied)
     batch_id = uuid.uuid4().hex
-    for operation in applied:
+    applied: list[RenameOperation] = []
+    for operation in plan.actionable:
+        operation.target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(operation.source), str(operation.target))
+        applied.append(operation)
         await db.objects.create(
             OrganizerRenameLogModel,
             batch_id=batch_id,
@@ -89,9 +90,11 @@ async def apply_rename_body(
             media_type=operation.media_type,
             status="applied",
         )
+    remove_empty_source_dirs(applied)
+    await refresh_after_rename(db, parsed, applied)
     return OrganizerApplyResponse(
         affected=len(applied),
-        message=f"Renamed {len(applied)} file(s). Batch {batch_id}",
+        message=rename_complete_message(len(applied)),
         batch_id=batch_id,
     )
 
@@ -104,7 +107,6 @@ async def rename_log_entries(
     rows = await db.objects.fetchall(
         OrganizerRenameLogModel.select()
         .order_by(OrganizerRenameLogModel.created_at.desc(), OrganizerRenameLogModel.id.desc())
-        .limit(max(1, min(limit * 20, 500)))
     )
     grouped: dict[str, list[OrganizerRenameLogModel]] = {}
     for row in rows:
@@ -138,6 +140,8 @@ async def undo_rename_batch(
     )
     undone = 0
     now = dt.datetime.now()
+    undo_ops: list[RenameOperation] = []
+    parsed_targets: list[ParsedMediaFile] = []
     for row in rows:
         target = Path(row.target)
         source = Path(row.source)
@@ -145,12 +149,19 @@ async def undo_rename_batch(
             continue
         source.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(target), str(source))
+        undo_ops.append(RenameOperation(target, source, row.media_type, "ready"))
+        parsed = parse_media_filename(target)
+        if parsed is not None:
+            parsed_targets.append(parsed)
         await db.objects.execute(
             OrganizerRenameLogModel.update(status="undone", undone_at=now).where(
                 OrganizerRenameLogModel.id == row.id
             )
         )
         undone += 1
+    remove_empty_source_dirs(undo_ops)
+    if undo_ops:
+        await refresh_after_rename(db, parsed_targets, undo_ops)
     return OrganizerApplyResponse(affected=undone, message=f"Restored {undone} file(s)")
 
 
@@ -204,9 +215,9 @@ async def run_rename_job(db: AsyncDBClient, job_id: str) -> None:
             job_id,
             status="done",
             progress=100,
-            title="Rename complete",
-            message=f"Renamed {len(applied)} file(s)",
-            detail=f"Batch {batch_id}",
+            title=rename_complete_title(len(applied)),
+            message=rename_complete_message(len(applied)),
+            detail="",
             result=json.dumps({"affected": len(applied), "batch_id": batch_id}),
         )
     except Exception as exc:  # noqa: BLE001 - persist job-level failure
@@ -291,3 +302,15 @@ async def delete_conflicting_target_row(db: AsyncDBClient, *, source: str, targe
             & (OrganizerMediaModel.path != source)
         )
     )
+
+
+def rename_complete_title(count: int) -> str:
+    return "Rename complete" if count else "Nothing to rename"
+
+
+def rename_complete_message(count: int) -> str:
+    if count == 0:
+        return "All selected files already match the target names."
+    if count == 1:
+        return "Renamed 1 file."
+    return f"Renamed {count} files."

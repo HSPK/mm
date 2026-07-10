@@ -1,6 +1,6 @@
 import axios from "axios"
 import type { OrganizerConfig } from "@/api/organizer"
-import { jobsRepo } from "@/api/jobs"
+import { jobsRepo, type Job } from "@/api/jobs"
 import { notify } from "@/stores/notifications"
 import type { OrganizerKind, ScrapeTarget } from "./organize-types"
 
@@ -13,12 +13,17 @@ export async function pollOrganizerJob(jobId: string, notificationId: number) {
             jobId: job.id,
             title: job.title,
             message: job.message,
-            detail: job.detail,
+            detail: userFacingJobDetail(job),
             progress: job.progress,
         })
         if (["done", "error", "canceled"].includes(job.status)) return job
         await new Promise((resolve) => window.setTimeout(resolve, 900))
     }
+}
+
+function userFacingJobDetail(job: Job) {
+    if (job.kind === "rename" && job.status === "done") return ""
+    return job.detail
 }
 
 export function errorMessage(error: unknown) {

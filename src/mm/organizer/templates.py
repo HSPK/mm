@@ -53,6 +53,7 @@ def template_values(item: ParsedMediaFile) -> dict[str, object]:
         "episode_end": item.episode_end or "",
         "disc": item.disc or 0,
         "disc_folder": disc_folder,
+        "disk_folder": disc_folder,
         "track": item.track or 0,
         "ext": item.path.suffix,
         "stem": item.path.stem,
