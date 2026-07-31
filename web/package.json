@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench:music": "bun run scripts/benchmark-music.ts",
     "gen:api": "cd .. && uv run --quiet python scripts/gen_openapi.py > web/openapi.json && bunx --bun openapi-typescript web/openapi.json -o web/src/api/schema.ts && rm web/openapi.json"
   },
   "dependencies": {

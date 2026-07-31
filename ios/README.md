@@ -30,6 +30,15 @@ The app defaults to `http://localhost:8000/api`. To override:
 You can also tap the URL field on the login screen to change it at runtime;
 it's persisted to `UserDefaults`.
 
+## Configure local media access on macOS
+
+The macOS app can use native file URLs for playback and image preview when the
+media files are available locally. Open **Settings → Local Media**, choose the
+root media folder, and the app stores a security-scoped bookmark so future
+launches can access the folder inside the sandbox. When a server media path can
+be resolved under that folder, the macOS viewer uses the local file directly;
+otherwise it falls back to the server URL.
+
 ## Build targets
 
 - **MM-iOS** — iPhone + iPad

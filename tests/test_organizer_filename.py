@@ -140,21 +140,67 @@ def test_parse_audio_uses_album_artist_for_compilation_album():
     parsed = parse_media_filename(Path("Various Artists/Pop Mix/01. Artist A - Big Song.flac"))
 
     assert parsed is not None
-    assert parsed.artist == "Various Artists"
+    assert parsed.artist == "Artist A"
+    assert parsed.album_artist == "Various Artists"
     assert parsed.album == "Pop Mix"
     assert parsed.title == "Big Song"
     assert parsed.track == 1
 
 
-def test_parse_audio_uses_primary_artist_when_track_has_featured_artist():
-    parsed = parse_media_filename(Path("Music/2010 - 跨时代/02. 周杰伦&浪花兄弟 - 免费教学录影带.flac"))
+def test_parse_audio_separates_track_credit_from_primary_album_artist():
+    parsed = parse_media_filename(
+        Path("Music/2010 - 跨时代/02. 周杰伦&浪花兄弟 - 免费教学录影带.flac")
+    )
 
     assert parsed is not None
-    assert parsed.artist == "周杰伦"
+    assert parsed.artist == "周杰伦, 浪花兄弟"
+    assert parsed.album_artist == "周杰伦"
     assert parsed.album == "跨时代"
     assert parsed.year == 2010
     assert parsed.title == "免费教学录影带"
     assert parsed.track == 2
+
+
+def test_parse_audio_ignores_numeric_artist_tags(monkeypatch):
+    import mm.organizer.filename as filename
+
+    monkeypatch.setattr(
+        filename,
+        "_audio_tags",
+        lambda _path: {
+            "title": "守時",
+            "artist": "2",
+            "album_artist": "2",
+            "album": "自便",
+        },
+    )
+
+    parsed = parse_media_filename(Path("王菲/EP's/[1997.05] 自便/01. 守時.mp3"))
+
+    assert parsed is not None
+    assert parsed.artist == "王菲"
+    assert parsed.album_artist == "王菲"
+
+
+def test_parse_audio_canonicalizes_common_chinese_artist_aliases(monkeypatch):
+    import mm.organizer.filename as filename
+
+    monkeypatch.setattr(
+        filename,
+        "_audio_tags",
+        lambda _path: {
+            "title": "Song",
+            "artist": "G.E.M.",
+            "album_artist": "Wang Leehom",
+            "album": "Album",
+        },
+    )
+
+    parsed = parse_media_filename(Path("Music/Album/01 Song.mp3"))
+
+    assert parsed is not None
+    assert parsed.artist == "邓紫棋"
+    assert parsed.album_artist == "王力宏"
 
 
 def test_parse_audio_track_preserves_decimal_dot_title():
@@ -219,7 +265,8 @@ def test_parse_audio_dated_album_simple_cd_folder_template():
     )
 
     assert parsed is not None
-    assert parsed.artist == "Jay Chou"
+    assert parsed.artist == "周杰伦"
+    assert parsed.album_artist == "周杰伦"
     assert parsed.album == "Jay Chou 周杰倫 超時代演唱會 The Era World Tours Concert Live"
     assert parsed.year == 2011
     assert parsed.disc == 1
@@ -256,3 +303,48 @@ def test_fix_big5_mojibake_tags():
 def test_clean_music_title_removes_live_and_disc_suffixes():
     assert clean_music_title("2004无与伦比演唱会 [Live] [Disc 1]") == "2004无与伦比演唱会"
     assert clean_music_title("超时代演唱会CD1") == "超时代演唱会"
+
+
+def test_parse_audio_skips_category_folder_and_reads_cjk_artist():
+    parsed = parse_media_filename(Path("王菲/EP's/[1993.12] 如風/01. 如風.mp3"))
+
+    assert parsed is not None
+    assert parsed.artist == "王菲"
+    assert parsed.year == 1993
+
+
+def test_parse_audio_roman_numeral_disc_folder_with_category():
+    parsed = parse_media_filename(
+        Path("孙燕姿/Other Albums/[2010.01.29] My Story/Disc I/12. 我不难过.mp3")
+    )
+
+    assert parsed is not None
+    assert parsed.artist == "孙燕姿"
+    assert parsed.disc == 1
+    assert parsed.track == 12
+    assert parsed.year == 2010
+
+
+def test_clean_music_title_strips_roman_disc_suffix():
+    assert (
+        clean_music_title("My Story (2010 Special Edition) [Disc I]")
+        == "My Story (2010 Special Edition)"
+    )
+
+
+def test_parse_audio_skips_russian_category_folder():
+    parsed = parse_media_filename(Path("王力宏/Синглы/2011 - 火力全開/01.火力全開.mp3"))
+
+    assert parsed is not None
+    assert parsed.artist == "王力宏"
+    assert parsed.year == 2011
+
+
+def test_parse_audio_year_prefixed_album_direct():
+    parsed = parse_media_filename(Path("王力宏/1999 - 不可能錯過你/07.不降落的滑翔翼.mp3"))
+
+    assert parsed is not None
+    assert parsed.artist == "王力宏"
+    assert parsed.album == "不可能錯過你"
+    assert parsed.year == 1999
+    assert parsed.track == 7

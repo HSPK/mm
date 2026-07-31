@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from mm.config import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
@@ -15,15 +16,46 @@ from mm.server.organizer_schemas import OrganizerLibraryEntry
 def iter_media_files(path: Path, *, recursive: bool) -> list[Path]:
     extensions = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
     if path.is_file():
-        return [path] if path.suffix.lower() in extensions else []
+        return [path] if _is_media_file(path, extensions) else []
     if not path.is_dir():
         return []
-    pattern = "**/*" if recursive else "*"
-    return [
-        candidate
-        for candidate in path.glob(pattern)
-        if candidate.is_file() and candidate.suffix.lower() in extensions
-    ]
+    files: list[Path] = []
+    _scan_media_dir(path, extensions, recursive=recursive, out=files)
+    return files
+
+
+def _scan_media_dir(
+    directory: Path,
+    extensions: set[str],
+    *,
+    recursive: bool,
+    out: list[Path],
+) -> None:
+    # os.scandir exposes each entry's type from the single directory read, so we
+    # filter by name/extension before ever calling stat(). The old
+    # ``path.glob("**/*")`` + ``candidate.is_file()`` stat'd every entry (files
+    # *and* directories), which is a syscall storm on network mounts.
+    try:
+        entries = list(os.scandir(directory))
+    except OSError:
+        return
+    for entry in entries:
+        name = entry.name
+        if name.startswith("._"):
+            continue
+        # Recurse only into real subdirectories, never following directory
+        # symlinks — mirrors pathlib's ``**`` and avoids symlink cycles.
+        if recursive and entry.is_dir(follow_symlinks=False):
+            _scan_media_dir(Path(entry.path), extensions, recursive=recursive, out=out)
+            continue
+        if os.path.splitext(name)[1].lower() in extensions and entry.is_file():
+            out.append(Path(entry.path))
+
+
+def _is_media_file(path: Path, extensions: set[str]) -> bool:
+    # Skip AppleDouble sidecars (._foo.mp3) macOS drops on non-HFS volumes;
+    # they carry a media extension but are not real media.
+    return not path.name.startswith("._") and path.suffix.lower() in extensions
 
 
 def parse_paths(paths: list[Path], *, recursive: bool) -> list[ParsedMediaFile]:

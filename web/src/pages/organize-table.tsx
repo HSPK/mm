@@ -19,15 +19,15 @@ export function MediaTable({
     selectedKey: string | null
     selectedKeys: string[]
     onOpenDetail: (key: string) => void
-    onSelect: (key: string, shiftKey: boolean) => void
+    onSelect: (key: string, shiftKey: boolean, visibleRows: MediaRow[]) => void
     onToggleExpand: (key: string) => void
 }) {
     const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys])
     const rowRefs = useRef(new Map<string, HTMLTableRowElement>())
     const handleRowClick = useCallback((event: MouseEvent<HTMLTableRowElement>, key: string) => {
         if (event.shiftKey) event.preventDefault()
-        onSelect(key, event.shiftKey)
-    }, [onSelect])
+        onSelect(key, event.shiftKey, rows)
+    }, [onSelect, rows])
 
     useEffect(() => {
         if (!selectedKey) return
@@ -36,10 +36,13 @@ export function MediaTable({
     }, [kind, selectedKey])
 
     return (
-        <Card className="overflow-hidden rounded-[1.25rem]">
-            <div className={cn(kind === "music" ? "overflow-hidden" : "overflow-x-auto")}>
+        <Card className="flex h-full min-h-0 flex-col overflow-hidden rounded-[1.25rem]">
+            <div className={cn(
+                "min-h-0 flex-1 overflow-y-auto",
+                kind === "music" ? "overflow-x-hidden" : "overflow-x-auto",
+            )}>
                 <table className={cn("w-full text-left text-sm", kind === "music" ? "table-fixed" : "min-w-[720px]")}>
-                    <thead className="bg-secondary/35 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <thead className="sticky top-0 z-10 border-b border-border/55 bg-card text-[11px] uppercase tracking-wider text-muted-foreground">
                         <tr>
                             <th className="min-w-0 px-5 py-2.5 font-semibold">Title</th>
                             <th className="w-16 px-2 py-2.5 font-semibold">Year</th>

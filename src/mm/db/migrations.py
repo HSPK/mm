@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Protocol
 
 from peewee import (
+    BigIntegerField,
     CharField,
     Database,
     DateTimeField,
@@ -25,7 +28,9 @@ from mm.db.models import (
     OrganizerMediaModel,
     OrganizerRenameLogModel,
     SchemaMigrationModel,
+    ScrapeCacheModel,
     SmartAlbumModel,
+    VideoProbeCacheModel,
     VideoStateModel,
 )
 
@@ -216,6 +221,292 @@ def _create_video_state(db: Database, migrator: Migrator) -> None:
     db.create_tables([VideoStateModel], safe=True)
 
 
+def _create_video_probe_cache(db: Database, migrator: Migrator) -> None:
+    db.create_tables([VideoProbeCacheModel], safe=True)
+
+
+def _create_scrape_cache(db: Database, migrator: Migrator) -> None:
+    db.create_tables([ScrapeCacheModel], safe=True)
+
+
+def _add_organizer_audio_columns(db: Database, migrator: Migrator) -> None:
+    _add_column_if_missing(
+        db, migrator, "organizer_media", "audio_duration", FloatField(null=True, default=None)
+    )
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "audio_mime_type",
+        CharField(max_length=128, null=True, default=None),
+    )
+    db.execute_sql(
+        "CREATE INDEX IF NOT EXISTS organizer_media_music_catalog "
+        "ON organizer_media (source_kind, media_type, missing)"
+    )
+
+
+def _add_organizer_music_ids(db: Database, migrator: Migrator) -> None:
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "music_album_id",
+        CharField(max_length=64, null=True, default=None),
+    )
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "music_artist_id",
+        CharField(max_length=64, null=True, default=None),
+    )
+    from mm.server.music_catalog import album_id_for_path, artist_id_for_name
+
+    rows = OrganizerMediaModel.select(
+        OrganizerMediaModel.id,
+        OrganizerMediaModel.path,
+        OrganizerMediaModel.artist,
+    ).where(
+        (OrganizerMediaModel.source_kind == "music") & (OrganizerMediaModel.media_type == "track")
+    )
+    for row in rows:
+        OrganizerMediaModel.update(
+            music_album_id=album_id_for_path(Path(row.path)),
+            music_artist_id=artist_id_for_name(row.artist),
+        ).where(OrganizerMediaModel.id == row.id).execute()
+
+
+def _add_organizer_identity_and_scope(db: Database, migrator: Migrator) -> None:
+    import uuid
+
+    from mm.server.organizer_sources import configured_root_for_path
+
+    _add_column_if_missing(
+        db, migrator, "organizer_media", "item_uid", CharField(max_length=64, null=True)
+    )
+    _add_column_if_missing(db, migrator, "organizer_media", "revision", IntegerField(default=1))
+    _add_column_if_missing(db, migrator, "organizer_media", "source_root", TextField(null=True))
+    identity_rows = OrganizerMediaModel.select(
+        OrganizerMediaModel.id,
+        OrganizerMediaModel.item_uid,
+    ).where(OrganizerMediaModel.item_uid.is_null())
+    for row in identity_rows:
+        OrganizerMediaModel.update(item_uid=uuid.uuid4().hex, revision=1).where(
+            OrganizerMediaModel.id == row.id
+        ).execute()
+    source_rows = OrganizerMediaModel.select(
+        OrganizerMediaModel.id,
+        OrganizerMediaModel.path,
+        OrganizerMediaModel.source_root,
+    ).where(OrganizerMediaModel.source_root.is_null())
+    for row in source_rows:
+        root = configured_root_for_path(Path(row.path))
+        if root is not None:
+            OrganizerMediaModel.update(source_root=str(root)).where(
+                OrganizerMediaModel.id == row.id
+            ).execute()
+    db.execute_sql(
+        "CREATE UNIQUE INDEX IF NOT EXISTS organizer_media_item_uid ON organizer_media (item_uid)"
+    )
+    db.execute_sql(
+        "CREATE INDEX IF NOT EXISTS organizer_media_source_root "
+        "ON organizer_media (source_root, missing)"
+    )
+
+
+def _add_job_idempotency(db: Database, migrator: Migrator) -> None:
+    _add_column_if_missing(
+        db, migrator, "jobs", "idempotency_key", CharField(max_length=256, null=True)
+    )
+    _add_column_if_missing(
+        db, migrator, "jobs", "payload_hash", CharField(max_length=64, null=True)
+    )
+    db.execute_sql(
+        "CREATE INDEX IF NOT EXISTS jobs_idempotency "
+        "ON jobs (kind, idempotency_key, payload_hash, status)"
+    )
+
+
+def _add_job_active_claim(db: Database, migrator: Migrator) -> None:
+    _add_column_if_missing(
+        db,
+        migrator,
+        "jobs",
+        "active_claim",
+        CharField(max_length=320, null=True, default=None),
+    )
+    db.execute_sql("CREATE UNIQUE INDEX IF NOT EXISTS jobs_active_claim ON jobs (active_claim)")
+
+
+def _backfill_organizer_source_roots(db: Database, migrator: Migrator) -> None:
+    from mm.server.organizer_sources import configured_root_for_path
+
+    rows = OrganizerMediaModel.select(
+        OrganizerMediaModel.id,
+        OrganizerMediaModel.path,
+        OrganizerMediaModel.source_root,
+    ).where(OrganizerMediaModel.source_root.is_null())
+    for row in rows:
+        root = configured_root_for_path(Path(row.path))
+        if root is not None:
+            OrganizerMediaModel.update(source_root=str(root)).where(
+                OrganizerMediaModel.id == row.id
+            ).execute()
+
+
+def _add_organizer_sync_fingerprints(db: Database, migrator: Migrator) -> None:
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "file_size",
+        BigIntegerField(default=0),
+    )
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "mtime_ns",
+        BigIntegerField(default=0),
+    )
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "sidecar_signature",
+        CharField(max_length=64, default=""),
+    )
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "scan_version",
+        SmallIntegerField(default=0),
+    )
+
+
+def _add_localized_music_identity(db: Database, migrator: Migrator) -> None:
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "album_artist",
+        TextField(null=True, default=None),
+    )
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "music_track_id",
+        CharField(max_length=64, null=True, default=None),
+    )
+    _add_column_if_missing(
+        db,
+        migrator,
+        "organizer_media",
+        "music_album_artist_id",
+        CharField(max_length=64, null=True, default=None),
+    )
+    for column in (
+        "music_title_variants",
+        "music_artist_variants",
+        "music_album_artist_variants",
+        "music_album_variants",
+    ):
+        _add_column_if_missing(
+            db,
+            migrator,
+            "organizer_media",
+            column,
+            TextField(default="{}"),
+        )
+    from mm.server.music_catalog import (
+        album_artist_id_for_item,
+        album_id_for_item,
+        artist_id_for_item,
+        track_id_for_item,
+    )
+    from mm.server.organizer_schemas import OrganizerItem
+
+    rows = OrganizerMediaModel.select(
+        OrganizerMediaModel.id,
+        OrganizerMediaModel.path,
+        OrganizerMediaModel.item_uid,
+        OrganizerMediaModel.title,
+        OrganizerMediaModel.artist,
+        OrganizerMediaModel.album_artist,
+        OrganizerMediaModel.album,
+        OrganizerMediaModel.payload,
+        OrganizerMediaModel.music_track_id,
+        OrganizerMediaModel.music_album_id,
+        OrganizerMediaModel.music_artist_id,
+        OrganizerMediaModel.music_album_artist_id,
+    ).where(
+        (OrganizerMediaModel.source_kind == "music") & (OrganizerMediaModel.media_type == "track")
+    )
+    for row in rows:
+        try:
+            item = OrganizerItem.model_validate_json(row.payload)
+        except (ValueError, TypeError):
+            item = OrganizerItem(
+                path=row.path,
+                media_type="track",
+                title=row.title,
+            )
+        title = row.title or item.title
+        artist = row.artist or item.artist
+        album = row.album or item.album
+        album_artist = row.album_artist or item.album_artist or artist
+        item = item.model_copy(
+            update={
+                "path": row.path,
+                "item_uid": row.item_uid,
+                "media_type": "track",
+                "title": title,
+                "artist": artist,
+                "album_artist": album_artist,
+                "album": album,
+            }
+        )
+        title_variants = item.metadata_title_variants or {"und": title}
+        artist_variants = item.metadata_artist_variants or ({"und": artist} if artist else {})
+        album_artist_variants = item.metadata_album_artist_variants or (
+            {"und": album_artist} if album_artist else {}
+        )
+        album_variants = item.metadata_album_variants or ({"und": album} if album else {})
+        OrganizerMediaModel.update(
+            music_track_id=track_id_for_item(
+                item,
+                existing_id=row.music_track_id,
+                item_uid=row.item_uid,
+            ),
+            title=title,
+            artist=artist,
+            album=album,
+            music_album_id=album_id_for_item(
+                item,
+                existing_id=row.music_album_id,
+            ),
+            music_artist_id=artist_id_for_item(
+                item,
+                existing_id=row.music_artist_id,
+            ),
+            music_album_artist_id=album_artist_id_for_item(
+                item,
+                existing_id=row.music_album_artist_id,
+            ),
+            album_artist=album_artist,
+            music_title_variants=json.dumps(title_variants, ensure_ascii=False),
+            music_artist_variants=json.dumps(artist_variants, ensure_ascii=False),
+            music_album_artist_variants=json.dumps(
+                album_artist_variants,
+                ensure_ascii=False,
+            ),
+            music_album_variants=json.dumps(album_variants, ensure_ascii=False),
+        ).where(OrganizerMediaModel.id == row.id).execute()
+
+
 _MIGRATIONS: tuple[tuple[str, Migration], ...] = (
     ("0001_add_media_deleted_at", _add_media_deleted_at),
     ("0002_normalize_smart_album_schema", _normalize_smart_album_schema),
@@ -227,4 +518,15 @@ _MIGRATIONS: tuple[tuple[str, Migration], ...] = (
     ("0008_create_job_events", _create_job_events),
     ("0009_add_organizer_media_light_columns", _add_organizer_media_light_columns),
     ("0010_create_video_state", _create_video_state),
+    ("0011_create_video_probe_cache", _create_video_probe_cache),
+    ("0012_create_scrape_cache", _create_scrape_cache),
+    ("0013_add_organizer_audio_columns", _add_organizer_audio_columns),
+    ("0014_add_organizer_music_ids", _add_organizer_music_ids),
+    ("0015_add_organizer_identity_and_scope", _add_organizer_identity_and_scope),
+    ("0016_add_job_idempotency", _add_job_idempotency),
+    ("0017_add_job_active_claim", _add_job_active_claim),
+    ("0018_backfill_organizer_source_roots", _backfill_organizer_source_roots),
+    ("0019_add_organizer_sync_fingerprints", _add_organizer_sync_fingerprints),
+    ("0020_add_localized_music_identity", _add_localized_music_identity),
+    ("0021_complete_album_artist_identity", _add_localized_music_identity),
 )

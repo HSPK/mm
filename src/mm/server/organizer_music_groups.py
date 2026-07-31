@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
+from mm.music.grouping import music_album_directory, music_album_key_from_path
 from mm.organizer.filename import ParsedMediaFile
 from mm.organizer.scrapers import ScrapeCandidate
 from mm.server.organizer_metadata import _read_metadata_file
@@ -17,29 +17,19 @@ def music_album_groups(items: list[OrganizerItem]) -> dict[str, list[OrganizerIt
     return groups
 
 
-def music_album_key_from_path(path: Path) -> str:
-    directory = path.parent
-    if disc_from_path_directory(directory.name) is not None:
-        directory = directory.parent
-    return f"music:{directory.expanduser().resolve()}"
-
-
-def disc_from_path_directory(name: str) -> int | None:
-    match = re.search(r"\bcd\s*(\d{1,3})\b", name, re.IGNORECASE)
-    return int(match.group(1)) if match else None
-
-
 def album_item_from_tracks(tracks: list[ParsedMediaFile]) -> ParsedMediaFile:
     first = tracks[0]
+    album_directory = music_album_directory(first.path)
     return ParsedMediaFile(
-        path=first.path,
+        path=album_directory / first.path.name,
         media_type="album",
         title=first.album or first.title,
         artist=first.artist,
+        album_artist=first.album_artist or first.artist,
         album=first.album,
         year=first.year,
         parse_template=first.parse_template,
-        parse_relative_path=str(first.path.parent),
+        parse_relative_path=str(album_directory),
         confidence=first.confidence,
     )
 
@@ -58,6 +48,7 @@ def candidate_from_album_nfo(item: ParsedMediaFile) -> ScrapeCandidate | None:
         media_type="album",
         title=metadata.title or item.album or item.title,
         artist=metadata.artist or item.artist or "",
+        album_artist=metadata.album_artist or metadata.artist or item.artist or "",
         album=metadata.title or metadata.album or item.album or "",
         year=metadata.year or item.year,
         overview=metadata.plot or "",
@@ -66,5 +57,9 @@ def candidate_from_album_nfo(item: ParsedMediaFile) -> ScrapeCandidate | None:
         tags=metadata.tags or [],
         composers=metadata.composers or [],
         external_ids=metadata.ids or {},
+        title_variants=metadata.title_variants or {},
+        artist_variants=metadata.artist_variants or {},
+        album_artist_variants=metadata.album_artist_variants or metadata.artist_variants or {},
+        album_variants=metadata.album_variants or metadata.title_variants or {},
         confidence=1,
     )

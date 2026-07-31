@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import { ArrowLeft, Disc3, Play, Plus, Shuffle, UserRound } from "lucide-react"
 import { type PlayerTrack } from "@/stores/player"
+import { AuthImage } from "@/components/auth-image"
 import { cn } from "@/lib/utils"
 import { InfiniteScrollSentinel } from "./music-infinite-scroll"
 import { type AlbumGroup, type ArtistGroup } from "./music-library-model"
@@ -30,7 +31,7 @@ export function ArtistGrid({
                     </button>
                     <button type="button" onClick={() => onOpenArtist(artist)} className="min-w-0 flex-1 text-left">
                         <div className="truncate font-bold">{artist.name}</div>
-                        <div className="text-sm text-muted-foreground">{artist.albums} album(s) · {artist.tracks.length} song(s)</div>
+                        <div className="text-sm text-muted-foreground">{artist.albums} album(s) · {artist.trackCount} song(s)</div>
                     </button>
                     <div className="flex shrink-0 gap-1">
                         <IconButton onClick={() => onPlay(artist)} label="Play artist" icon={Play} />
@@ -100,8 +101,8 @@ export function ArtistDetail({
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Artist</p>
                         <h2 className="mt-2 truncate text-3xl font-black tracking-tight md:text-5xl">{artist.name}</h2>
                         <p className="mt-2 text-sm text-muted-foreground">
-                            {artist.albums.toLocaleString()} album(s) · {artist.tracks.length.toLocaleString()} song(s)
-                            {query && matchedTrackCount !== artist.tracks.length ? ` · ${matchedTrackCount.toLocaleString()} matched` : ""}
+                            {artist.albums.toLocaleString()} album(s) · {artist.trackCount.toLocaleString()} song(s)
+                            {query && matchedTrackCount !== artist.trackCount ? ` · ${matchedTrackCount.toLocaleString()} matched` : ""}
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -187,8 +188,19 @@ function ArtistAlbumGrid({
 
 function ArtistCover({ artist, large }: { artist: ArtistGroup, large?: boolean }) {
     if (artist.artworkUrl) {
-        return <img src={artist.artworkUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+        return (
+            <AuthImage
+                apiSrc={artist.artworkUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                fallback={<ArtistFallback large={large} />}
+            />
+        )
     }
+    return <ArtistFallback large={large} />
+}
+
+function ArtistFallback({ large }: { large?: boolean }) {
     return (
         <div className="flex h-full w-full items-center justify-center bg-primary/10 text-primary">
             <UserRound className={large ? "h-16 w-16" : "h-7 w-7"} />
@@ -198,8 +210,19 @@ function ArtistCover({ artist, large }: { artist: ArtistGroup, large?: boolean }
 
 function AlbumCover({ album }: { album: AlbumGroup }) {
     if (album.artworkUrl) {
-        return <img src={album.artworkUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+        return (
+            <AuthImage
+                apiSrc={album.artworkUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                fallback={<AlbumFallback />}
+            />
+        )
     }
+    return <AlbumFallback />
+}
+
+function AlbumFallback() {
     return (
         <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-secondary to-muted">
             <Disc3 className="h-10 w-10 text-muted-foreground/35" />

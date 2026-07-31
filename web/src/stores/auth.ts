@@ -31,10 +31,11 @@ export function createAuthStore(deps: AuthStoreDeps = {}) {
     const repo = deps.repo ?? authRepo
     const storage = deps.tokenStorage ?? browserTokenStorage
 
+    const initialToken = storage.get()
     return create<AuthState>((set, get) => ({
-        token: storage.get(),
+        token: initialToken,
         user: null,
-        loading: false,
+        loading: Boolean(initialToken),
         error: null,
         get isAuthenticated() {
             return !!get().token
@@ -55,17 +56,19 @@ export function createAuthStore(deps: AuthStoreDeps = {}) {
         },
 
         fetchUser: async () => {
+            set({ loading: true })
             try {
                 const user = await repo.me()
-                set({ user })
+                set({ user, loading: false })
             } catch {
                 get().logout()
             }
         },
 
         logout: () => {
+            void repo.logout().catch(() => undefined)
             storage.clear()
-            set({ token: null, user: null })
+            set({ token: null, user: null, loading: false })
         },
     }))
 }

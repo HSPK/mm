@@ -1,97 +1,38 @@
 import type { AxiosInstance } from "axios"
 import { api as defaultApi } from "@/api/client"
+import type { components } from "@/api/schema"
 
-export interface OrganizerItem {
-    path: string
-    playback_id?: string | null
-    media_type: "movie" | "tv" | "album" | "track" | string
-    title: string
-    artist?: string | null
-    album?: string | null
-    year?: number | null
-    season?: number | null
-    episode?: number | null
-    episode_end?: number | null
-    disc?: number | null
-    track?: number | null
-    parse_template?: string | null
-    parse_relative_path?: string | null
-    confidence: number
-    is_new: boolean
-    metadata: boolean
-    metadata_title?: string | null
-    metadata_original_title?: string | null
-    metadata_show_title?: string | null
-    metadata_year?: number | null
-    metadata_premiered?: string | null
-    metadata_certification?: string | null
-    metadata_runtime?: number | null
-    metadata_genres?: string[]
-    metadata_styles?: string[]
-    metadata_composers?: string[]
-    metadata_status?: string | null
-    metadata_countries?: string[]
-    metadata_tagline?: string | null
-    metadata_plot?: string | null
-    metadata_lyrics?: string | null
-    metadata_synced_lyrics?: string | null
-    metadata_tags?: string[]
-    metadata_ids?: Record<string, string>
-    metadata_rating?: number | null
-    metadata_rating_source?: string | null
-    metadata_studios?: string[]
-    metadata_cast?: string[]
-    images: boolean
-    cover_path?: string | null
-    artwork?: OrganizerArtworkAsset[]
-    subtitles: boolean
+export type OrganizerItem = components["schemas"]["OrganizerItem-Output"]
+export type OrganizerItemPatch = components["schemas"]["OrganizerItemPatch"]
+export type OrganizerItemsResponse = components["schemas"]["OrganizerItemsResponse"]
+export type OrganizerFileAsset = components["schemas"]["OrganizerFileAsset"]
+export type OrganizerArtworkAsset = components["schemas"]["OrganizerArtworkAsset"]
+export type OrganizerStreamInfo = components["schemas"]["OrganizerStreamInfo"]
+export type OrganizerMediaInfo = components["schemas"]["OrganizerMediaInfo"]
+
+export interface OrganizerItemsQuery {
+    kind?: string
+}
+
+export interface OrganizerItemPatchRequest extends OrganizerItemPatch {
+    item_uid: string
+}
+
+export interface OrganizerCapability {
+    media_type: string
+    scrapers: string[]
+    outputs: string[]
+    rename: boolean
     lyrics: boolean
-    related_files?: OrganizerFileAsset[]
-    media_info?: OrganizerMediaInfo | null
 }
 
-export interface OrganizerFileAsset {
-    kind: string
-    path: string
-    name: string
-    extension: string
-    size?: number | null
+export interface OrganizerCapabilities {
+    media_types: OrganizerCapability[]
+    scraper_adapters: Record<string, string>
 }
 
-export interface OrganizerArtworkAsset {
-    kind: string
-    path: string
-    playback_id?: string | null
-    label: string
-    width?: number | null
-    height?: number | null
-}
-
-export interface OrganizerStreamInfo {
-    source: string
-    codec: string
-    channels: string
-    bit_rate?: number | null
-    bit_depth?: number | null
-    language: string
-    default: boolean
-    forced: boolean
-    title: string
-    format: string
-}
-
-export interface OrganizerMediaInfo {
-    duration?: number | null
-    width?: number | null
-    height?: number | null
-    aspect_ratio: string
-    video_codec: string
-    frame_rate?: number | null
-    video_bit_rate?: number | null
-    video_bit_depth?: number | null
-    hdr_format: string
-    audio_streams: OrganizerStreamInfo[]
-    subtitle_streams: OrganizerStreamInfo[]
+export interface RequestOptions {
+    signal?: AbortSignal
 }
 
 export interface OrganizerCandidate {
@@ -146,49 +87,6 @@ export interface OrganizerLyricsCandidate {
     lyrics: string
     synced_lyrics: string
     confidence: number
-}
-
-export interface OrganizerLibraryEntry {
-    key: string
-    media_type: string
-    title: string
-    subtitle: string
-    count: number
-    cover_id?: number | null
-    year?: number | null
-    artist?: string | null
-    album?: string | null
-}
-
-export interface OrganizerLibrary {
-    movies: OrganizerLibraryEntry[]
-    tv: OrganizerLibraryEntry[]
-    music: OrganizerLibraryEntry[]
-}
-
-export interface OrganizerMusicTrack {
-    playback_id?: string | null
-    path: string
-    title: string
-    artist?: string | null
-    album?: string | null
-    year?: number | null
-    disc?: number | null
-    track?: number | null
-    metadata: boolean
-    images: boolean
-    lyrics: boolean
-}
-
-export interface OrganizerMusicAlbum {
-    key: string
-    title: string
-    artist: string
-    year?: number | null
-    count: number
-    cover_path?: string | null
-    cover_playback_id?: string | null
-    tracks: OrganizerMusicTrack[]
 }
 
 export interface OrganizerRenameOperation {
@@ -260,12 +158,14 @@ export interface OrganizerArtworkBatchItem {
 export interface OrganizerRepository {
     getConfig(): Promise<OrganizerConfig>
     updateConfig(patch: Record<string, unknown>): Promise<OrganizerConfig>
-    library(): Promise<OrganizerLibrary>
-    musicAlbums(): Promise<OrganizerMusicAlbum[]>
-    items(kind?: string): Promise<OrganizerItem[]>
+    items(query?: OrganizerItemsQuery, options?: RequestOptions): Promise<OrganizerItemsResponse>
+    revealDirectory(itemUids: string[]): Promise<{ revealed: boolean }>
+    patchItem(itemUid: string, patch: OrganizerItemPatch): Promise<OrganizerItem>
+    patchItems(items: OrganizerItemPatchRequest[]): Promise<OrganizerItem[]>
+    capabilities(options?: RequestOptions): Promise<OrganizerCapabilities>
     details(items: OrganizerItem[]): Promise<OrganizerItem[]>
     mediaInfo(playbackId: string): Promise<OrganizerMediaInfo | null>
-    lyricsSearch(input: { path: string, title: string, artist?: string | null, album?: string | null, source?: string, limit?: number }): Promise<OrganizerLyricsCandidate[]>
+    lyricsSearch(input: { path: string, title: string, artist?: string | null, album?: string | null, source?: string, limit?: number }, options?: RequestOptions): Promise<OrganizerLyricsCandidate[]>
     lyricsApply(input: { path: string, lyrics?: string, synced_lyrics?: string, overwrite?: boolean }): Promise<OrganizerApplyResponse>
     scan(paths: string[], recursive: boolean): Promise<OrganizerItem[]>
     match(items: OrganizerItem[], source?: string, limit?: number, language?: string): Promise<OrganizerMatchResult[]>
@@ -282,6 +182,7 @@ export interface OrganizerRepository {
 
 export interface OrganizerPlanOptions {
     source?: string
+    language?: string
     overwrite?: boolean
     selectedCandidates?: Record<string, OrganizerCandidate>
 }
@@ -290,17 +191,38 @@ export function createOrganizerRepository(api: AxiosInstance = defaultApi): Orga
     return {
         getConfig: async () => (await api.get<OrganizerConfig>("/organizer/config")).data,
         updateConfig: async (patch) => (await api.put<OrganizerConfig>("/organizer/config", patch)).data,
-        library: async () => (await api.get<OrganizerLibrary>("/organizer/library")).data,
-        musicAlbums: async () =>
-            (await api.get<{ albums: OrganizerMusicAlbum[] }>("/organizer/music/albums")).data.albums,
-        items: async (kind) =>
-            (await api.get<{ items: OrganizerItem[] }>("/organizer/items", { params: { kind } })).data.items,
+        items: async (query = {}, options = {}) =>
+            (await api.get<OrganizerItemsResponse>("/organizer/items", {
+                params: query,
+                signal: options.signal,
+            })).data,
+        revealDirectory: async (itemUids) =>
+            (await api.post<{ revealed: boolean }>("/organizer/reveal-directory", {
+                item_uids: itemUids,
+            })).data,
+        patchItem: async (itemUid, patch) =>
+            (await api.patch<OrganizerItem>(`/organizer/items/${encodeURIComponent(itemUid)}`, patch)).data,
+        patchItems: async (items) =>
+            (await api.patch<{ items: OrganizerItem[] }>("/organizer/items", { items })).data.items,
+        capabilities: async (options = {}) => {
+            const data = (await api.get<Record<string, unknown>>("/organizer/capabilities", {
+                signal: options.signal,
+            })).data
+            return {
+                media_types: Array.isArray(data.media_types) ? data.media_types as OrganizerCapability[] : [],
+                scraper_adapters: typeof data.scraper_adapters === "object" && data.scraper_adapters
+                    ? data.scraper_adapters as Record<string, string>
+                    : {},
+            }
+        },
         details: async (items) =>
             (await api.post<{ items: OrganizerItem[] }>("/organizer/details", { items })).data.items,
         mediaInfo: async (playbackId) =>
             (await api.get<OrganizerMediaInfo | null>("/organizer/media-info", { params: { playback_id: playbackId } })).data,
-        lyricsSearch: async (input) =>
-            (await api.post<{ candidates: OrganizerLyricsCandidate[] }>("/organizer/lyrics/search", input)).data.candidates,
+        lyricsSearch: async (input, options = {}) =>
+            (await api.post<{ candidates: OrganizerLyricsCandidate[] }>("/organizer/lyrics/search", input, {
+                signal: options.signal,
+            })).data.candidates,
         lyricsApply: async (input) =>
             (await api.post<OrganizerApplyResponse>("/organizer/lyrics/apply", input)).data,
         scan: async (paths, recursive) =>

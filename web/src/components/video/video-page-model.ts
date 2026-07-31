@@ -5,6 +5,7 @@ export type VideoPageKind = "movies" | "tv"
 
 export interface ShowGroup {
     key: string
+    id: string
     title: string
     year?: number | null
     episodes: VideoLibraryItem[]
@@ -64,17 +65,21 @@ export function runtimeText(item: VideoLibraryItem) {
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
 }
 
-export function artworkUrlFromItem(item?: VideoLibraryItem, size = 420) {
+export function artworkUrlFromItem(item?: VideoLibraryItem, size = 420, kind?: string) {
     if (!item?.playback_id) return undefined
     const params = new URLSearchParams({ size: String(size) })
+    if (kind) params.set("kind", kind)
     return `${config.apiBaseUrl}/videos/artwork/thumb/item/${encodeURIComponent(item.playback_id)}?${params.toString()}`
 }
 
-export function episodeLabel(item: VideoLibraryItem) {
-    const season = item.season != null ? `S${String(item.season).padStart(2, "0")}` : ""
-    const episode = item.episode != null ? `E${String(item.episode).padStart(2, "0")}` : ""
-    const prefix = `${season}${episode}`
-    return prefix ? `${prefix} · ${videoTitle(item)}` : videoTitle(item)
+export function backdropUrlFromItem(item?: VideoLibraryItem) {
+    if (!item?.playback_id) return undefined
+    return `${config.apiBaseUrl}/videos/artwork/image/item/${encodeURIComponent(item.playback_id)}?kind=fanart`
+}
+
+export function logoUrlFromItem(item?: VideoLibraryItem) {
+    if (!item?.playback_id) return undefined
+    return `${config.apiBaseUrl}/videos/artwork/image/item/${encodeURIComponent(item.playback_id)}?kind=clearlogo`
 }
 
 export function itemSubtitle(item: VideoLibraryItem) {
@@ -95,6 +100,7 @@ function showGroup(title: string, episodes: VideoLibraryItem[]): ShowGroup {
     }
     return {
         key: title.toLowerCase(),
+        id: representative.playback_id || title.toLowerCase(),
         title,
         year: episodes.find((item) => videoYear(item)) ? videoYear(episodes.find((item) => videoYear(item))!) : null,
         episodes,

@@ -14,6 +14,7 @@ import {
     X,
 } from "lucide-react"
 import { type PlayerTrack } from "@/stores/player"
+import { AuthImage } from "@/components/auth-image"
 import { cn } from "@/lib/utils"
 import { InfiniteScrollSentinel } from "./music-infinite-scroll"
 import { type AlbumGroup } from "./music-library-model"
@@ -107,46 +108,52 @@ export function MusicToolbar({
 export function HomeView({
     albums,
     tracks,
+    albumTotal,
+    trackTotal,
     onViewAlbums,
     onViewSongs,
     onOpenAlbum,
     onPlayAlbum,
     onPlayTrack,
-    onPlayNext,
+    onPlayNextAlbum,
+    onPlayNextTrack,
 }: {
     albums: AlbumGroup[]
     tracks: PlayerTrack[]
+    albumTotal: number
+    trackTotal: number
     onViewAlbums: () => void
     onViewSongs: () => void
     onOpenAlbum: (album: AlbumGroup) => void
     onPlayAlbum: (album: AlbumGroup) => void
     onPlayTrack: (track: PlayerTrack) => void
-    onPlayNext: (tracks: PlayerTrack[] | PlayerTrack) => void
+    onPlayNextAlbum: (album: AlbumGroup) => void
+    onPlayNextTrack: (track: PlayerTrack) => void
 }) {
     return (
         <div className="space-y-7">
             <MusicSectionHeader
                 title="Albums"
-                count={albums.length}
-                actionLabel={albums.length > 12 ? "View all" : undefined}
+                count={albumTotal}
+                actionLabel={albumTotal > 12 ? "View all" : undefined}
                 onAction={onViewAlbums}
             />
             <AlbumGrid
                 albums={albums.slice(0, 12)}
                 onOpenAlbum={onOpenAlbum}
                 onPlayAlbum={onPlayAlbum}
-                onPlayNext={onPlayNext}
+                onPlayNextAlbum={onPlayNextAlbum}
             />
             <MusicSectionHeader
                 title="Songs"
-                count={tracks.length}
-                actionLabel={tracks.length > 12 ? "View all" : undefined}
+                count={trackTotal}
+                actionLabel={trackTotal > 12 ? "View all" : undefined}
                 onAction={onViewSongs}
             />
             <TrackTable
                 tracks={tracks.slice(0, 12)}
                 onPlay={onPlayTrack}
-                onPlayNext={(track) => onPlayNext(track)}
+                onPlayNext={onPlayNextTrack}
             />
         </div>
     )
@@ -159,7 +166,7 @@ export function AlbumsView({
     onDisplayChange,
     onOpenAlbum,
     onPlayAlbum,
-    onPlayNext,
+    onPlayNextAlbum,
     hasMore,
     onLoadMore,
 }: {
@@ -169,7 +176,7 @@ export function AlbumsView({
     onDisplayChange: (display: AlbumDisplay) => void
     onOpenAlbum: (album: AlbumGroup) => void
     onPlayAlbum: (album: AlbumGroup) => void
-    onPlayNext: (tracks: PlayerTrack[]) => void
+    onPlayNextAlbum: (album: AlbumGroup) => void
     hasMore: boolean
     onLoadMore: () => void
 }) {
@@ -187,9 +194,9 @@ export function AlbumsView({
                 />
             </div>
             {display === "grid" ? (
-                <AlbumGrid albums={albums} onOpenAlbum={onOpenAlbum} onPlayAlbum={onPlayAlbum} onPlayNext={onPlayNext} />
+                <AlbumGrid albums={albums} onOpenAlbum={onOpenAlbum} onPlayAlbum={onPlayAlbum} onPlayNextAlbum={onPlayNextAlbum} />
             ) : (
-                <AlbumList albums={albums} onOpenAlbum={onOpenAlbum} onPlayAlbum={onPlayAlbum} onPlayNext={onPlayNext} />
+                <AlbumList albums={albums} onOpenAlbum={onOpenAlbum} onPlayAlbum={onPlayAlbum} onPlayNextAlbum={onPlayNextAlbum} />
             )}
             <InfiniteScrollSentinel key={albums.length} hasMore={hasMore} onLoadMore={onLoadMore} />
         </div>
@@ -240,7 +247,7 @@ export function AlbumDetail({
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Album</p>
                         <h2 className="mt-2 truncate text-3xl font-black tracking-tight md:text-5xl">{album.title}</h2>
                         <p className="mt-2 truncate text-lg text-muted-foreground">{album.artist}</p>
-                        <AlbumMeta year={album.year} matched={query && matchedCount !== album.tracks.length ? matchedCount : null} />
+                        <AlbumMeta year={album.year} matched={query && matchedCount !== album.count ? matchedCount : null} />
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <PillButton onClick={onPlay} primary icon={Play}>Play</PillButton>
@@ -290,12 +297,12 @@ function AlbumGrid({
     albums,
     onOpenAlbum,
     onPlayAlbum,
-    onPlayNext,
+    onPlayNextAlbum,
 }: {
     albums: AlbumGroup[]
     onOpenAlbum: (album: AlbumGroup) => void
     onPlayAlbum: (album: AlbumGroup) => void
-    onPlayNext: (tracks: PlayerTrack[]) => void
+    onPlayNextAlbum: (album: AlbumGroup) => void
 }) {
     return (
         <section className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -324,7 +331,7 @@ function AlbumGrid({
                     </div>
                     <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_2rem] items-start gap-2 px-1.5">
                         <AlbumCaption album={album} onOpenAlbum={onOpenAlbum} />
-                        <IconButton onClick={() => onPlayNext(album.tracks)} label="Play next" icon={Plus} />
+                        <IconButton onClick={() => onPlayNextAlbum(album)} label="Play next" icon={Plus} />
                     </div>
                 </article>
             ))}
@@ -336,12 +343,12 @@ function AlbumList({
     albums,
     onOpenAlbum,
     onPlayAlbum,
-    onPlayNext,
+    onPlayNextAlbum,
 }: {
     albums: AlbumGroup[]
     onOpenAlbum: (album: AlbumGroup) => void
     onPlayAlbum: (album: AlbumGroup) => void
-    onPlayNext: (tracks: PlayerTrack[]) => void
+    onPlayNextAlbum: (album: AlbumGroup) => void
 }) {
     return (
         <div className="overflow-hidden rounded-3xl border border-border/45 bg-card">
@@ -357,7 +364,7 @@ function AlbumList({
                     <span className="hidden md:block">{album.year ? <YearBadge year={album.year} /> : null}</span>
                     <div className="flex items-center gap-1">
                         <IconButton onClick={() => onPlayAlbum(album)} label="Play album" icon={Play} />
-                        <IconButton onClick={() => onPlayNext(album.tracks)} label="Play next" icon={Plus} />
+                        <IconButton onClick={() => onPlayNextAlbum(album)} label="Play next" icon={Plus} />
                     </div>
                 </div>
             ))}
@@ -367,8 +374,19 @@ function AlbumList({
 
 function AlbumCover({ album, className }: { album: AlbumGroup, className?: string }) {
     if (album.artworkUrl) {
-        return <img src={album.artworkUrl} alt="" loading="lazy" decoding="async" className={cn("object-cover", className)} />
+        return (
+            <AuthImage
+                apiSrc={album.artworkUrl}
+                alt=""
+                className={cn("object-cover", className)}
+                fallback={<AlbumFallback className={className} />}
+            />
+        )
     }
+    return <AlbumFallback className={className} />
+}
+
+function AlbumFallback({ className }: { className?: string }) {
     return (
         <div className={cn("flex items-center justify-center bg-gradient-to-br from-secondary to-muted", className)}>
             <Disc3 className="h-12 w-12 text-muted-foreground/35" />

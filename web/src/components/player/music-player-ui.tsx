@@ -1,9 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type MutableRefObject } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MutableRefObject } from "react"
 import { ListMusic, Maximize2, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, X } from "lucide-react"
-import type { PlayerTrack, RepeatMode } from "@/stores/player"
+import type { PlayerQueueItem, PlayerTrack, RepeatMode } from "@/stores/player"
+import { AuthImage } from "@/components/auth-image"
+import type { TrackResourceStatus } from "./use-enriched-player-track"
 import { cn } from "@/lib/utils"
 import { PlayerButton } from "./music-player-button"
 import { formatTime, parseLyrics, repeatLabel } from "./music-player-utils"
+
+const QUEUE_ROW_HEIGHT = 60
+const QUEUE_OVERSCAN = 6
 
 export function FullscreenPlayer({
     track,
@@ -15,6 +20,8 @@ export function FullscreenPlayer({
     shuffle,
     repeatMode,
     lyrics,
+    lyricsStatus,
+    onRetryLyrics,
     activeLyricIndex,
     showQueue,
     onShowQueueChange,
@@ -28,7 +35,7 @@ export function FullscreenPlayer({
     onRepeat,
 }: {
     track: PlayerTrack
-    queue: PlayerTrack[]
+    queue: PlayerQueueItem[]
     index: number
     currentTime: number
     duration: number
@@ -36,6 +43,8 @@ export function FullscreenPlayer({
     shuffle: boolean
     repeatMode: RepeatMode
     lyrics: ReturnType<typeof parseLyrics>
+    lyricsStatus: TrackResourceStatus
+    onRetryLyrics: () => void
     activeLyricIndex: number
     showQueue: boolean
     onShowQueueChange: (show: boolean) => void
@@ -113,7 +122,14 @@ export function FullscreenPlayer({
                     </section>
 
                     <section className="min-h-0 overflow-hidden">
-                        <LyricsPanel lyrics={lyrics} activeIndex={activeLyricIndex} onSeek={onSeek} />
+                        <LyricsPanel
+                            key={`${track.id}:${lyrics.synced.length}:${lyrics.plain.length}`}
+                            lyrics={lyrics}
+                            status={lyricsStatus}
+                            onRetry={onRetryLyrics}
+                            activeIndex={activeLyricIndex}
+                            onSeek={onSeek}
+                        />
                     </section>
 
                     {showQueue && (
@@ -122,25 +138,11 @@ export function FullscreenPlayer({
                                 <ListMusic className="h-5 w-5 text-primary" />
                                 <h3 className="text-xl font-bold">Up Next</h3>
                             </div>
-                            <div className="space-y-1.5 pr-2 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
-                                {queue.map((item, queueIndex) => (
-                                    <button
-                                        key={`${item.id}-${queueIndex}`}
-                                        type="button"
-                                        onClick={() => onPlayQueueItem(queueIndex)}
-                                        className={cn(
-                                            "flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors",
-                                            queueIndex === index ? "bg-primary/10 text-primary" : "hover:bg-secondary/45",
-                                        )}
-                                    >
-                                        <Cover track={item} className="h-12 w-12 rounded-xl" />
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-sm font-semibold">{item.title}</span>
-                                            <span className="block truncate text-xs text-muted-foreground">{item.artist}</span>
-                                        </span>
-                                    </button>
-                                ))}
-                            </div>
+                            <QueuePanel
+                                queue={queue}
+                                index={index}
+                                onPlayQueueItem={onPlayQueueItem}
+                            />
                         </section>
                     )}
                 </div>
@@ -149,12 +151,86 @@ export function FullscreenPlayer({
     )
 }
 
-export function LyricsPanel({
+const QueuePanel = memo(function QueuePanel({
+    queue,
+    index,
+    onPlayQueueItem,
+}: {
+    queue: PlayerQueueItem[]
+    index: number
+    onPlayQueueItem: (index: number) => void
+}) {
+    const containerRef = useRef<HTMLDivElement | null>(null)
+    const [viewport, setViewport] = useState({ start: 0, count: 20 })
+    const updateViewport = useCallback(() => {
+        const container = containerRef.current
+        if (!container) return
+        const visible = Math.ceil(container.clientHeight / QUEUE_ROW_HEIGHT)
+        const start = Math.max(
+            0,
+            Math.floor(container.scrollTop / QUEUE_ROW_HEIGHT) - QUEUE_OVERSCAN,
+        )
+        setViewport({ start, count: visible + QUEUE_OVERSCAN * 2 })
+    }, [])
+
+    useLayoutEffect(() => {
+        const container = containerRef.current
+        if (!container || index < 0) return
+        const top = index * QUEUE_ROW_HEIGHT
+        const bottom = top + QUEUE_ROW_HEIGHT
+        if (top < container.scrollTop || bottom > container.scrollTop + container.clientHeight) {
+            container.scrollTop = Math.max(
+                0,
+                top - container.clientHeight / 2 + QUEUE_ROW_HEIGHT / 2,
+            )
+        }
+        updateViewport()
+    }, [index, updateViewport])
+
+    const visibleItems = queue.slice(viewport.start, viewport.start + viewport.count)
+    return (
+        <div
+            ref={containerRef}
+            onScroll={updateViewport}
+            className="relative max-h-96 overflow-y-auto pr-2 lg:h-[calc(100vh-9rem)] lg:max-h-none"
+        >
+            <div className="relative" style={{ height: `${queue.length * QUEUE_ROW_HEIGHT}px` }}>
+                {visibleItems.map((item, visibleIndex) => {
+                    const queueIndex = viewport.start + visibleIndex
+                    return (
+                        <button
+                            key={item.queueEntryId}
+                            type="button"
+                            onClick={() => onPlayQueueItem(queueIndex)}
+                            className={cn(
+                                "absolute left-0 right-0 flex h-14 items-center gap-3 rounded-xl px-2 text-left transition-colors",
+                                queueIndex === index ? "bg-primary/10 text-primary" : "hover:bg-secondary/45",
+                            )}
+                            style={{ top: `${queueIndex * QUEUE_ROW_HEIGHT}px` }}
+                        >
+                            <Cover track={item} className="h-12 w-12 rounded-xl" />
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-semibold">{item.title}</span>
+                                <span className="block truncate text-xs text-muted-foreground">{item.artist}</span>
+                            </span>
+                        </button>
+                    )
+                })}
+            </div>
+        </div>
+    )
+})
+
+export const LyricsPanel = memo(function LyricsPanel({
     lyrics,
+    status,
+    onRetry,
     activeIndex,
     onSeek,
 }: {
     lyrics: ReturnType<typeof parseLyrics>
+    status: TrackResourceStatus
+    onRetry: () => void
     activeIndex: number
     onSeek: (time: number) => void
 }) {
@@ -166,24 +242,19 @@ export function LyricsPanel({
     const initialCenteredRef = useRef(false)
     const [tracking, setTracking] = useState(true)
 
-    const activeLineIsVisible = () => {
+    const activeLineIsVisible = useCallback(() => {
         const container = containerRef.current
         const line = lineRefs.current.get(activeIndex)
         if (!container || !line) return false
         const containerRect = container.getBoundingClientRect()
         const lineRect = line.getBoundingClientRect()
         return lineRect.top >= containerRect.top && lineRect.bottom <= containerRect.bottom
-    }
+    }, [activeIndex])
 
     useEffect(() => () => {
         if (scrollTimerRef.current != null) window.clearTimeout(scrollTimerRef.current)
         if (animationFrameRef.current != null) window.cancelAnimationFrame(animationFrameRef.current)
     }, [])
-
-    useLayoutEffect(() => {
-        initialCenteredRef.current = false
-        setTracking(true)
-    }, [lyrics.synced])
 
     useLayoutEffect(() => {
         if (!tracking || activeIndex < 0) return
@@ -205,7 +276,7 @@ export function LyricsPanel({
             if (activeLineIsVisible()) setTracking(true)
         }, 1500)
         return () => window.clearTimeout(id)
-    }, [activeIndex, tracking])
+    }, [activeIndex, activeLineIsVisible, tracking])
 
     const handleScroll = () => {
         if (autoScrollRef.current) return
@@ -271,18 +342,42 @@ export function LyricsPanel({
     }
     return (
         <div className="flex h-full min-h-72 flex-col items-center justify-center text-center">
-            <h4 className="text-lg font-bold">No lyrics yet</h4>
+            <h4 className="text-lg font-bold">
+                {status === "loading"
+                    ? "Loading lyrics…"
+                    : status === "error"
+                        ? "Lyrics unavailable"
+                        : "No lyrics yet"}
+            </h4>
+            {status === "error" && (
+                <button
+                    type="button"
+                    onClick={onRetry}
+                    className="mt-3 rounded-full bg-secondary px-4 py-2 text-sm font-semibold"
+                >
+                    Retry
+                </button>
+            )}
         </div>
     )
-}
+})
 
 export function Cover({ track, className }: { track: PlayerTrack, className?: string }) {
+    const fallback = (
+        <span className="text-2xl font-bold text-muted-foreground">{track.title.slice(0, 1)}</span>
+    )
     return (
-        <div className={cn("flex shrink-0 items-center justify-center overflow-hidden bg-secondary", className)}>
+        <div className={cn("relative flex shrink-0 items-center justify-center overflow-hidden bg-secondary", className)}>
             {track.artworkUrl ? (
-                <img src={track.artworkUrl} alt="" className="h-full w-full object-cover" />
+                <AuthImage
+                    apiSrc={track.artworkUrl}
+                    alt=""
+                    loading="eager"
+                    className="h-full w-full object-cover"
+                    fallback={fallback}
+                />
             ) : (
-                <span className="text-2xl font-bold text-muted-foreground">{track.title.slice(0, 1)}</span>
+                fallback
             )}
         </div>
     )
@@ -319,14 +414,13 @@ export function ProgressBar({
     const safeDuration = Number.isFinite(duration) ? duration : 0
     const value = Math.min(currentTime, safeDuration || currentTime)
     const seekable = safeDuration > 0
-    const percent = seekable ? Math.min(100, Math.max(0, value / safeDuration * 100)) : 0
     const remaining = seekable ? Math.max(0, safeDuration - value) : 0
     return (
         <div className={cn(
             "grid select-none grid-cols-[minmax(0,1fr)_3rem] items-center",
             compact ? "gap-2" : "gap-3",
         )}>
-            <SeekTrack percent={percent} value={value} max={seekable ? safeDuration : 1} disabled={!seekable} onSeek={onSeek} compact={compact} />
+            <SeekTrack value={value} max={seekable ? safeDuration : 1} disabled={!seekable} onSeek={onSeek} compact={compact} />
             <span className="text-right text-[11px] font-medium tabular-nums text-muted-foreground">
                 {seekable ? `-${formatTime(remaining)}` : "--:--"}
             </span>
@@ -391,22 +485,35 @@ export function VolumeControl({ volume, onChange }: { volume: number, onChange: 
 }
 
 function SeekTrack({
-    percent,
     value,
     max,
     disabled,
     onSeek,
     compact,
 }: {
-    percent: number
     value: number
     max: number
     disabled: boolean
     onSeek: (time: number) => void
     compact?: boolean
 }) {
-    const handleSeek = (event: ChangeEvent<HTMLInputElement> | FormEvent<HTMLInputElement>) => {
-        onSeek(Number(event.currentTarget.value))
+    const [dragging, setDragging] = useState(false)
+    const [draft, setDraft] = useState(value)
+    const draggingRef = useRef(false)
+    const displayedValue = dragging ? draft : value
+    const percent = disabled ? 0 : Math.min(100, Math.max(0, displayedValue / max * 100))
+
+    const handleInput = (event: FormEvent<HTMLInputElement>) => {
+        draggingRef.current = true
+        setDragging(true)
+        setDraft(Number(event.currentTarget.value))
+    }
+    const commit = (value: number) => {
+        if (!draggingRef.current) return
+        draggingRef.current = false
+        setDragging(false)
+        setDraft(value)
+        onSeek(value)
     }
     return (
         <div className={cn("group relative", compact ? "h-5" : "h-6")}>
@@ -433,10 +540,25 @@ function SeekTrack({
                 type="range"
                 min={0}
                 max={max}
-                value={disabled ? 0 : value}
+                step={0.1}
+                value={disabled ? 0 : displayedValue}
                 disabled={disabled}
-                onInput={handleSeek}
-                onChange={handleSeek}
+                onInput={handleInput}
+                onPointerDown={() => {
+                    draggingRef.current = true
+                    setDraft(value)
+                    setDragging(true)
+                }}
+                onPointerUp={(event) => commit(Number(event.currentTarget.value))}
+                onPointerCancel={(event) => commit(Number(event.currentTarget.value))}
+                onKeyUp={(event) => {
+                    if (["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+                        commit(Number(event.currentTarget.value))
+                    }
+                }}
+                onBlur={(event) => {
+                    if (draggingRef.current) commit(Number(event.currentTarget.value))
+                }}
                 className="absolute inset-x-0 top-1/2 h-8 -translate-y-1/2 cursor-pointer opacity-0 disabled:cursor-default"
                 aria-label="Seek"
             />

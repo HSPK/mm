@@ -8,13 +8,29 @@ from mm.db.models import JobEventModel, JobModel
 from mm.server.organizer_schemas import JobEventResponse, OrganizerJobResponse
 
 
-async def update_job(db: AsyncDBClient, job_id: str, **fields: object) -> None:
+async def update_job(
+    db: AsyncDBClient, job_id: str, *, event: bool = True, **fields: object
+) -> bool:
     fields = {**fields, "updated_at": dt.datetime.now()}
-    await db.objects.execute(JobModel.update(**fields).where(JobModel.id == job_id))
+    next_status = fields.get("status")
+    condition = JobModel.id == job_id
+    terminal = ("done", "error", "canceled", "completed_with_errors")
+    if next_status in terminal:
+        fields["active_claim"] = None
+    if next_status == "canceled":
+        condition &= JobModel.status.in_(("queued", "running", "canceling"))
+    elif next_status in terminal:
+        # A cancellation request wins over a late worker completion/failure.
+        condition &= JobModel.status.in_(("queued", "running"))
+    else:
+        condition &= JobModel.status.in_(("queued", "running", "canceling"))
+    affected = await db.objects.execute(JobModel.update(**fields).where(condition))
+    if not affected or not event:
+        return bool(affected)
     try:
         row = await db.objects.get(JobModel, id=job_id)
     except JobModel.DoesNotExist:
-        return
+        return False
     await db.objects.create(
         JobEventModel,
         job=row,
@@ -25,6 +41,7 @@ async def update_job(db: AsyncDBClient, job_id: str, **fields: object) -> None:
         error=row.error,
         created_at=dt.datetime.now(),
     )
+    return True
 
 
 async def is_cancel_requested(db: AsyncDBClient, job_id: str) -> bool:

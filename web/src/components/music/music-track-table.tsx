@@ -3,6 +3,7 @@ import { Music, Plus } from "lucide-react"
 import { formatTime } from "@/components/player/music-player-utils"
 import { type PlayerTrack, usePlayerStore } from "@/stores/player"
 import { cn } from "@/lib/utils"
+import { AuthImage } from "@/components/auth-image"
 
 export function TrackTable({
     tracks,
@@ -54,9 +55,14 @@ export function TrackTable({
 
 function TrackCover({ track }: { track: PlayerTrack }) {
     return (
-        <div className="h-11 w-11 overflow-hidden rounded-xl bg-secondary">
+        <div className="relative h-11 w-11 overflow-hidden rounded-xl bg-secondary">
             {track.artworkUrl ? (
-                <img src={track.artworkUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                <AuthImage
+                    apiSrc={track.artworkUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    fallback={<MusicFallback />}
+                />
             ) : (
                 <MusicFallback />
             )}

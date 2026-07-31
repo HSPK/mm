@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import secrets
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,6 +23,7 @@ from mm.server.routers import (
     jobs,
     library,
     media,
+    music,
     organizer,
     player,
     stats,
@@ -39,8 +42,17 @@ async def lifespan(app: FastAPI):
     await db.init_db()
     app.state.db = db
     app.state.config = await db.library_config.get()
+    app.state.library_generation = 0
+    app.state.library_event_subscribers = set()
+    app.state.media_ticket_secret = secrets.token_bytes(32)
     await resume_jobs(db)
-    yield
+    try:
+        yield
+    finally:
+        current_db: AsyncDBClient = getattr(app.state, "db", db)
+        await current_db.close()
+        if current_db is not db:
+            await db.close()
 
 
 def create_app(db_path: str | Path) -> FastAPI:
@@ -61,6 +73,7 @@ def create_app(db_path: str | Path) -> FastAPI:
         auth,
         users,
         media,
+        music,
         tags,
         stats,
         batch,
@@ -76,12 +89,9 @@ def create_app(db_path: str | Path) -> FastAPI:
     ):
         app.include_router(r.router)
 
-    # Serve frontend static files (bundled in package)
-    web_dist = Path(__file__).resolve().parent.parent / "_web_dist"
-    if not local_storage.is_dir(web_dist):
-        env_dist = os.environ.get("MM_WEB_DIST")
-        if env_dist:
-            web_dist = Path(env_dist)
+    # Prefer an explicitly configured or freshly built source checkout. Wheels
+    # fall back to the bundled dist copied in by the build backend.
+    web_dist = resolve_web_dist()
 
     if local_storage.is_dir(web_dist):
         assets_dir = web_dist / "assets"
@@ -107,12 +117,35 @@ def create_app(db_path: str | Path) -> FastAPI:
                 return HTMLResponse(status_code=404)
             index = web_dist / "index.html"
             return (
-                FileResponse(str(index), media_type="text/html")
+                FileResponse(
+                    str(index),
+                    media_type="text/html",
+                    headers={"Cache-Control": "no-cache"},
+                )
                 if local_storage.exists(index)
                 else HTMLResponse(status_code=404)
             )
 
     return app
+
+
+def resolve_web_dist(
+    *,
+    module_file: str | Path = __file__,
+    env: Mapping[str, str] = os.environ,
+) -> Path:
+    configured = env.get("MM_WEB_DIST")
+    module_path = Path(module_file).resolve()
+    embedded = module_path.parent.parent / "_web_dist"
+    candidates = [
+        Path(configured).expanduser() if configured else None,
+        module_path.parents[3] / "web" / "dist",
+        embedded,
+    ]
+    return next(
+        (candidate for candidate in candidates if candidate and local_storage.is_dir(candidate)),
+        embedded,
+    )
 
 
 # ASGI entry point

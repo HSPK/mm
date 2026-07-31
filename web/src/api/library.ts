@@ -4,6 +4,7 @@ import { api as defaultApi } from "@/api/client"
 export interface LibraryInfo {
     db_path: string
     name: string
+    library_id?: string | null
 }
 
 export interface ThumbnailStatus {

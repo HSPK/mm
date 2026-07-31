@@ -1,8 +1,6 @@
 import { memo, useState } from "react"
 import { cn } from "@/lib/utils"
-import { config } from "@/lib/config"
-
-const IS_CROSS_ORIGIN = config.apiBaseUrl.startsWith("http")
+import { resolveAuthImageSrc } from "@/lib/auth-image-url"
 
 interface AuthImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
     apiSrc: string | null
@@ -25,7 +23,10 @@ export const AuthImage = memo(function AuthImage({
     fallback,
     ...rest
 }: AuthImageProps) {
-    const src = apiSrc?.startsWith("/") ? `${config.apiBaseUrl}${apiSrc}` : apiSrc
+    const src = resolveAuthImageSrc(apiSrc)
+    const crossOrigin = src && typeof window !== "undefined"
+        ? new URL(src, window.location.href).origin !== window.location.origin
+        : false
     const [state, setState] = useState({ src: src ?? null, loaded: false, error: false })
     const loaded = state.src === src && state.loaded
     const error = state.src === src && state.error
@@ -56,7 +57,7 @@ export const AuthImage = memo(function AuthImage({
                 alt={alt ?? ""}
                 loading={loading}
                 decoding="async"
-                crossOrigin={IS_CROSS_ORIGIN ? "use-credentials" : undefined}
+                crossOrigin={crossOrigin ? "use-credentials" : undefined}
                 className={cn(className, !loaded && "opacity-0")}
                 onLoad={() => setState({ src: src ?? null, loaded: true, error: false })}
                 onError={() => setState({ src: src ?? null, loaded: false, error: true })}

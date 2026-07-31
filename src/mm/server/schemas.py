@@ -142,6 +142,7 @@ class MediaBrief(PydanticBase):
     model_config = ConfigDict(extra="ignore")
 
     id: int
+    path: str | None = None
     filename: str
     extension: str
     media_type: str
@@ -317,6 +318,7 @@ class LibraryInfo(PydanticBase):
 class SwitchLibraryResponse(PydanticBase):
     db_path: str
     name: str
+    library_id: str
     message: str
 
 
@@ -408,13 +410,12 @@ def serialize_media_brief(m: Any, md: Any = None) -> MediaBrief:
     deleted_at: str | None = None
     if m.deleted_at:
         deleted_at = (
-            m.deleted_at.isoformat()
-            if hasattr(m.deleted_at, "isoformat")
-            else str(m.deleted_at)
+            m.deleted_at.isoformat() if hasattr(m.deleted_at, "isoformat") else str(m.deleted_at)
         )
 
     payload: dict[str, Any] = {
         "id": m.id,
+        "path": str(m.path),
         "filename": m.filename,
         "extension": m.extension,
         "media_type": m.media_type.value,

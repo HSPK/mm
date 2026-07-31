@@ -24,6 +24,7 @@ from mm.server.job_utils import is_cancel_requested, update_job
 from mm.server.organizer_items import _light_item_from_parsed
 from mm.server.organizer_matching import parsed_from_item
 from mm.server.organizer_metadata import OrganizerScanContext
+from mm.server.organizer_paths import AuthorizedMediaPath
 from mm.server.organizer_persistence import persist_scan_items
 from mm.server.organizer_schemas import (
     OrganizerApplyResponse,
@@ -37,10 +38,16 @@ from mm.server.organizer_sources import configured_roots_for_items, source_kind_
 
 def rename_plan_for_items(items: list[ParsedMediaFile], root: str | None) -> RenamePlan:
     cfg = load_cli_config()
+    authorized_items = [
+        AuthorizedMediaPath.resolve(item.path, must_exist=True, file=True) for item in items
+    ]
     if root:
+        root_path = AuthorizedMediaPath.resolve(root, must_exist=True).path
+        if any(not item.path.is_relative_to(root_path) for item in authorized_items):
+            raise HTTPException(403, "Rename root does not contain every media item")
         return plan_renames(
             items,
-            root=Path(root),
+            root=root_path,
             templates=cfg.organizer.templates,
         )
     return plan_renames_with_source_roots(
@@ -79,6 +86,8 @@ async def apply_rename_body(
     batch_id = uuid.uuid4().hex
     applied: list[RenameOperation] = []
     for operation in plan.actionable:
+        owner = AuthorizedMediaPath.resolve(operation.source, must_exist=True, file=True)
+        owner.output(operation.target)
         operation.target.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(operation.source), str(operation.target))
         applied.append(operation)
@@ -105,8 +114,9 @@ async def rename_log_entries(
     limit: int = 10,
 ) -> list[OrganizerRenameLogEntry]:
     rows = await db.objects.fetchall(
-        OrganizerRenameLogModel.select()
-        .order_by(OrganizerRenameLogModel.created_at.desc(), OrganizerRenameLogModel.id.desc())
+        OrganizerRenameLogModel.select().order_by(
+            OrganizerRenameLogModel.created_at.desc(), OrganizerRenameLogModel.id.desc()
+        )
     )
     grouped: dict[str, list[OrganizerRenameLogModel]] = {}
     for row in rows:
@@ -166,6 +176,10 @@ async def undo_rename_batch(
 
 
 async def run_rename_job(db: AsyncDBClient, job_id: str) -> None:
+    parsed: list[ParsedMediaFile] = []
+    applied: list[RenameOperation] = []
+    current_operation: RenameOperation | None = None
+    batch_id = ""
     try:
         row = await db.objects.get(JobModel, id=job_id)
         body = OrganizerPlanBody.model_validate_json(row.payload)
@@ -183,11 +197,13 @@ async def run_rename_job(db: AsyncDBClient, job_id: str) -> None:
                 error="rename conflicts",
             )
             return
-        applied: list[RenameOperation] = []
         total = max(1, len(plan.actionable))
         batch_id = uuid.uuid4().hex
         for index, operation in enumerate(plan.actionable, start=1):
+            current_operation = operation
             if await is_cancel_requested(db, job_id):
+                remove_empty_source_dirs(applied)
+                await refresh_after_rename(db, parsed, applied)
                 await update_job(db, job_id, status="canceled", message="Canceled", progress=100)
                 return
             await update_job(
@@ -197,6 +213,8 @@ async def run_rename_job(db: AsyncDBClient, job_id: str) -> None:
                 detail=operation.source.name,
                 progress=10 + int(index / total * 80),
             )
+            owner = AuthorizedMediaPath.resolve(operation.source, must_exist=True, file=True)
+            owner.output(operation.target)
             operation.target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(operation.source), str(operation.target))
             applied.append(operation)
@@ -208,6 +226,7 @@ async def run_rename_job(db: AsyncDBClient, job_id: str) -> None:
                 media_type=operation.media_type,
                 status="applied",
             )
+            current_operation = None
         remove_empty_source_dirs(applied)
         await refresh_after_rename(db, parsed, applied)
         await update_job(
@@ -221,13 +240,37 @@ async def run_rename_job(db: AsyncDBClient, job_id: str) -> None:
             result=json.dumps({"affected": len(applied), "batch_id": batch_id}),
         )
     except Exception as exc:  # noqa: BLE001 - persist job-level failure
+        if applied:
+            remove_empty_source_dirs(applied)
+            await refresh_after_rename(db, parsed, applied)
+        if current_operation is not None and batch_id:
+            await db.objects.create(
+                OrganizerRenameLogModel,
+                batch_id=batch_id,
+                source=str(current_operation.source),
+                target=str(current_operation.target),
+                media_type=current_operation.media_type,
+                status="failed",
+            )
+        partial = bool(applied)
         await update_job(
             db,
             job_id,
-            status="error",
+            status="completed_with_errors" if partial else "error",
             progress=100,
-            title="Rename failed",
-            message=str(exc),
+            title="Rename partially completed" if partial else "Rename failed",
+            message=(
+                f"Renamed {len(applied)} file(s) before failure: {exc}" if partial else str(exc)
+            ),
+            result=json.dumps(
+                {
+                    "completed": len(applied),
+                    "skipped": 0,
+                    "conflicts": 0,
+                    "failed": 1,
+                    "batch_id": batch_id or None,
+                }
+            ),
             error=str(exc),
         )
 
@@ -298,8 +341,7 @@ async def delete_conflicting_target_row(db: AsyncDBClient, *, source: str, targe
         return
     await db.objects.execute(
         OrganizerMediaModel.delete().where(
-            (OrganizerMediaModel.path == target)
-            & (OrganizerMediaModel.path != source)
+            (OrganizerMediaModel.path == target) & (OrganizerMediaModel.path != source)
         )
     )
 

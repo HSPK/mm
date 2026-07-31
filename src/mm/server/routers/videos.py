@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -11,8 +11,9 @@ from mm.config import load_cli_config
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
 from mm.db.models import OrganizerMediaModel
-from mm.organizer.artwork_cache import first_artwork_path
+from mm.organizer.artwork_cache import artwork_path_by_kind, first_artwork_path
 from mm.server.dependencies import get_current_user, get_db
+from mm.server.file_manager import is_local_request, open_in_file_manager
 from mm.server.organizer_paths import allowed_media_source_path
 from mm.server.organizer_schemas import OrganizerItem
 from mm.server.video_library import list_video_items
@@ -50,25 +51,47 @@ async def video_items(
     return VideoLibraryItemsResponse(items=await list_video_items(db, kind))
 
 
+@router.post("/reveal")
+async def reveal_video_in_file_manager(
+    request: Request,
+    playback_id: str = "",
+    _u: User | None = Depends(get_current_user),
+    db: AsyncDBClient = Depends(get_db),
+) -> dict[str, bool]:
+    if not is_local_request(request):
+        raise HTTPException(403, "Opening the file manager is only available on the local machine")
+    row = await _video_library_row(db, playback_id)
+    path = Path(row.path)
+    if not allowed_media_source_path(path):
+        raise HTTPException(403, "File is outside configured media sources")
+    if not path.exists():
+        raise HTTPException(404, "File not found")
+    if not await asyncio.to_thread(open_in_file_manager, path, select=True):
+        raise HTTPException(422, "Could not open the system file manager")
+    return {"revealed": True}
+
+
 @router.get("/artwork/image/item/{playback_id}")
 async def video_artwork_image_for_item(
     playback_id: str,
+    kind: str = "",
     _u: User | None = Depends(get_current_user),
     db: AsyncDBClient = Depends(get_db),
 ) -> FileResponse:
-    return FileResponse(str(await _artwork_path_for_playback_id(db, playback_id)))
+    return FileResponse(str(await _artwork_path_for_playback_id(db, playback_id, kind)))
 
 
 @router.get("/artwork/thumb/item/{playback_id}")
 async def video_artwork_thumb_for_item(
     playback_id: str,
     size: int = 320,
+    kind: str = "",
     _u: User | None = Depends(get_current_user),
     db: AsyncDBClient = Depends(get_db),
 ) -> FileResponse:
     from mm.organizer.artwork_cache import artwork_thumbnail
 
-    image_path = await _artwork_path_for_playback_id(db, playback_id)
+    image_path = await _artwork_path_for_playback_id(db, playback_id, kind)
     thumb_path = await asyncio.to_thread(artwork_thumbnail, image_path, size)
     if thumb_path is None:
         raise HTTPException(422, "Artwork thumbnail could not be generated")
@@ -92,17 +115,26 @@ async def video_artwork_batch(
         except HTTPException:
             items.append(VideoArtworkBatchItem(playback_id=playback_id))
             continue
-        items.append(VideoArtworkBatchItem(
-            playback_id=playback_id,
-            thumb_url=f"/api/videos/artwork/thumb/item/{playback_id}?size={body.size}",
-            image_url=f"/api/videos/artwork/image/item/{playback_id}",
-        ))
+        items.append(
+            VideoArtworkBatchItem(
+                playback_id=playback_id,
+                thumb_url=f"/api/videos/artwork/thumb/item/{playback_id}?size={body.size}",
+                image_url=f"/api/videos/artwork/image/item/{playback_id}",
+            )
+        )
     return VideoArtworkBatchResponse(items=items)
 
 
-async def _artwork_path_for_playback_id(db: AsyncDBClient, playback_id: str) -> Path:
+async def _artwork_path_for_playback_id(
+    db: AsyncDBClient,
+    playback_id: str,
+    kind: str = "",
+) -> Path:
     row = await _video_library_row(db, playback_id)
-    artwork_path = first_artwork_path(Path(row.path), row.media_type)
+    if kind:
+        artwork_path = artwork_path_by_kind(Path(row.path), row.media_type, kind)
+    else:
+        artwork_path = first_artwork_path(Path(row.path), row.media_type)
     if artwork_path is None:
         raise HTTPException(404, "Artwork not found")
     if not allowed_media_source_path(artwork_path):

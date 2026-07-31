@@ -1,4 +1,4 @@
-import type { OrganizerItem } from "@/api/organizer"
+import type { OrganizerArtworkAsset, OrganizerItem } from "@/api/organizer"
 import { config } from "@/lib/config"
 import type { MediaRow } from "./organize-model"
 import { basename, commonFolder, uniqueText } from "./organize-model"
@@ -70,7 +70,7 @@ export function rowRelatedFiles(row: MediaRow) {
 
 export function rowArtworkAssets(row: MediaRow) {
     const seen = new Set<string>()
-    const assets: NonNullable<OrganizerItem["artwork"]> = []
+    const assets: Array<OrganizerArtworkAsset & { playback_id?: string | null }> = []
     for (const file of row.files) {
         for (const asset of file.artwork ?? []) {
             if (!artworkBelongsToRow(asset, row)) continue

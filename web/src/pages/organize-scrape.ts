@@ -1,30 +1,7 @@
 import axios from "axios"
-import type { OrganizerConfig } from "@/api/organizer"
-import { jobsRepo, type Job } from "@/api/jobs"
-import { notify } from "@/stores/notifications"
+import type { OrganizerCapabilities, OrganizerConfig } from "@/api/organizer"
+import type { Job } from "@/api/jobs"
 import type { OrganizerKind, ScrapeTarget } from "./organize-types"
-
-export async function pollOrganizerJob(jobId: string, notificationId: number) {
-    while (true) {
-        const job = await jobsRepo.job(jobId)
-        notify.update(notificationId, {
-            kind: job.status === "error" ? "error" : job.status === "done" ? "success" : "task",
-            status: job.status === "error" ? "error" : job.status === "done" ? "done" : "active",
-            jobId: job.id,
-            title: job.title,
-            message: job.message,
-            detail: userFacingJobDetail(job),
-            progress: job.progress,
-        })
-        if (["done", "error", "canceled"].includes(job.status)) return job
-        await new Promise((resolve) => window.setTimeout(resolve, 900))
-    }
-}
-
-function userFacingJobDetail(job: Job) {
-    if (job.kind === "rename" && job.status === "done") return ""
-    return job.detail
-}
 
 export function errorMessage(error: unknown) {
     if (axios.isAxiosError<{ detail?: string }>(error)) {
@@ -33,10 +10,17 @@ export function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : "Unknown error"
 }
 
-export function scraperOptionsForKind(config: OrganizerConfig | null, kind: OrganizerKind) {
-    const allowed = kind === "music"
-        ? new Set(["musicbrainz", "itunes", "netease", "qqmusic"])
-        : new Set(["tmdb", "omdb"])
+export function scraperOptionsForKind(
+    config: OrganizerConfig | null,
+    capabilities: OrganizerCapabilities | null,
+    kind: OrganizerKind,
+) {
+    const mediaTypes = kind === "movies" ? ["movie"] : kind === "tv" ? ["tv"] : ["track", "album"]
+    const allowed = new Set(
+        capabilities?.media_types
+            .filter((capability) => mediaTypes.includes(capability.media_type))
+            .flatMap((capability) => capability.scrapers) ?? [],
+    )
     return config?.sources
         .filter((source) => source.enabled && source.implemented && allowed.has(source.name))
         .map((source) => source.name) ?? []
@@ -97,7 +81,7 @@ export function scrapeEmptyMessage(target: ScrapeTarget, kind: OrganizerKind) {
     return "Select media or sync sources before scraping."
 }
 
-export function scrapeResultMessage(job: Awaited<ReturnType<typeof jobsRepo.job>>) {
+export function scrapeResultMessage(job: Job) {
     const metadata = numberResult(job.result.metadata)
     const artwork = numberResult(job.result.artwork)
     const failures = Array.isArray(job.result.failures) ? job.result.failures.length : 0

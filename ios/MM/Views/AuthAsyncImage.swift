@@ -58,6 +58,14 @@ final class ImageCache {
         }
         let task: Task<PlatformImage?, Error> = Task.detached(priority: .utility) { [weak self] in
             defer { Task { @MainActor in self?.inflight[url] = nil } }
+            if url.isFileURL {
+                let data = try Data(contentsOf: url)
+                guard let img = PlatformImage(data: data) else { return nil }
+                await MainActor.run {
+                    self?.cache.setObject(img, forKey: url as NSURL, cost: data.count)
+                }
+                return img
+            }
             var req = URLRequest(url: url)
             if let token = TokenStore.read() {
                 req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

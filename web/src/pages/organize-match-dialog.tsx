@@ -171,6 +171,7 @@ export function MatchDialog({
                 <MatchFooter
                     activeRow={activeRow}
                     rows={rows}
+                    language={selectedLanguage}
                     missingOnly={missingOnly}
                     applying={applying}
                     onMissingOnlyChange={setMissingOnly}
@@ -416,6 +417,7 @@ function CandidatePreview({ activeRow, candidate }: { activeRow: MediaRow | null
 function MatchFooter({
     activeRow,
     rows,
+    language,
     missingOnly,
     applying,
     onMissingOnlyChange,
@@ -424,6 +426,7 @@ function MatchFooter({
 }: {
     activeRow: MediaRow | null
     rows: MediaRow[]
+    language: string
     missingOnly: boolean
     applying: boolean
     onMissingOnlyChange: (missingOnly: boolean) => void
@@ -452,7 +455,13 @@ function MatchFooter({
                 </label>
                 <div className="flex justify-end gap-2">
                     <Button size="sm" variant="plain" onClick={onClose}>Cancel</Button>
-                    <Button size="sm" loading={applying} onClick={() => void onApply(rows, { missingOnly })}>OK</Button>
+                    <Button
+                        size="sm"
+                        loading={applying}
+                        onClick={() => void onApply(rows, { missingOnly, language })}
+                    >
+                        OK
+                    </Button>
                 </div>
             </div>
         </div>

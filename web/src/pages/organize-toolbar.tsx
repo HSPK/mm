@@ -1,18 +1,10 @@
-import { ChevronDown, ChevronRight, FileSearch, Film, Music, RefreshCw, Tv } from "lucide-react"
+import { ArrowDownUp, ChevronDown, ChevronRight, FileSearch, RefreshCw, Search } from "lucide-react"
 import type { OrganizerRenameLogEntry } from "@/api/organizer"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { OrganizerKind } from "./organize-model"
+import type { OrganizerKind, OrganizerSortMode } from "./organize-model"
+import { organizerKindOptions } from "./organize-options"
 
-const kindOptions: Array<{
-    kind: OrganizerKind
-    label: string
-    icon: typeof Film
-}> = [
-    { kind: "movies", label: "Movies", icon: Film },
-    { kind: "tv", label: "TV Series", icon: Tv },
-    { kind: "music", label: "Music", icon: Music },
-]
 
 export function OrganizerToolbar({
     activeKind,
@@ -20,9 +12,15 @@ export function OrganizerToolbar({
     loading,
     hasRows,
     hasSelected,
+    canScrape,
+    canRename,
     renameLogs,
     renameMenuOpen,
     onKindChange,
+    search,
+    onSearchChange,
+    sortMode,
+    onSortChange,
     onUpdateSources,
     onScrape,
     onRename,
@@ -35,9 +33,15 @@ export function OrganizerToolbar({
     loading: string | null
     hasRows: boolean
     hasSelected: boolean
+    canScrape: boolean
+    canRename: boolean
     renameLogs: OrganizerRenameLogEntry[]
     renameMenuOpen: boolean
     onKindChange: (kind: OrganizerKind) => void
+    search: string
+    onSearchChange: (value: string) => void
+    sortMode: OrganizerSortMode
+    onSortChange: (mode: OrganizerSortMode) => void
     onUpdateSources: () => void
     onScrape: () => void
     onRename: () => void
@@ -46,10 +50,10 @@ export function OrganizerToolbar({
     onSettings: () => void
 }) {
     return (
-        <div className="sticky top-0 z-20 border-b border-border/70 bg-background">
+        <div className="sticky top-0 z-20 shrink-0 border-b border-border/70 bg-background">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
                 <div className="flex rounded-2xl bg-secondary/55 p-1">
-                    {kindOptions.map(({ kind, label, icon: Icon }) => {
+                    {organizerKindOptions.map(({ kind, label, icon: Icon }) => {
                         const active = activeKind === kind
                         return (
                             <button
@@ -68,7 +72,32 @@ export function OrganizerToolbar({
                         )
                     })}
                 </div>
-                <div className="min-w-0 flex-1" />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <label className="relative min-w-0 max-w-md flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                            type="search"
+                            value={search}
+                            onChange={(event) => onSearchChange(event.target.value)}
+                            placeholder="Search title, artist, album"
+                            className="h-9 w-full rounded-full border border-border/70 bg-secondary/40 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-ring/45 focus:ring-2 focus:ring-ring/15"
+                        />
+                    </label>
+                    <div className="relative inline-flex items-center">
+                        <ArrowDownUp className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <select
+                            value={sortMode}
+                            onChange={(event) => onSortChange(event.target.value as OrganizerSortMode)}
+                            aria-label="Sort"
+                            className="h-9 appearance-none rounded-full border border-border/70 bg-secondary/40 pl-8 pr-7 text-sm font-medium outline-none focus:border-ring/45"
+                        >
+                            <option value="name">Name</option>
+                            <option value="year">Year</option>
+                            <option value="incomplete">Incomplete first</option>
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <Button
                         size="sm"
@@ -84,7 +113,7 @@ export function OrganizerToolbar({
                         size="sm"
                         variant="tinted"
                         onClick={onScrape}
-                        disabled={!hasRows || loading === "scrape"}
+                        disabled={!hasRows || !canScrape || loading === "scrape"}
                         aria-busy={loading === "scrape" || undefined}
                     >
                         <FileSearch className="h-4 w-4" />
@@ -92,6 +121,7 @@ export function OrganizerToolbar({
                     </Button>
                     <RenameActions
                         hasSelected={hasSelected}
+                        canRename={canRename}
                         loading={loading}
                         renameLogs={renameLogs}
                         renameMenuOpen={renameMenuOpen}
@@ -110,16 +140,9 @@ export function OrganizerToolbar({
     )
 }
 
-export function optionForKind(kind: OrganizerKind) {
-    return kindOptions.find((option) => option.kind === kind) ?? kindOptions[0]
-}
-
-export function FolderOpenIcon(kind: OrganizerKind) {
-    return optionForKind(kind).icon
-}
-
 function RenameActions({
     hasSelected,
+    canRename,
     loading,
     renameLogs,
     renameMenuOpen,
@@ -128,6 +151,7 @@ function RenameActions({
     onUndoRename,
 }: {
     hasSelected: boolean
+    canRename: boolean
     loading: string | null
     renameLogs: OrganizerRenameLogEntry[]
     renameMenuOpen: boolean
@@ -149,11 +173,11 @@ function RenameActions({
             <button
                 type="button"
                 onClick={onRename}
-                disabled={loading === "rename" || loading === "rename-apply"}
-                aria-disabled={!hasSelected}
+                disabled={!hasSelected || !canRename || loading === "rename" || loading === "rename-apply"}
+                aria-disabled={!hasSelected || !canRename}
                 className={cn(
                     "inline-flex h-8 items-center justify-center rounded-r-full border-l border-primary-foreground/20 bg-primary pl-3 pr-4 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-80",
-                    !hasSelected && "cursor-default hover:opacity-100",
+                    (!hasSelected || !canRename) && "cursor-default hover:opacity-100",
                 )}
             >
                 Rename

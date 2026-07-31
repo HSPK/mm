@@ -353,6 +353,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/music/albums": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Albums */
+        get: operations["music_albums_api_music_albums_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/music/albums/{album_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Album */
+        get: operations["music_album_api_music_albums__album_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/music/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Tracks */
+        get: operations["music_tracks_api_music_tracks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/music/tracks/{playback_id}/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Lyrics */
+        get: operations["music_lyrics_api_music_tracks__playback_id__lyrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/music/artists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Artists */
+        get: operations["music_artists_api_music_artists_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/music/artists/{artist_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Artist */
+        get: operations["music_artist_api_music_artists__artist_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/music/artwork/{playback_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Artwork */
+        get: operations["music_artwork_api_music_artwork__playback_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/music/artwork/{playback_id}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Music Artwork Thumbnail */
+        get: operations["music_artwork_thumbnail_api_music_artwork__playback_id__thumbnail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tags": {
         parameters: {
             query?: never;
@@ -840,6 +976,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Library Events */
+        get: operations["library_events_api_library_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/library/config": {
         parameters: {
             query?: never;
@@ -892,6 +1045,23 @@ export interface paths {
         put?: never;
         /** Build Thumbnails */
         post: operations["build_thumbnails_api_library_thumbnails_build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizer/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capabilities */
+        get: operations["capabilities_api_organizer_capabilities_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -964,24 +1134,42 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch Items */
+        patch: operations["patch_items_api_organizer_items_patch"];
         trace?: never;
     };
-    "/api/organizer/music/albums": {
+    "/api/organizer/reveal-directory": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Music Albums */
-        get: operations["music_albums_api_organizer_music_albums_get"];
+        get?: never;
+        put?: never;
+        /** Reveal Item Directory */
+        post: operations["reveal_item_directory_api_organizer_reveal_directory_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizer/items/{item_uid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch Item */
+        patch: operations["patch_item_api_organizer_items__item_uid__patch"];
         trace?: never;
     };
     "/api/organizer/artwork/image": {
@@ -1112,23 +1300,6 @@ export interface paths {
         };
         /** Organizer Audio */
         get: operations["organizer_audio_api_organizer_audio_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/organizer/library": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Library Groups */
-        get: operations["library_groups_api_organizer_library_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1460,6 +1631,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/player/audio/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Player Audio Source */
+        get: operations["player_audio_source_api_player_audio_source_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/player/video/states": {
         parameters: {
             query?: never;
@@ -1506,6 +1694,23 @@ export interface paths {
         get: operations["video_items_api_videos_items_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/videos/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reveal Video In File Manager */
+        post: operations["reveal_video_in_file_manager_api_videos_reveal_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1823,6 +2028,34 @@ export interface components {
             count: number;
             /** Created At */
             created_at?: string | null;
+        };
+        /** AudioPlaybackSource */
+        AudioPlaybackSource: {
+            /**
+             * Url
+             * @default
+             */
+            url: string;
+            /**
+             * Mime Type
+             * @default application/octet-stream
+             */
+            mime_type: string;
+            /**
+             * Directly Supported
+             * @default false
+             */
+            directly_supported: boolean;
+            /**
+             * Known Unsupported
+             * @default false
+             */
+            known_unsupported: boolean;
+            /**
+             * Unsupported Reason
+             * @default
+             */
+            unsupported_reason: string;
         };
         /** AuthStatus */
         AuthStatus: {
@@ -2155,6 +2388,8 @@ export interface components {
         MediaBrief: {
             /** Id */
             id: number;
+            /** Path */
+            path?: string | null;
             /** Filename */
             filename: string;
             /** Extension */
@@ -2267,6 +2502,191 @@ export interface components {
             /** Confidence */
             confidence?: number | null;
         };
+        /** MusicAlbum */
+        MusicAlbum: {
+            /** Album Id */
+            album_id: string;
+            /** Artist Id */
+            artist_id: string;
+            /** Album Artist Id */
+            album_artist_id: string;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist: string;
+            /** Year */
+            year?: number | null;
+            /**
+             * Count
+             * @default 0
+             */
+            count: number;
+            /** Cover Playback Id */
+            cover_playback_id?: string | null;
+            /** Title Variants */
+            title_variants?: {
+                [key: string]: string;
+            };
+            /** Artist Variants */
+            artist_variants?: {
+                [key: string]: string;
+            };
+        };
+        /** MusicAlbumsResponse */
+        MusicAlbumsResponse: {
+            /** Albums */
+            albums?: components["schemas"]["MusicAlbum"][];
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Limit
+             * @default 50
+             */
+            limit: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** MusicArtist */
+        MusicArtist: {
+            /** Artist Id */
+            artist_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Album Count
+             * @default 0
+             */
+            album_count: number;
+            /**
+             * Track Count
+             * @default 0
+             */
+            track_count: number;
+            /** Cover Playback Id */
+            cover_playback_id?: string | null;
+            /** Name Variants */
+            name_variants?: {
+                [key: string]: string;
+            };
+        };
+        /** MusicArtistsResponse */
+        MusicArtistsResponse: {
+            /** Artists */
+            artists?: components["schemas"]["MusicArtist"][];
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** MusicLyricsResource */
+        MusicLyricsResource: {
+            /** Playback Id */
+            playback_id: string;
+            /**
+             * Lyrics
+             * @default
+             */
+            lyrics: string;
+            /**
+             * Synced Lyrics
+             * @default
+             */
+            synced_lyrics: string;
+            /**
+             * Version
+             * @default
+             */
+            version: string;
+        };
+        /** MusicTrack */
+        MusicTrack: {
+            /** Track Id */
+            track_id: string;
+            /** Playback Id */
+            playback_id?: string | null;
+            /** Title */
+            title: string;
+            /** Artist */
+            artist?: string | null;
+            /** Album */
+            album?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Disc */
+            disc?: number | null;
+            /** Track */
+            track?: number | null;
+            /**
+             * Metadata
+             * @default false
+             */
+            metadata: boolean;
+            /**
+             * Images
+             * @default false
+             */
+            images: boolean;
+            /**
+             * Lyrics
+             * @default false
+             */
+            lyrics: boolean;
+            /** Duration */
+            duration?: number | null;
+            /** Mime Type */
+            mime_type?: string | null;
+            /** Title Variants */
+            title_variants?: {
+                [key: string]: string;
+            };
+            /** Artist Variants */
+            artist_variants?: {
+                [key: string]: string;
+            };
+            /** Album Variants */
+            album_variants?: {
+                [key: string]: string;
+            };
+        };
+        /** MusicTracksResponse */
+        MusicTracksResponse: {
+            /** Tracks */
+            tracks?: components["schemas"]["MusicTrack"][];
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
         /** OrganizerApplyResponse */
         OrganizerApplyResponse: {
             /** Affected */
@@ -2275,6 +2695,21 @@ export interface components {
             message: string;
             /** Batch Id */
             batch_id?: string | null;
+            /**
+             * Nfo Affected
+             * @default 0
+             */
+            nfo_affected: number;
+            /**
+             * Lyrics Affected
+             * @default 0
+             */
+            lyrics_affected: number;
+            /**
+             * Artwork Affected
+             * @default 0
+             */
+            artwork_affected: number;
         };
         /** OrganizerArtworkAsset */
         OrganizerArtworkAsset: {
@@ -2360,6 +2795,11 @@ export interface components {
              */
             artist: string;
             /**
+             * Album Artist
+             * @default
+             */
+            album_artist: string;
+            /**
              * Album
              * @default
              */
@@ -2375,6 +2815,11 @@ export interface components {
              * @default
              */
             overview: string;
+            /**
+             * Tagline
+             * @default
+             */
+            tagline: string;
             /**
              * Poster Url
              * @default
@@ -2458,6 +2903,22 @@ export interface components {
              * @default 0
              */
             confidence: number;
+            /** Title Variants */
+            title_variants?: {
+                [key: string]: string;
+            };
+            /** Artist Variants */
+            artist_variants?: {
+                [key: string]: string;
+            };
+            /** Album Artist Variants */
+            album_artist_variants?: {
+                [key: string]: string;
+            };
+            /** Album Variants */
+            album_variants?: {
+                [key: string]: string;
+            };
         };
         /** OrganizerConfigPatch */
         OrganizerConfigPatch: {
@@ -2554,6 +3015,10 @@ export interface components {
         "OrganizerItem-Input": {
             /** Path */
             path: string;
+            /** Item Uid */
+            item_uid?: string | null;
+            /** Revision */
+            revision?: number | null;
             /** Playback Id */
             playback_id?: string | null;
             /** Media Type */
@@ -2562,6 +3027,8 @@ export interface components {
             title: string;
             /** Artist */
             artist?: string | null;
+            /** Album Artist */
+            album_artist?: string | null;
             /** Album */
             album?: string | null;
             /** Year */
@@ -2585,6 +3052,10 @@ export interface components {
              * @default 0
              */
             confidence: number;
+            /** Duration */
+            duration?: number | null;
+            /** Mime Type */
+            mime_type?: string | null;
             /**
              * Is New
              * @default false
@@ -2597,6 +3068,22 @@ export interface components {
             metadata: boolean;
             /** Metadata Title */
             metadata_title?: string | null;
+            /** Metadata Title Variants */
+            metadata_title_variants?: {
+                [key: string]: string;
+            };
+            /** Metadata Artist Variants */
+            metadata_artist_variants?: {
+                [key: string]: string;
+            };
+            /** Metadata Album Artist Variants */
+            metadata_album_artist_variants?: {
+                [key: string]: string;
+            };
+            /** Metadata Album Variants */
+            metadata_album_variants?: {
+                [key: string]: string;
+            };
             /** Metadata Original Title */
             metadata_original_title?: string | null;
             /** Metadata Show Title */
@@ -2668,6 +3155,10 @@ export interface components {
         "OrganizerItem-Output": {
             /** Path */
             path: string;
+            /** Item Uid */
+            item_uid?: string | null;
+            /** Revision */
+            revision?: number | null;
             /** Playback Id */
             playback_id?: string | null;
             /** Media Type */
@@ -2676,6 +3167,8 @@ export interface components {
             title: string;
             /** Artist */
             artist?: string | null;
+            /** Album Artist */
+            album_artist?: string | null;
             /** Album */
             album?: string | null;
             /** Year */
@@ -2699,6 +3192,10 @@ export interface components {
              * @default 0
              */
             confidence: number;
+            /** Duration */
+            duration?: number | null;
+            /** Mime Type */
+            mime_type?: string | null;
             /**
              * Is New
              * @default false
@@ -2711,6 +3208,22 @@ export interface components {
             metadata: boolean;
             /** Metadata Title */
             metadata_title?: string | null;
+            /** Metadata Title Variants */
+            metadata_title_variants?: {
+                [key: string]: string;
+            };
+            /** Metadata Artist Variants */
+            metadata_artist_variants?: {
+                [key: string]: string;
+            };
+            /** Metadata Album Artist Variants */
+            metadata_album_artist_variants?: {
+                [key: string]: string;
+            };
+            /** Metadata Album Variants */
+            metadata_album_variants?: {
+                [key: string]: string;
+            };
             /** Metadata Original Title */
             metadata_original_title?: string | null;
             /** Metadata Show Title */
@@ -2778,6 +3291,131 @@ export interface components {
             related_files?: components["schemas"]["OrganizerFileAsset"][];
             media_info?: components["schemas"]["OrganizerMediaInfo"] | null;
         };
+        /** OrganizerItemPatch */
+        OrganizerItemPatch: {
+            /** Revision */
+            revision: number;
+            /** Title */
+            title?: string | null;
+            /** Artist */
+            artist?: string | null;
+            /** Album */
+            album?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Metadata Title */
+            metadata_title?: string | null;
+            /** Metadata Original Title */
+            metadata_original_title?: string | null;
+            /** Metadata Show Title */
+            metadata_show_title?: string | null;
+            /** Metadata Premiered */
+            metadata_premiered?: string | null;
+            /** Metadata Certification */
+            metadata_certification?: string | null;
+            /** Metadata Runtime */
+            metadata_runtime?: number | null;
+            /** Metadata Genres */
+            metadata_genres?: string[] | null;
+            /** Metadata Status */
+            metadata_status?: string | null;
+            /** Metadata Countries */
+            metadata_countries?: string[] | null;
+            /** Metadata Tagline */
+            metadata_tagline?: string | null;
+            /** Metadata Plot */
+            metadata_plot?: string | null;
+            /** Metadata Tags */
+            metadata_tags?: string[] | null;
+            /** Metadata Ids */
+            metadata_ids?: {
+                [key: string]: string;
+            } | null;
+            /** Metadata Rating */
+            metadata_rating?: number | null;
+            /** Metadata Rating Source */
+            metadata_rating_source?: string | null;
+            /** Metadata Studios */
+            metadata_studios?: string[] | null;
+            /** Metadata Cast */
+            metadata_cast?: string[] | null;
+            /**
+             * Write Nfo
+             * @default false
+             */
+            write_nfo: boolean;
+        };
+        /** OrganizerItemPatchRequest */
+        OrganizerItemPatchRequest: {
+            /** Revision */
+            revision: number;
+            /** Title */
+            title?: string | null;
+            /** Artist */
+            artist?: string | null;
+            /** Album */
+            album?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Metadata Title */
+            metadata_title?: string | null;
+            /** Metadata Original Title */
+            metadata_original_title?: string | null;
+            /** Metadata Show Title */
+            metadata_show_title?: string | null;
+            /** Metadata Premiered */
+            metadata_premiered?: string | null;
+            /** Metadata Certification */
+            metadata_certification?: string | null;
+            /** Metadata Runtime */
+            metadata_runtime?: number | null;
+            /** Metadata Genres */
+            metadata_genres?: string[] | null;
+            /** Metadata Status */
+            metadata_status?: string | null;
+            /** Metadata Countries */
+            metadata_countries?: string[] | null;
+            /** Metadata Tagline */
+            metadata_tagline?: string | null;
+            /** Metadata Plot */
+            metadata_plot?: string | null;
+            /** Metadata Tags */
+            metadata_tags?: string[] | null;
+            /** Metadata Ids */
+            metadata_ids?: {
+                [key: string]: string;
+            } | null;
+            /** Metadata Rating */
+            metadata_rating?: number | null;
+            /** Metadata Rating Source */
+            metadata_rating_source?: string | null;
+            /** Metadata Studios */
+            metadata_studios?: string[] | null;
+            /** Metadata Cast */
+            metadata_cast?: string[] | null;
+            /**
+             * Write Nfo
+             * @default false
+             */
+            write_nfo: boolean;
+            /** Item Uid */
+            item_uid: string;
+        };
+        /** OrganizerItemsPatchBody */
+        OrganizerItemsPatchBody: {
+            /** Items */
+            items: components["schemas"]["OrganizerItemPatchRequest"][];
+        };
+        /** OrganizerItemsPatchResponse */
+        OrganizerItemsPatchResponse: {
+            /** Items */
+            items: components["schemas"]["OrganizerItem-Output"][];
+        };
+        /** OrganizerItemsResponse */
+        OrganizerItemsResponse: {
+            /** Items */
+            items: components["schemas"]["OrganizerItem-Output"][];
+        };
         /** OrganizerJobResponse */
         OrganizerJobResponse: {
             /** Id */
@@ -2810,53 +3448,6 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
-        };
-        /** OrganizerLibraryEntry */
-        OrganizerLibraryEntry: {
-            /** Key */
-            key: string;
-            /** Media Type */
-            media_type: string;
-            /** Title */
-            title: string;
-            /**
-             * Subtitle
-             * @default
-             */
-            subtitle: string;
-            /**
-             * Count
-             * @default 0
-             */
-            count: number;
-            /** Cover Id */
-            cover_id?: number | null;
-            /** Year */
-            year?: number | null;
-            /** Artist */
-            artist?: string | null;
-            /** Album */
-            album?: string | null;
-            /** Paths */
-            paths?: string[];
-        };
-        /** OrganizerLibraryResponse */
-        OrganizerLibraryResponse: {
-            /**
-             * Movies
-             * @default []
-             */
-            movies: components["schemas"]["OrganizerLibraryEntry"][];
-            /**
-             * Tv
-             * @default []
-             */
-            tv: components["schemas"]["OrganizerLibraryEntry"][];
-            /**
-             * Music
-             * @default []
-             */
-            music: components["schemas"]["OrganizerLibraryEntry"][];
         };
         /** OrganizerLyricsApplyBody */
         OrganizerLyricsApplyBody: {
@@ -3008,67 +3599,6 @@ export interface components {
             /** Subtitle Streams */
             subtitle_streams?: components["schemas"]["OrganizerStreamInfo"][];
         };
-        /** OrganizerMusicAlbum */
-        OrganizerMusicAlbum: {
-            /** Key */
-            key: string;
-            /** Title */
-            title: string;
-            /** Artist */
-            artist: string;
-            /** Year */
-            year?: number | null;
-            /**
-             * Count
-             * @default 0
-             */
-            count: number;
-            /** Cover Path */
-            cover_path?: string | null;
-            /** Cover Playback Id */
-            cover_playback_id?: string | null;
-            /** Tracks */
-            tracks?: components["schemas"]["OrganizerMusicTrack"][];
-        };
-        /** OrganizerMusicAlbumsResponse */
-        OrganizerMusicAlbumsResponse: {
-            /** Albums */
-            albums?: components["schemas"]["OrganizerMusicAlbum"][];
-        };
-        /** OrganizerMusicTrack */
-        OrganizerMusicTrack: {
-            /** Playback Id */
-            playback_id?: string | null;
-            /** Path */
-            path: string;
-            /** Title */
-            title: string;
-            /** Artist */
-            artist?: string | null;
-            /** Album */
-            album?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Disc */
-            disc?: number | null;
-            /** Track */
-            track?: number | null;
-            /**
-             * Metadata
-             * @default false
-             */
-            metadata: boolean;
-            /**
-             * Images
-             * @default false
-             */
-            images: boolean;
-            /**
-             * Lyrics
-             * @default false
-             */
-            lyrics: boolean;
-        };
         /** OrganizerNfoOperation */
         OrganizerNfoOperation: {
             /** Target */
@@ -3144,6 +3674,11 @@ export interface components {
             /** Conflicts */
             conflicts: number;
         };
+        /** OrganizerRevealDirectoryBody */
+        OrganizerRevealDirectoryBody: {
+            /** Item Uids */
+            item_uids: string[];
+        };
         /** OrganizerScanBody */
         OrganizerScanBody: {
             /** Paths */
@@ -3165,6 +3700,8 @@ export interface components {
             items: components["schemas"]["OrganizerItem-Input"][];
             /** Source */
             source?: string | null;
+            /** Language */
+            language?: string | null;
             /**
              * Overwrite
              * @default true
@@ -3534,6 +4071,8 @@ export interface components {
             db_path: string;
             /** Name */
             name: string;
+            /** Library Id */
+            library_id: string;
             /** Message */
             message: string;
         };
@@ -3745,6 +4284,32 @@ export interface components {
             /** Items */
             items?: components["schemas"]["OrganizerItem-Output"][];
         };
+        /** VideoMediaInfo */
+        VideoMediaInfo: {
+            /**
+             * Video Codec
+             * @default
+             */
+            video_codec: string;
+            /**
+             * Audio Codec
+             * @default
+             */
+            audio_codec: string;
+            /** Width */
+            width?: number | null;
+            /** Height */
+            height?: number | null;
+            /**
+             * Hdr
+             * @default
+             */
+            hdr: string;
+            /** Bit Depth */
+            bit_depth?: number | null;
+            /** Frame Rate */
+            frame_rate?: number | null;
+        };
         /** VideoPlaybackSource */
         VideoPlaybackSource: {
             /** Mode */
@@ -3764,6 +4329,17 @@ export interface components {
              * @default false
              */
             preserves_video: boolean;
+            /**
+             * Playable
+             * @default true
+             */
+            playable: boolean;
+            /**
+             * Unsupported Reason
+             * @default
+             */
+            unsupported_reason: string;
+            media_info?: components["schemas"]["VideoMediaInfo"] | null;
         };
         /** VideoStatePatch */
         VideoStatePatch: {
@@ -4534,6 +5110,265 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusMessage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_albums_api_music_albums_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                query?: string;
+                artist_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicAlbumsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_album_api_music_albums__album_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                album_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicAlbum"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_tracks_api_music_tracks_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                query?: string;
+                album_id?: string;
+                artist_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicTracksResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_lyrics_api_music_tracks__playback_id__lyrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playback_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicLyricsResource"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_artists_api_music_artists_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                query?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicArtistsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_artist_api_music_artists__artist_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicArtist"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_artwork_api_music_artwork__playback_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playback_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    music_artwork_thumbnail_api_music_artwork__playback_id__thumbnail_get: {
+        parameters: {
+            query?: {
+                size?: number;
+            };
+            header?: never;
+            path: {
+                playback_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -5503,6 +6338,26 @@ export interface operations {
             };
         };
     };
+    library_events_api_library_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     get_library_config_api_library_config_get: {
         parameters: {
             query?: never;
@@ -5611,6 +6466,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capabilities_api_organizer_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -5751,7 +6628,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrganizerScanResponse"];
+                    "application/json": components["schemas"]["OrganizerItemsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5765,14 +6642,18 @@ export interface operations {
             };
         };
     };
-    music_albums_api_organizer_music_albums_get: {
+    patch_items_api_organizer_items_patch: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizerItemsPatchBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5780,7 +6661,86 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrganizerMusicAlbumsResponse"];
+                    "application/json": components["schemas"]["OrganizerItemsPatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reveal_item_directory_api_organizer_reveal_directory_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizerRevealDirectoryBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_item_api_organizer_items__item_uid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_uid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizerItemPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizerItem-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -6034,26 +6994,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    library_groups_api_organizer_library_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrganizerLibraryResponse"];
                 };
             };
         };
@@ -6484,6 +7424,7 @@ export interface operations {
             query?: {
                 playback_id?: string;
                 audio_stream?: number | null;
+                refresh?: boolean;
             };
             header?: never;
             path?: never;
@@ -6670,6 +7611,37 @@ export interface operations {
             };
         };
     };
+    player_audio_source_api_player_audio_source_get: {
+        parameters: {
+            query: {
+                playback_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioPlaybackSource"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     video_states_api_player_video_states_get: {
         parameters: {
             query?: never;
@@ -6785,9 +7757,44 @@ export interface operations {
             };
         };
     };
+    reveal_video_in_file_manager_api_videos_reveal_post: {
+        parameters: {
+            query?: {
+                playback_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     video_artwork_image_for_item_api_videos_artwork_image_item__playback_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                kind?: string;
+            };
             header?: never;
             path: {
                 playback_id: string;
@@ -6820,6 +7827,7 @@ export interface operations {
         parameters: {
             query?: {
                 size?: number;
+                kind?: string;
             };
             header?: never;
             path: {
@@ -6951,7 +7959,9 @@ export interface operations {
     create_scrape_job_api_jobs_scrape_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6984,7 +7994,9 @@ export interface operations {
     create_sync_job_api_jobs_sync_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7017,7 +8029,9 @@ export interface operations {
     create_rename_job_api_jobs_rename_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

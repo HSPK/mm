@@ -29,15 +29,14 @@ describe("createBrowserTokenStorage", () => {
     })
 
     it("reads/writes the localStorage key", () => {
-        const s = createBrowserTokenStorage({ storageKey: "k", cookieName: "c" })
+        const s = createBrowserTokenStorage({ storageKey: "k" })
         s.set("xyz")
         expect(localStorage.getItem("k")).toBe("xyz")
-        expect(document.cookie).toContain("c=xyz")
         expect(s.get()).toBe("xyz")
     })
 
     it("clears both stores", () => {
-        const s = createBrowserTokenStorage({ storageKey: "k", cookieName: "c" })
+        const s = createBrowserTokenStorage({ storageKey: "k" })
         s.set("xyz")
         s.clear()
         expect(localStorage.getItem("k")).toBeNull()

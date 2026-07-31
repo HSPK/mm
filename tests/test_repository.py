@@ -182,6 +182,7 @@ def test_db_client_migrates_legacy_schema(tmp_path: Path):
         migrations = {
             row[0] for row in conn.execute("SELECT name FROM schema_migrations ORDER BY name")
         }
+        organizer_columns = {row[1] for row in conn.execute("PRAGMA table_info(organizer_media)")}
 
     assert "deleted_at" in media_columns
     assert "file_sync_state" in tables
@@ -197,7 +198,141 @@ def test_db_client_migrates_legacy_schema(tmp_path: Path):
         "0008_create_job_events",
         "0009_add_organizer_media_light_columns",
         "0010_create_video_state",
+        "0011_create_video_probe_cache",
+        "0012_create_scrape_cache",
+        "0013_add_organizer_audio_columns",
+        "0014_add_organizer_music_ids",
+        "0015_add_organizer_identity_and_scope",
+        "0016_add_job_idempotency",
+        "0017_add_job_active_claim",
+        "0018_backfill_organizer_source_roots",
+        "0019_add_organizer_sync_fingerprints",
+        "0020_add_localized_music_identity",
+        "0021_complete_album_artist_identity",
     }
+    assert {
+        "audio_duration",
+        "audio_mime_type",
+        "music_album_id",
+        "music_artist_id",
+        "item_uid",
+        "revision",
+        "source_root",
+        "file_size",
+        "mtime_ns",
+        "sidecar_signature",
+        "scan_version",
+        "music_track_id",
+        "album_artist",
+        "music_album_artist_id",
+        "music_title_variants",
+        "music_artist_variants",
+        "music_album_artist_variants",
+        "music_album_variants",
+    } <= organizer_columns
+
+
+def test_db_client_adds_unique_columns_after_migrating_legacy_rows(tmp_path: Path):
+    db_path = tmp_path / "legacy-unique-columns.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE organizer_media (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL,
+                source_kind VARCHAR(16) NOT NULL,
+                media_type VARCHAR(16) NOT NULL,
+                payload TEXT NOT NULL DEFAULT '{}',
+                missing INTEGER NOT NULL DEFAULT 0,
+                first_seen_at DATETIME NOT NULL,
+                last_seen_at DATETIME NOT NULL
+            );
+            INSERT INTO organizer_media (
+                path, source_kind, media_type, first_seen_at, last_seen_at
+            ) VALUES
+                ('/tmp/one.mkv', 'movies', 'movie', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                ('/tmp/two.mkv', 'movies', 'movie', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                ('/tmp/track.flac', 'music', 'track', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            UPDATE organizer_media
+            SET payload = '{
+                "path": "/tmp/track.flac",
+                "media_type": "track",
+                "title": "Silence",
+                "artist": "Jay Chou",
+                "album": "Fantasy",
+                "metadata_ids": {
+                    "musicbrainz_recording": "recording-mbid",
+                    "musicbrainz_release_group": "release-group-mbid",
+                    "musicbrainz_artist": "artist-mbid"
+                }
+            }'
+            WHERE path = '/tmp/track.flac';
+
+            CREATE TABLE jobs (
+                id VARCHAR(64) PRIMARY KEY,
+                kind VARCHAR(32) NOT NULL,
+                status VARCHAR(16) NOT NULL,
+                progress INTEGER NOT NULL DEFAULT 0,
+                title VARCHAR(256) NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                detail TEXT NOT NULL DEFAULT '',
+                payload TEXT NOT NULL DEFAULT '{}',
+                result TEXT NOT NULL DEFAULT '{}',
+                error TEXT NOT NULL DEFAULT '',
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            );
+            INSERT INTO jobs (id, kind, status, created_at, updated_at) VALUES
+                ('job-one', 'sync', 'done', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                ('job-two', 'sync', 'done', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            """
+        )
+
+    client = DBClient(db_path)
+    client.close()
+
+    with sqlite3.connect(db_path) as conn:
+        organizer_ids = conn.execute("SELECT item_uid FROM organizer_media ORDER BY id").fetchall()
+        organizer_indexes = {row[1] for row in conn.execute("PRAGMA index_list(organizer_media)")}
+        job_claims = conn.execute("SELECT active_claim FROM jobs ORDER BY id").fetchall()
+        job_indexes = {row[1] for row in conn.execute("PRAGMA index_list(jobs)")}
+        track_ids = conn.execute(
+            "SELECT music_track_id, music_album_id, music_artist_id, "
+            "music_album_artist_id "
+            "FROM organizer_media WHERE media_type = 'track'"
+        ).fetchone()
+
+    assert all(item_uid for (item_uid,) in organizer_ids)
+    assert len({item_uid for (item_uid,) in organizer_ids}) == 3
+    assert "organizer_media_item_uid" in organizer_indexes
+    from mm.server.music_catalog import (
+        album_artist_id_for_item,
+        album_id_for_item,
+        artist_id_for_item,
+        track_id_for_item,
+    )
+    from mm.server.organizer_schemas import OrganizerItem
+
+    expected_item = OrganizerItem(
+        path="/tmp/track.flac",
+        media_type="track",
+        title="Silence",
+        artist="Jay Chou",
+        album="Fantasy",
+        metadata_ids={
+            "musicbrainz_recording": "recording-mbid",
+            "musicbrainz_release_group": "release-group-mbid",
+            "musicbrainz_artist": "artist-mbid",
+        },
+    )
+    assert track_ids == (
+        track_id_for_item(expected_item),
+        album_id_for_item(expected_item),
+        artist_id_for_item(expected_item),
+        album_artist_id_for_item(expected_item),
+    )
+    assert job_claims == [(None,), (None,)]
+    assert "jobs_active_claim" in job_indexes
 
 
 def test_library_id_generated_on_first_read(db: DBClient):

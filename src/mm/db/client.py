@@ -75,6 +75,10 @@ class AsyncDBClient:
         async with self.manager:
             pass
 
+    async def close(self) -> None:
+        if self.manager.is_connected:
+            await self.manager.disconnect()
+
     async def init_db(self) -> None:
         await self.manager.create_tables(*ALL_TABLES, safe=True)
         with self.manager.allow_sync():

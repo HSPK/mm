@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
     organizerRepo,
     type OrganizerCandidate,
     type OrganizerConfig,
+    type OrganizerCapabilities,
     type OrganizerRenameLogEntry,
 } from "@/api/organizer"
 import { jobsRepo } from "@/api/jobs"
@@ -20,11 +21,11 @@ import {
     actionKey,
     buildRows,
     errorMessage,
-    itemBelongsToKind,
+    filterAndSortRows,
     loadSession,
     mergeMatches,
+    metadataPatchRequests,
     persistedViewState,
-    pollOrganizerJob,
     renameItemsForRows,
     scrapeEmptyMessage,
     scrapeItemsForRows,
@@ -33,14 +34,15 @@ import {
     scraperForKind,
     scraperOptionsForKind,
     selectedCandidateMap,
-    splitList,
     visibleRangeKeys,
 } from "./organize-model"
 import { OrganizePageView } from "./organize-page-view"
-import { optionForKind } from "./organize-toolbar"
+import { optionForKind } from "./organize-options"
+import { useOrganizerJob } from "./use-organizer-job"
 export default function OrganizePage() {
     const navigate = useNavigate()
     const [config, setConfig] = useState<OrganizerConfig | null>(null)
+    const [capabilities, setCapabilities] = useState<OrganizerCapabilities | null>(null)
     const [sessionState, setSessionState] = useState<OrganizerSessionState>(() => loadSession())
     const [loading, setLoading] = useState<string | null>(null)
     const [, setOperationStatus] = useState<{ state: "idle" | "error"; text?: string }>({ state: "idle" })
@@ -53,8 +55,13 @@ export default function OrganizePage() {
     const [expandedKeys, setExpandedKeys] = useState<string[]>([])
     const [selectionAnchorKey, setSelectionAnchorKey] = useState<string | null>(null)
     const [loadedKinds, setLoadedKinds] = useState<string[]>([])
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [renameLogs, setRenameLogs] = useState<OrganizerRenameLogEntry[]>([])
     const [renameMenuOpen, setRenameMenuOpen] = useState(false)
+    const itemRequests = useRef<Record<OrganizerKind, { generation: number, controller?: AbortController }>>({
+        movies: { generation: 0 }, tv: { generation: 0 }, music: { generation: 0 },
+    })
+    const { isCommandActive, runJob } = useOrganizerJob()
     const activeKind = sessionState.activeKind
     const activeSession = sessionState.sessions[activeKind]
     const activeOption = optionForKind(activeKind)
@@ -63,17 +70,21 @@ export default function OrganizePage() {
         [activeKind, config],
     )
     const scraperOptions = useMemo(
-        () => scraperOptionsForKind(config, activeKind),
-        [activeKind, config],
+        () => scraperOptionsForKind(config, capabilities, activeKind),
+        [activeKind, capabilities, config],
     )
     const scrapeSource = scraperForKind(
         activeKind,
         activeSession.source || config?.default_scrapers?.[activeKind] || "",
         scraperOptions,
     )
-    const rows = useMemo(
+    const catalogRows = useMemo(
         () => buildRows(activeSession.items, activeSession.matches, activeSession.selectedCandidates, activeKind, expandedKeys),
         [activeKind, activeSession.items, activeSession.matches, activeSession.selectedCandidates, expandedKeys],
+    )
+    const rows = useMemo(
+        () => filterAndSortRows(catalogRows, activeSession.query ?? "", activeSession.order ?? "name"),
+        [activeSession.order, activeSession.query, catalogRows],
     )
     const scrapeDialogRows = useMemo(
         () => scrapeDialogKeys
@@ -99,14 +110,32 @@ export default function OrganizePage() {
         [actionRows],
     )
     const noSources = config != null && sourcePaths.length === 0
-    useEffect(() => {
-        void organizerRepo.getConfig().then(setConfig).catch((err) => {
+    const activeCapabilities = useMemo(() => {
+        const mediaTypes = activeKind === "movies" ? ["movie"] : activeKind === "tv" ? ["tv"] : ["track", "album"]
+        return capabilities?.media_types.filter((capability) => mediaTypes.includes(capability.media_type)) ?? []
+    }, [activeKind, capabilities])
+    const canScrape = activeCapabilities.some((capability) => capability.scrapers.length > 0)
+    const canRename = activeCapabilities.some((capability) => capability.rename)
+    const loadOrganizerSetup = useCallback(async () => {
+        setLoadError(null)
+        try {
+            const [nextConfig, nextCapabilities] = await Promise.all([organizerRepo.getConfig(), organizerRepo.capabilities()])
+            setConfig(nextConfig)
+            setCapabilities(nextCapabilities)
+        } catch (err) {
             setOperationStatus({
                 state: "error",
                 text: err instanceof Error ? err.message : "Could not load organizer config",
             })
-        })
+            setLoadError(err instanceof Error ? err.message : "Could not load organizer config")
+        }
     }, [])
+    useEffect(() => {
+        const id = window.setTimeout(() => {
+            void loadOrganizerSetup()
+        }, 0)
+        return () => window.clearTimeout(id)
+    }, [loadOrganizerSetup])
     const refreshRenameLogs = useCallback(async () => {
         try {
             setRenameLogs(await organizerRepo.renameLogs(8))
@@ -139,28 +168,36 @@ export default function OrganizePage() {
         },
         [activeKind, updateKindSession],
     )
-    useEffect(() => {
-        if (loadedKinds.includes(activeKind)) return
-        let cancelled = false
-        void organizerRepo.items(activeKind)
-            .then((items) => {
-                if (cancelled) return
-                updateKindSession(activeKind, (session) => ({
-                    ...session,
-                    items,
-                    scanned: items.length > 0,
-                    selectedKey: null,
-                    selectedKeys: [],
-                }))
-                setLoadedKinds((prev) => Array.from(new Set([...prev, activeKind])))
-            })
-            .catch(() => {
-                if (!cancelled) setLoadedKinds((prev) => Array.from(new Set([...prev, activeKind])))
-            })
-        return () => {
-            cancelled = true
+    const loadItems = useCallback(async (kind: OrganizerKind) => {
+        const request = itemRequests.current[kind]
+        request.controller?.abort()
+        request.generation += 1
+        const generation = request.generation
+        const controller = new AbortController()
+        request.controller = controller
+        setLoadError(null)
+        try {
+            const response = await organizerRepo.items({ kind }, { signal: controller.signal })
+            if (itemRequests.current[kind].generation !== generation) return
+            updateKindSession(kind, (current) => ({
+                ...current,
+                items: response.items,
+                scanned: current.scanned || response.items.length > 0,
+            }))
+            setLoadedKinds((prev) => Array.from(new Set([...prev, kind])))
+        } catch (error) {
+            if (controller.signal.aborted || itemRequests.current[kind].generation !== generation) return
+            setLoadError(errorMessage(error))
         }
-    }, [activeKind, loadedKinds, updateKindSession])
+    }, [updateKindSession])
+    useEffect(() => {
+        const request = itemRequests.current[activeKind]
+        const timer = window.setTimeout(() => void loadItems(activeKind), 0)
+        return () => {
+            window.clearTimeout(timer)
+            request.controller?.abort()
+        }
+    }, [activeKind, loadItems])
     const run = useCallback(async <T,>(label: string, fn: () => Promise<T>) => {
         setLoading(label)
         setOperationStatus({ state: "idle" })
@@ -179,79 +216,43 @@ export default function OrganizePage() {
         const kind = activeKind
         const paths = sourcePaths
         const recursive = activeSession.recursive
-        const notificationId = notify.task("Sync queued", `${paths.length} source folder(s)`)
-        const job = await run("update-sources", () => jobsRepo.createSyncJob(paths, recursive))
+        const job = await runJob("sync", "Sync queued", `${paths.length} source folder(s)`, (key) =>
+            jobsRepo.createSyncJob(paths, recursive, key))
         if (!job) return
-        await pollOrganizerJob(job.id, notificationId)
-        const result = await run("load-items", () => organizerRepo.items(kind))
-        if (!result) return
-        setLoadedKinds((prev) => Array.from(new Set([...prev, kind])))
-        setSelectionAnchorKey(null)
+        await loadItems(kind)
+        const completed = job.status === "done" || job.status === "completed_with_errors"
+        if (!completed) return
         updateKindSession(kind, (session) => ({
             ...session,
             scanned: true,
-            items: result,
-            selectedKey: null,
-            selectedKeys: [],
             renamePlan: null,
             renamePlanKey: null,
         }))
-    }, [activeKind, activeSession.recursive, run, sourcePaths, updateKindSession])
+    }, [activeKind, activeSession.recursive, loadItems, runJob, sourcePaths, updateKindSession])
     const runScrapeJob = useCallback(async (targetRows: MediaRow[], options: ScrapeApplyOptions) => {
         const kind = activeKind
         const source = scrapeSource
-        const taskId = notify.task("Scrape queued", `${targetRows.length} album(s) queued`)
         const batches = options.sequentialRows ? targetRows.map((row) => [row]) : [targetRows]
         let done = 0
         let failed = 0
         try {
             for (const batch of batches) {
                 const items = batch.flatMap((row) => row.files)
-                notify.update(taskId, {
-                    kind: "task",
-                    status: "active",
-                    title: "Scrape running",
-                    message: `${done + failed + 1}/${batches.length}: ${batch[0]?.title ?? "Album"}`,
-                    detail: "",
-                    progress: Math.round((done + failed) / batches.length * 100),
-                })
-                const job = await jobsRepo.createScrapeJob(items, {
+                const finished = await runJob("scrape", "Scrape queued", `${done + failed + 1}/${batches.length}: ${batch[0]?.title ?? "Album"}`, (key) => jobsRepo.createScrapeJob(items, {
                     source,
+                    language: options.language ?? config?.language,
                     overwrite: !options.missingOnly,
                     selectedCandidates: selectedCandidateMap(batch),
-                })
-                notify.update(taskId, { jobId: job.id })
-                const finished = await pollOrganizerJob(job.id, taskId)
-                if (finished.status === "error" || finished.status === "canceled") failed += 1
+                }, key))
+                if (!finished || finished.status === "error" || finished.status === "canceled" || finished.status === "completed_with_errors") failed += 1
                 else done += 1
-                const refreshed = await organizerRepo.items(kind)
-                updateKindSession(kind, (session) => ({
-                    ...session,
-                    items: refreshed,
-                    selectedKey: session.selectedKey,
-                    selectedKeys: [],
-                    renamePlan: null,
-                    renamePlanKey: null,
-                }))
+                await loadItems(kind)
             }
-            notify.update(taskId, {
-                kind: failed > 0 ? "error" : "success",
-                status: failed > 0 ? "error" : "done",
-                title: failed > 0 ? "Scrape completed with failures" : "Scrape complete",
-                message: `${done} album(s) done${failed ? `, ${failed} failed` : ""}`,
-                detail: "",
-                progress: 100,
-            })
+            if (failed > 0) notify.info("Scrape completed with errors", `${done} album(s) completed, ${failed} skipped or failed`)
         } catch (error) {
-            notify.update(taskId, {
-                kind: "error",
-                status: "error",
-                title: "Scrape failed",
-                message: errorMessage(error),
-                progress: 100,
-            })
+            notify.error("Scrape failed", errorMessage(error))
         }
-    }, [activeKind, scrapeSource, updateKindSession])
+    }, [activeKind, config?.language, loadItems, runJob, scrapeSource])
     const scrape = useCallback(async (target: ScrapeTarget = "missing") => {
         const kind = activeKind
         const baseRows = actionRows.length > 0 ? actionRows : rows
@@ -287,50 +288,46 @@ export default function OrganizePage() {
     const rename = useCallback(async () => {
         if (actionItems.length === 0 || !actionPlanKey) return
         const kind = activeKind
-        const notificationId = notify.task("Rename queued", `${actionItems.length} file(s)`)
-        const job = await run("rename", () => jobsRepo.createRenameJob(actionItems))
-        if (!job) return
-        const finished = await pollOrganizerJob(job.id, notificationId)
-        if (finished.status === "error") return
+        const finished = await runJob("rename", "Rename queued", `${actionItems.length} file(s)`, (key) =>
+            jobsRepo.createRenameJob(actionItems, {}, key))
+        if (!finished) return
         await refreshRenameLogs()
-        const refreshed = await run("load-items", () => organizerRepo.items(kind))
-        if (!refreshed) return
+        await loadItems(kind)
+        const counts = renameResultMessage(finished)
+        if (counts) notify.info(finished.status === "completed_with_errors" ? "Rename partially completed" : "Rename result", counts)
         updateKindSession(kind, (session) => ({
             ...session,
-            items: refreshed,
             selectedKey: null,
             selectedKeys: [],
             renamePlan: null,
             renamePlanKey: null,
         }))
-    }, [actionItems, actionPlanKey, activeKind, refreshRenameLogs, run, updateKindSession])
+    }, [actionItems, actionPlanKey, activeKind, loadItems, refreshRenameLogs, runJob, updateKindSession])
     const undoRename = useCallback(async (batchId: string) => {
         const result = await run("rename-undo", () => organizerRepo.renameUndo(batchId))
         if (!result) return
         notify.success("Undo complete", result.message)
         setRenameMenuOpen(false)
         await refreshRenameLogs()
-        const refreshed = await run("update-sources", () => organizerRepo.scan(sourcePaths, activeSession.recursive))
-        if (!refreshed) return
         const kind = activeKind
+        await loadItems(kind)
         updateKindSession(kind, (session) => ({
             ...session,
-            items: refreshed.filter((item) => itemBelongsToKind(item, kind)),
             selectedKey: null,
             selectedKeys: [],
             renamePlan: null,
             renamePlanKey: null,
         }))
-    }, [activeKind, activeSession.recursive, refreshRenameLogs, run, sourcePaths, updateKindSession])
+    }, [activeKind, loadItems, refreshRenameLogs, run, updateKindSession])
     const toggleRenameMenu = useCallback(() => {
         setRenameMenuOpen((open) => {
             if (!open) void refreshRenameLogs()
             return !open
         })
     }, [refreshRenameLogs])
-    const selectTableRow = useCallback((key: string, shiftKey: boolean) => {
+    const selectTableRow = useCallback((key: string, shiftKey: boolean, visibleRows: MediaRow[]) => {
         const nextKeys = shiftKey
-            ? visibleRangeKeys(rows, selectionAnchorKey, key)
+            ? visibleRangeKeys(visibleRows, selectionAnchorKey, key)
             : activeSession.selectedKeys.includes(key)
                 ? activeSession.selectedKeys.filter((item) => item !== key)
                 : [key]
@@ -343,49 +340,47 @@ export default function OrganizePage() {
             renamePlan: null,
             renamePlanKey: null,
         }))
-    }, [activeSession.selectedKeys, rows, selectionAnchorKey, updateActiveSession])
-    const saveEdit = useCallback((row: MediaRow, values: MetadataEditValues) => {
-        updateActiveSession((session) => ({
-            ...session,
-            items: session.items.map((item) => {
-                if (!row.files.some((file) => file.path === item.path)) return item
-                return {
-                    ...item,
-                    title: row.kind === "music" ? item.title : values.title,
-                    album: row.kind === "music" ? values.title : item.album,
-                    year: values.year,
-                    metadata: true,
-                    metadata_title: row.kind === "tv" ? item.metadata_title : values.title,
-                    metadata_show_title: row.kind === "tv" ? values.title : item.metadata_show_title,
-                    metadata_original_title: values.originalTitle || null,
-                    metadata_year: values.year,
-                    metadata_rating: values.rating,
-                    metadata_rating_source: values.rating == null ? null : "User",
-                    metadata_premiered: values.premiered || null,
-                    metadata_certification: values.certification || null,
-                    metadata_runtime: values.runtime,
-                    metadata_genres: splitList(values.genres),
-                    metadata_status: values.status || null,
-                    metadata_studios: splitList(values.studios),
-                    metadata_countries: splitList(values.countries),
-                    metadata_tagline: values.tagline || null,
-                    metadata_plot: values.plot || null,
-                    metadata_tags: splitList(values.tags),
-                    metadata_cast: splitList(values.cast),
-                }
-            }),
-            renamePlan: null,
-            renamePlanKey: null,
-        }))
-        setEditingKey(null)
-    }, [updateActiveSession])
+    }, [activeSession.selectedKeys, selectionAnchorKey, updateActiveSession])
+    const saveEdit = useCallback(async (row: MediaRow, values: MetadataEditValues) => {
+        if (row.files.some((item) => !item.item_uid || item.revision == null)) {
+            notify.error("Cannot save legacy item", "This projection has no persistent item identity. Sync it again before saving.")
+            return
+        }
+        try {
+            const patchedItems = await organizerRepo.patchItems(
+                metadataPatchRequests(row, values),
+            )
+            const patchedByUid = new Map(
+                patchedItems.map((item) => [item.item_uid, item]),
+            )
+            updateActiveSession((session) => ({
+                ...session,
+                items: session.items.map((current) => (
+                    patchedByUid.get(current.item_uid) ?? current
+                )),
+                renamePlan: null,
+                renamePlanKey: null,
+            }))
+            setEditingKey(null)
+            notify.success("Projection saved", values.writeNfo ? "Saved and wrote NFO." : "Saved to the organizer projection only.")
+        } catch (error) {
+            const status = (error as { response?: { status?: number } }).response?.status
+            if (status === 409) {
+                await loadItems(activeKind)
+                notify.error("Revision conflict", "The item changed elsewhere. The latest projection was reloaded.")
+                return
+            }
+            await loadItems(activeKind)
+            notify.error("Could not save projection", errorMessage(error))
+        }
+    }, [activeKind, loadItems, updateActiveSession])
     const openMediaSettings = useCallback(() => {
         navigate("/settings?section=media")
     }, [navigate])
     const selectCandidateForRow = useCallback((row: MediaRow, candidate: OrganizerCandidate) => {
         updateActiveSession((session) => {
             const selectedCandidates = { ...session.selectedCandidates }
-            for (const file of row.files) selectedCandidates[file.path] = candidate
+            for (const file of row.files) selectedCandidates[file.item_uid ?? file.path] = candidate
             return {
                 ...session,
                 selectedCandidates,
@@ -400,50 +395,33 @@ export default function OrganizePage() {
         setMatchDialogOpen(false)
         const items = targetRows.flatMap((row) => row.files)
         const selectedCandidates = selectedCandidateMap(targetRows)
-        const taskId = notify.task("Scrape queued", `${items.length} file(s) queued`)
-        try {
-            const job = await jobsRepo.createScrapeJob(items, {
+        const finished = await runJob("scrape", "Scrape queued", `${items.length} file(s) queued`, (key) =>
+            jobsRepo.createScrapeJob(items, {
                 source,
+                language: options.language ?? config?.language,
                 overwrite: !options.missingOnly,
                 selectedCandidates,
-            })
-            notify.update(taskId, { jobId: job.id })
-            const finished = await pollOrganizerJob(job.id, taskId)
-            notify.update(taskId, { message: scrapeResultMessage(finished), detail: "" })
-            if (finished.status === "error" || finished.status === "canceled") return
-            const refreshed = await organizerRepo.items(kind)
-            updateKindSession(kind, (session) => ({
-                ...session,
-                items: refreshed,
-                selectedKey: null,
-                selectedKeys: [],
-                renamePlan: null,
-                renamePlanKey: null,
-            }))
-            if (scrapeSequential && scrapeDialogIndex < scrapeDialogKeys.length - 1) {
-                setScrapeDialogIndex((index) => index + 1)
-                setMatchDialogOpen(true)
-            } else {
-                setScrapeDialogKeys([])
-                setScrapeDialogIndex(0)
-                setScrapeSequential(false)
-            }
-        } catch (error) {
-            notify.update(taskId, {
-                kind: "error",
-                status: "error",
-                title: "Scrape failed",
-                message: errorMessage(error),
-                progress: 100,
-            })
+            }, key))
+        if (!finished) return
+        await loadItems(kind)
+        if (finished.status === "completed_with_errors") notify.info("Scrape partially completed", scrapeResultMessage(finished))
+        if (scrapeSequential && scrapeDialogIndex < scrapeDialogKeys.length - 1) {
+            setScrapeDialogIndex((index) => index + 1)
+            setMatchDialogOpen(true)
+        } else {
+            setScrapeDialogKeys([])
+            setScrapeDialogIndex(0)
+            setScrapeSequential(false)
         }
     }, [
         activeKind,
+        config?.language,
         scrapeDialogIndex,
         scrapeDialogKeys.length,
         scrapeSource,
         scrapeSequential,
-        updateKindSession,
+        loadItems,
+        runJob,
     ])
         return (
         <OrganizePageView
@@ -459,7 +437,12 @@ export default function OrganizePage() {
             actionRows={actionRows}
             loadedKinds={loadedKinds}
             expandedKeys={expandedKeys}
-            loading={loading}
+            loading={loading ?? (isCommandActive("sync") ? "update-sources" : isCommandActive("scrape") ? "scrape" : isCommandActive("rename") ? "rename" : null)}
+            loadError={loadError}
+            canScrape={canScrape}
+            canRename={canRename}
+            searchQuery={activeSession.query ?? ""}
+            sortMode={activeSession.order ?? "name"}
             renameLogs={renameLogs}
             renameMenuOpen={renameMenuOpen}
             detailsOpen={detailsOpen}
@@ -480,8 +463,9 @@ export default function OrganizePage() {
             setScrapeSequential={setScrapeSequential}
             setOperationStatus={setOperationStatus}
             updateActiveSession={updateActiveSession}
-            updateKindSession={updateKindSession}
             updateSources={updateSources}
+            refreshItems={() => loadItems(activeKind)}
+            retrySetup={loadOrganizerSetup}
             scrape={scrape}
             rename={rename}
             toggleRenameMenu={toggleRenameMenu}
@@ -493,4 +477,13 @@ export default function OrganizePage() {
             applyScrape={applyScrape}
         />
     )
+}
+
+function renameResultMessage(job: import("@/api/jobs").Job) {
+    const result = job.result ?? {}
+    const completed = result.completed ?? result.renamed ?? 0
+    const skipped = result.skipped ?? 0
+    const conflicts = result.conflicts ?? 0
+    const failed = result.failed ?? 0
+    return `Completed ${completed}, skipped ${skipped}, conflicts ${conflicts}, failed ${failed}`
 }

@@ -10,6 +10,7 @@ import { TopHeaderBar } from "@/components/navigation/top-header-bar"
 import { navItems } from "@/components/navigation/nav-items"
 import { GlobalMusicPlayer } from "@/components/player/global-music-player"
 import { usePlayerStore } from "@/stores/player"
+import { useLibraryEvents } from "@/hooks/use-library-events"
 import MediaLibraryPage from "@/pages/media-library"
 import AlbumsPage from "@/pages/albums"
 
@@ -28,6 +29,7 @@ function isInteractiveSwipeTarget(target: EventTarget | null) {
 }
 
 export default function AppLayout() {
+    useLibraryEvents()
     const location = useLocation()
     const isTabRoute = TAB_ROUTES.includes(location.pathname)
     const activeTabIndex = getActiveIndex(location.pathname)

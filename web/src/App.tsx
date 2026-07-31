@@ -30,12 +30,14 @@ function lazyRoute(node: ReactNode) {
 function RequireAuth({ children }: { children: ReactNode }) {
     const token = useAuthStore((s) => s.token)
     const user = useAuthStore((s) => s.user)
+    const loading = useAuthStore((s) => s.loading)
     const fetchUser = useAuthStore((s) => s.fetchUser)
     useEffect(() => {
         if (token && !user) void fetchUser()
     }, [fetchUser, token, user])
 
     if (!token) return <Navigate to="/login" replace />
+    if (loading || !user) return <PageLoading />
     return <>{children}</>
 }
 

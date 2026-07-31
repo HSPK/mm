@@ -56,10 +56,13 @@ class OrganizerMediaInfo(PydanticBase):
 
 class OrganizerItem(PydanticBase):
     path: str
+    item_uid: str | None = None
+    revision: int | None = None
     playback_id: str | None = None
     media_type: str
     title: str
     artist: str | None = None
+    album_artist: str | None = None
     album: str | None = None
     year: int | None = None
     season: int | None = None
@@ -70,9 +73,15 @@ class OrganizerItem(PydanticBase):
     parse_template: str | None = None
     parse_relative_path: str | None = None
     confidence: float = 0.0
+    duration: float | None = None
+    mime_type: str | None = None
     is_new: bool = False
     metadata: bool = False
     metadata_title: str | None = None
+    metadata_title_variants: dict[str, str] = Field(default_factory=dict)
+    metadata_artist_variants: dict[str, str] = Field(default_factory=dict)
+    metadata_album_artist_variants: dict[str, str] = Field(default_factory=dict)
+    metadata_album_variants: dict[str, str] = Field(default_factory=dict)
     metadata_original_title: str | None = None
     metadata_show_title: str | None = None
     metadata_year: int | None = None
@@ -107,14 +116,65 @@ class OrganizerScanResponse(PydanticBase):
     items: list[OrganizerItem]
 
 
+class OrganizerItemsResponse(PydanticBase):
+    items: list[OrganizerItem]
+
+
+class OrganizerRevealDirectoryBody(PydanticBase):
+    item_uids: list[str] = Field(min_length=1)
+
+
 class OrganizerDetailsBody(PydanticBase):
+    items: list[OrganizerItem]
+
+
+class OrganizerItemPatch(PydanticBase):
+    revision: int
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    year: int | None = None
+    metadata_title: str | None = None
+    metadata_original_title: str | None = None
+    metadata_show_title: str | None = None
+    metadata_premiered: str | None = None
+    metadata_certification: str | None = None
+    metadata_runtime: int | None = None
+    metadata_genres: list[str] | None = None
+    metadata_status: str | None = None
+    metadata_countries: list[str] | None = None
+    metadata_tagline: str | None = None
+    metadata_plot: str | None = None
+    metadata_tags: list[str] | None = None
+    metadata_ids: dict[str, str] | None = None
+    metadata_rating: float | None = None
+    metadata_rating_source: str | None = None
+    metadata_studios: list[str] | None = None
+    metadata_cast: list[str] | None = None
+    write_nfo: bool = False
+
+
+class OrganizerItemPatchRequest(OrganizerItemPatch):
+    item_uid: str
+
+
+class OrganizerItemsPatchBody(PydanticBase):
+    items: list[OrganizerItemPatchRequest]
+
+
+class OrganizerItemsPatchResponse(PydanticBase):
     items: list[OrganizerItem]
 
 
 class OrganizerMatchBody(PydanticBase):
     items: list[OrganizerItem]
     source: str | None = None
-    language: str | None = None
+    language: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=32,
+        pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+    )
     limit: int = 3
 
 
@@ -126,11 +186,13 @@ class OrganizerCandidate(PydanticBase):
     original_title: str = ""
     show_title: str = ""
     artist: str = ""
+    album_artist: str = ""
     album: str = ""
     year: int | None = None
     disc: int | None = None
     track: int | None = None
     overview: str = ""
+    tagline: str = ""
     poster_url: str = ""
     backdrop_url: str = ""
     logo_url: str = ""
@@ -153,6 +215,10 @@ class OrganizerCandidate(PydanticBase):
     synced_lyrics: str = ""
     rating: float | None = None
     confidence: float = 0.0
+    title_variants: dict[str, str] = Field(default_factory=dict)
+    artist_variants: dict[str, str] = Field(default_factory=dict)
+    album_artist_variants: dict[str, str] = Field(default_factory=dict)
+    album_variants: dict[str, str] = Field(default_factory=dict)
 
 
 class OrganizerMatchResult(PydanticBase):
@@ -246,6 +312,9 @@ class OrganizerApplyResponse(PydanticBase):
     affected: int
     message: str
     batch_id: str | None = None
+    nfo_affected: int = 0
+    lyrics_affected: int = 0
+    artwork_affected: int = 0
 
 
 class OrganizerRenameLogEntry(PydanticBase):
@@ -258,6 +327,12 @@ class OrganizerRenameLogEntry(PydanticBase):
 class OrganizerScrapeJobBody(PydanticBase):
     items: list[OrganizerItem]
     source: str | None = None
+    language: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=32,
+        pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+    )
     overwrite: bool = True
     selected_candidates: dict[str, OrganizerCandidate] = Field(default_factory=dict)
 
@@ -341,35 +416,6 @@ class OrganizerConfigPatch(PydanticBase):
     templates: dict[str, str] | None = None
     default_scrapers: dict[str, str] | None = None
     media_sources: dict[str, list[str]] | None = None
-
-
-class OrganizerMusicTrack(PydanticBase):
-    playback_id: str | None = None
-    path: str
-    title: str
-    artist: str | None = None
-    album: str | None = None
-    year: int | None = None
-    disc: int | None = None
-    track: int | None = None
-    metadata: bool = False
-    images: bool = False
-    lyrics: bool = False
-
-
-class OrganizerMusicAlbum(PydanticBase):
-    key: str
-    title: str
-    artist: str
-    year: int | None = None
-    count: int = 0
-    cover_path: str | None = None
-    cover_playback_id: str | None = None
-    tracks: list[OrganizerMusicTrack] = Field(default_factory=list)
-
-
-class OrganizerMusicAlbumsResponse(PydanticBase):
-    albums: list[OrganizerMusicAlbum] = Field(default_factory=list)
 
 
 class OrganizerArtworkBatchBody(PydanticBase):

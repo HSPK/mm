@@ -5,7 +5,8 @@ from pathlib import Path
 from PIL import Image
 
 from mm.config import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
-from mm.server.organizer_metadata import OrganizerScanContext
+from mm.music.grouping import music_album_directory, music_album_disc_directories
+from mm.server.organizer_metadata import OrganizerScanContext, normalized_path_key
 from mm.server.organizer_schemas import OrganizerArtworkAsset, OrganizerFileAsset
 
 _SUBTITLE_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"}
@@ -25,7 +26,7 @@ def _artwork_assets(
             kind = _artwork_kind(child)
             if not kind:
                 continue
-            resolved = child.resolve()
+            resolved = normalized_path_key(child)
             if resolved in seen:
                 continue
             seen.add(resolved)
@@ -48,13 +49,17 @@ def _has_artwork(
     context: OrganizerScanContext | None = None,
 ) -> bool:
     return any(
-        _artwork_files(directory, context)
-        for directory in _artwork_directories(path, media_type)
+        _artwork_files(directory, context) for directory in _artwork_directories(path, media_type)
     )
 
 
 def _artwork_directories(path: Path, media_type: str) -> list[Path]:
     directories = [path.parent]
+    if media_type == "track":
+        album_directory = music_album_directory(path)
+        if album_directory != path.parent:
+            directories.append(album_directory)
+            directories.extend(music_album_disc_directories(path))
     if media_type == "tv":
         directories.append(path.parent.parent)
     return directories
@@ -68,14 +73,17 @@ def _directory_children(
         return context.list_children(directory)
     if not directory.is_dir():
         return []
-    return sorted(directory.iterdir(), key=lambda item: item.name.lower())
+    return sorted(
+        (child for child in directory.iterdir() if not child.name.startswith("._")),
+        key=lambda item: item.name.lower(),
+    )
 
 
 def _artwork_files(
     directory: Path,
     context: OrganizerScanContext | None = None,
 ) -> list[Path]:
-    key = directory.expanduser().resolve()
+    key = normalized_path_key(directory)
     if context and key in context.artwork_files:
         return context.artwork_files[key]
     files = [
@@ -105,7 +113,7 @@ def _related_files(
         for child in children:
             if not child.is_file() or child.name.startswith("._"):
                 continue
-            resolved = child.resolve()
+            resolved = normalized_path_key(child)
             if resolved in seen:
                 continue
             seen.add(resolved)
@@ -132,14 +140,15 @@ def _track_related_files(
         path.with_suffix(".lrc"),
         path.with_name(f"{path.stem}.lyrics.txt"),
         path.with_name(f"{path.stem}.lyric.txt"),
-        path.parent / "album.nfo",
+        music_album_directory(path) / "album.nfo",
     ]
-    candidates.extend(_artwork_files(path.parent, context))
+    for directory in _artwork_directories(path, "track"):
+        candidates.extend(_artwork_files(directory, context))
     seen: set[Path] = set()
     for child in candidates:
         if not child.is_file() or child.name.startswith("._"):
             continue
-        resolved = child.resolve()
+        resolved = normalized_path_key(child)
         if resolved in seen:
             continue
         seen.add(resolved)
@@ -171,9 +180,11 @@ def _file_kind(path: Path) -> str:
         return _artwork_kind(path) or "image"
     return suffix.lstrip(".") or "file"
 
+
 def _artwork_kind(path: Path) -> str:
     stem = path.stem.lower()
     for kind in (
+        "cd",
         "poster",
         "fanart",
         "banner",
@@ -184,7 +195,7 @@ def _artwork_kind(path: Path) -> str:
         "cover",
     ):
         if stem == kind or stem.endswith(f"-{kind}") or stem.endswith(f".{kind}"):
-            return "poster" if kind in {"folder", "cover"} else kind
+            return "poster" if kind in {"cd", "folder", "cover"} else kind
     return ""
 
 
@@ -192,7 +203,7 @@ def _image_size(
     path: Path,
     context: OrganizerScanContext | None = None,
 ) -> tuple[int | None, int | None]:
-    key = path.expanduser().resolve()
+    key = normalized_path_key(path)
     if context and key in context.image_sizes:
         return context.image_sizes[key]
     try:
@@ -240,11 +251,14 @@ def _subtitle_in_directory(
 
 
 def _single_video_directory(directory: Path, context: OrganizerScanContext | None = None) -> bool:
-    return sum(
-        1
-        for candidate in _directory_children(directory, context)
-        if candidate.is_file() and candidate.suffix.lower() in VIDEO_EXTENSIONS
-    ) <= 1
+    return (
+        sum(
+            1
+            for candidate in _directory_children(directory, context)
+            if candidate.is_file() and candidate.suffix.lower() in VIDEO_EXTENSIONS
+        )
+        <= 1
+    )
 
 
 def _has_lyrics(path: Path, context: OrganizerScanContext | None = None) -> bool:

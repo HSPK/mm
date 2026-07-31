@@ -2,14 +2,12 @@ import type { VideoLibraryItem } from "@/api/videos"
 import type { ShowGroup } from "./video-page-model"
 import { readVideoState } from "./video-user-state"
 
-export type VideoFilter = "all" | "favorites" | "unwatched"
+export type VideoFilter = "all" | "favorites"
 
 export function filterCollectionMovies(items: VideoLibraryItem[], collection: string) {
     if (collection === "All") return items
     return items.filter((item) => {
-        const state = readVideoState(item.playback_id)
-        if (collection === "Favorites") return state.favorite
-        if (collection === "Unwatched") return !state.watched
+        if (collection === "Favorites") return readVideoState(item.playback_id).favorite
         return item.metadata_genres?.some((genre) => genre.trim() === collection) ?? false
     })
 }
@@ -17,22 +15,13 @@ export function filterCollectionMovies(items: VideoLibraryItem[], collection: st
 export function filterCollectionShows(shows: ShowGroup[], collection: string) {
     if (collection === "All") return shows
     return shows.filter((show) => {
-        const states = show.episodes.map((episode) => readVideoState(episode.playback_id))
-        if (collection === "Favorites") return states.some((state) => state.favorite)
-        if (collection === "Unwatched") return states.some((state) => !state.watched)
+        if (collection === "Favorites") {
+            return show.episodes.some((episode) => readVideoState(episode.playback_id).favorite)
+        }
         return show.episodes.some((episode) => (
             episode.metadata_genres?.some((genre) => genre.trim() === collection) ?? false
         ))
     })
-}
-
-export function hasProgress(item: VideoLibraryItem) {
-    const state = readVideoState(item.playback_id)
-    return state.progress > 30 && (!state.duration || state.progress < state.duration - 60)
-}
-
-export function showHasProgress(show: ShowGroup) {
-    return show.episodes.some(hasProgress)
 }
 
 export function recentItems(items: VideoLibraryItem[]) {

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Header
 
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
-from mm.server.dependencies import get_current_user, get_db
+from mm.server.dependencies import get_current_user, get_db, require_admin
 from mm.server.job_system import job_service
+from mm.server.organizer_paths import AuthorizedMediaPath
 from mm.server.organizer_schemas import (
     JobEventResponse,
     OrganizerJobResponse,
@@ -15,7 +16,11 @@ from mm.server.organizer_schemas import (
 )
 from mm.server.utility_schemas import ThumbnailBuildBody
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(
+    prefix="/api/jobs",
+    tags=["jobs"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 @router.post("/scrape", response_model=OrganizerJobResponse)
@@ -24,13 +29,17 @@ async def create_scrape_job(
     background_tasks: BackgroundTasks,
     _u: User | None = Depends(get_current_user),
     db: AsyncDBClient = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> OrganizerJobResponse:
+    for item in body.items:
+        AuthorizedMediaPath.resolve(item.path, must_exist=True, file=True)
     return await job_service.create(
         db,
         kind="scrape",
         title="Scrape",
         payload=body.model_dump_json(),
         background_tasks=background_tasks,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -40,13 +49,22 @@ async def create_sync_job(
     background_tasks: BackgroundTasks,
     _u: User | None = Depends(get_current_user),
     db: AsyncDBClient = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> OrganizerJobResponse:
+    authorized = [AuthorizedMediaPath.resolve(path, must_exist=True) for path in body.paths]
+    if any(path.path != path.root for path in authorized):
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            400, "Sync requires configured media roots; use /organizer/scan for discovery"
+        )
     return await job_service.create(
         db,
         kind="sync",
         title="Sync",
         payload=body.model_dump_json(),
         background_tasks=background_tasks,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -56,13 +74,17 @@ async def create_rename_job(
     background_tasks: BackgroundTasks,
     _u: User | None = Depends(get_current_user),
     db: AsyncDBClient = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> OrganizerJobResponse:
+    for item in body.items:
+        AuthorizedMediaPath.resolve(item.path, must_exist=True, file=True)
     return await job_service.create(
         db,
         kind="rename",
         title="Rename",
         payload=body.model_dump_json(),
         background_tasks=background_tasks,
+        idempotency_key=idempotency_key,
     )
 
 

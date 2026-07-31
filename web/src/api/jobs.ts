@@ -6,7 +6,7 @@ import type { ThumbnailBuildOptions } from "@/api/library"
 export interface Job {
     id: string
     kind: string
-    status: "queued" | "running" | "done" | "error" | string
+    status: "queued" | "running" | "canceling" | "done" | "error" | "canceled" | "completed_with_errors" | string
     progress: number
     title: string
     message: string
@@ -18,9 +18,9 @@ export interface Job {
 }
 
 export interface JobsRepository {
-    createScrapeJob(items: OrganizerItem[], opts?: OrganizerPlanOptions): Promise<Job>
-    createSyncJob(paths: string[], recursive: boolean): Promise<Job>
-    createRenameJob(items: OrganizerItem[], opts?: { root?: string }): Promise<Job>
+    createScrapeJob(items: OrganizerItem[], opts?: OrganizerPlanOptions, idempotencyKey?: string): Promise<Job>
+    createSyncJob(paths: string[], recursive: boolean, idempotencyKey?: string): Promise<Job>
+    createRenameJob(items: OrganizerItem[], opts?: { root?: string }, idempotencyKey?: string): Promise<Job>
     createThumbnailJob(opts: ThumbnailBuildOptions): Promise<Job>
     job(id: string): Promise<Job>
     list(limit?: number, status?: string): Promise<Job[]>
@@ -30,17 +30,22 @@ export interface JobsRepository {
 
 export function createJobsRepository(api: AxiosInstance = defaultApi): JobsRepository {
     return {
-        createScrapeJob: async (items, opts = {}) =>
+        createScrapeJob: async (items, opts = {}, idempotencyKey) =>
             (await api.post<Job>("/jobs/scrape", {
                 items,
                 source: opts.source,
+                language: opts.language,
                 overwrite: opts.overwrite ?? true,
                 selected_candidates: opts.selectedCandidates ?? {},
+            }, { headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined })).data,
+        createSyncJob: async (paths, recursive, idempotencyKey) =>
+            (await api.post<Job>("/jobs/sync", { paths, recursive }, {
+                headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
             })).data,
-        createSyncJob: async (paths, recursive) =>
-            (await api.post<Job>("/jobs/sync", { paths, recursive })).data,
-        createRenameJob: async (items, opts = {}) =>
-            (await api.post<Job>("/jobs/rename", { items, root: opts.root })).data,
+        createRenameJob: async (items, opts = {}, idempotencyKey) =>
+            (await api.post<Job>("/jobs/rename", { items, root: opts.root }, {
+                headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+            })).data,
         createThumbnailJob: async (opts) =>
             (await api.post<Job>("/jobs/thumbnails", {
                 videos_only: opts.videosOnly ?? false,

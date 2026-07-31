@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
-import { Captions, Music } from "lucide-react"
+import { Captions, FolderOpen, Music } from "lucide-react"
 import { organizerRepo, type OrganizerItem } from "@/api/organizer"
 import { Card } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+import { cn, isLocalMachine } from "@/lib/utils"
+import { toast } from "@/stores/toast"
 import { type MediaRow, cleanTrackTitle, basename, commonFolder, rowFromFiles } from "./organize-model"
 import {
     artworkImageSrc,
@@ -93,20 +94,25 @@ export function MusicDetailsSidebar({
 }) {
     const [lyricsTarget, setLyricsTarget] = useState<OrganizerItem | null>(null)
     const [tab, setTab] = useState<"details" | "files">("details")
-    const [detailFiles, setDetailFiles] = useState<OrganizerItem[] | null>(null)
+    const [detailResult, setDetailResult] = useState<{
+        key: string
+        files: OrganizerItem[]
+    } | null>(null)
     useEffect(() => {
         let cancelled = false
-        setDetailFiles(null)
         if (!row) return undefined
         void organizerRepo.details(row.files)
             .then((items) => {
-                if (!cancelled) setDetailFiles(items)
+                if (!cancelled) setDetailResult({ key: row.key, files: items })
             })
             .catch(() => undefined)
         return () => {
             cancelled = true
         }
-    }, [row?.key, row?.files])
+    }, [row])
+    const detailFiles = detailResult && detailResult.key === row?.key
+        ? detailResult.files
+        : null
     const detailRow = row && detailFiles
         ? rowFromFiles(row.key, row.kind, detailFiles, new Map(), {}, {
             expandable: row.expandable,
@@ -115,7 +121,7 @@ export function MusicDetailsSidebar({
         : row
     if (!detailRow) {
         return (
-            <Card className="flex min-h-[28rem] items-center justify-center rounded-[1.25rem] p-6 text-center text-sm text-muted-foreground">
+            <Card className="flex h-full min-h-[28rem] items-center justify-center rounded-[1.25rem] p-6 text-center text-sm text-muted-foreground xl:min-h-0">
                 Select an album or track to view details.
             </Card>
         )
@@ -124,11 +130,19 @@ export function MusicDetailsSidebar({
     const artist = musicArtists(detailRow).join(", ")
     const album = detailRow.files[0]?.album || detailRow.title
     const cover = rowArtworkAssets(detailRow).find((asset) => asset.kind === "poster") ?? rowArtworkAssets(detailRow)[0]
+    const itemUids = detailRow.files
+        .map((file) => file.item_uid)
+        .filter((itemUid): itemUid is string => Boolean(itemUid))
+    const revealDirectory = () => {
+        void organizerRepo.revealDirectory(itemUids)
+            .catch(() => toast.error("Couldn’t open the album folder"))
+    }
     return (
         <>
-            <Card className="sticky top-20 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-[1.25rem] p-4">
+            <Card className="h-full min-h-[28rem] max-h-[calc(100vh-7rem)] overflow-y-auto rounded-[1.25rem] p-4 xl:min-h-0 xl:max-h-none">
                 <div className="space-y-5">
-                <div className="flex rounded-full bg-secondary/45 p-1">
+                <div className="flex items-center gap-2">
+                <div className="flex flex-1 rounded-full bg-secondary/45 p-1">
                     {(["details", "files"] as const).map((item) => (
                         <button
                             key={item}
@@ -142,6 +156,18 @@ export function MusicDetailsSidebar({
                             {item}
                         </button>
                     ))}
+                </div>
+                {isLocalMachine() && itemUids.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={revealDirectory}
+                        title="Open album folder"
+                        aria-label="Open album folder"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary/45 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                        <FolderOpen className="h-4 w-4" />
+                    </button>
+                )}
                 </div>
 
                 {tab === "details" ? (

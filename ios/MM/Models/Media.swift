@@ -4,6 +4,7 @@ import Foundation
 /// `serialize_media_brief` Python function).
 struct Media: Identifiable, Codable, Hashable, Sendable {
     let id: Int
+    let path: String
     let filename: String
     let extension_: String
     let mediaType: String
@@ -22,7 +23,7 @@ struct Media: Identifiable, Codable, Hashable, Sendable {
     let deletedAt: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, filename, rating, width, height, duration
+        case id, path, filename, rating, width, height, duration
         case extension_ = "extension"
         case mediaType = "media_type"
         case fileSize = "file_size"

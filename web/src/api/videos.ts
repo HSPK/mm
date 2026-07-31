@@ -50,4 +50,6 @@ export const videoRepo = {
             playback_ids: playbackIds,
             size,
         })).data.items,
+    reveal: async (playbackId: string) =>
+        (await api.post<{ revealed: boolean }>("/videos/reveal", null, { params: { playback_id: playbackId } })).data,
 }

@@ -22,5 +22,7 @@ nav:
       - Web UI Guide: tutorials/web-ui.md
   - Architecture:
       - Design Overview: architecture/overview.md
+      - API Boundaries: architecture/api-boundaries.md
+      - Organizer Control Plane: organizer-control-plane.md
   - Development:
       - Developer Setup: development/setup.md

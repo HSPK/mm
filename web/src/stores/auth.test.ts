@@ -10,6 +10,7 @@ function makeRepo(overrides: Partial<AuthRepository> = {}): AuthRepository {
             user: { id: 1, username: "u", display_name: "User", is_admin: false },
         })),
         me: vi.fn(async () => ({ id: 1, username: "u", display_name: "User", is_admin: false })),
+        logout: vi.fn(async () => undefined),
         ...overrides,
     }
 }
@@ -28,6 +29,7 @@ describe("createAuthStore", () => {
         const s = createAuthStore({ repo: makeRepo(), tokenStorage: seeded })
         expect(s.getState().token).toBe("seed-token")
         expect(s.getState().isAuthenticated).toBe(true)
+        expect(s.getState().loading).toBe(true)
     })
 
     it("login stores token then fetches the user", async () => {
@@ -71,5 +73,16 @@ describe("createAuthStore", () => {
         storage.set("tok-1")
         await store.getState().fetchUser()
         expect(store.getState().token).toBeNull()
+        expect(store.getState().loading).toBe(false)
+    })
+
+    it("restores the user before protected resources render", async () => {
+        const seeded = createMemoryTokenStorage("seed-token")
+        const restored = createAuthStore({ repo: makeRepo(), tokenStorage: seeded })
+
+        await restored.getState().fetchUser()
+
+        expect(restored.getState().user?.username).toBe("u")
+        expect(restored.getState().loading).toBe(false)
     })
 })

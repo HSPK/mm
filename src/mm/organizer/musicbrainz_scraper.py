@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from mm.config import ScraperSourceConfig
+from mm.organizer.localization import localized_variants, select_localized_name
 from mm.organizer.scraper_core import (
     HttpJsonClient,
     ScrapeCandidate,
@@ -19,9 +21,16 @@ from mm.organizer.scraper_core import (
 class MusicBrainzScraper:
     name = "musicbrainz"
 
-    def __init__(self, source: ScraperSourceConfig, *, timeout: float) -> None:
+    def __init__(
+        self,
+        source: ScraperSourceConfig,
+        *,
+        timeout: float,
+        language: str = "en",
+    ) -> None:
         self.source = source
         self.client = HttpJsonClient(timeout)
+        self.language = language
         self.user_agent = (
             source.credentials.get("user_agent", "").strip()
             or "litemm/0.1 (https://github.com/HSPK/mm)"
@@ -54,6 +63,8 @@ class MusicBrainzScraper:
             title = str(item.get("title") or "")
             year = year_from_date(str(item.get("first-release-date") or ""))
             artist = _artist_credit(item)
+            title_variants = localized_variants(title)
+            artist_variants = localized_variants(artist)
             candidates.append(
                 ScrapeCandidate(
                     source=self.name,
@@ -61,12 +72,28 @@ class MusicBrainzScraper:
                     media_type="album",
                     title=title,
                     artist=artist,
+                    album_artist=artist,
                     year=year,
                     poster_url=f"https://coverartarchive.org/release-group/{item['id']}/front-250",
                     genres=_musicbrainz_names(item.get("genres")),
                     styles=_musicbrainz_names(item.get("tags")),
                     tags=_musicbrainz_names(item.get("tags")),
-                    confidence=music_confidence(query, title=title, artist=artist, album=title),
+                    confidence=_musicbrainz_confidence(
+                        item,
+                        query,
+                        title=title,
+                        artist=artist,
+                        album=title,
+                    ),
+                    external_ids={
+                        "musicbrainz_release_group": str(item["id"]),
+                        **_artist_external_id(item),
+                        **_album_artist_external_id(item),
+                    },
+                    title_variants=title_variants,
+                    artist_variants=artist_variants,
+                    album_artist_variants=artist_variants,
+                    album_variants=title_variants,
                 )
             )
         return candidates
@@ -102,6 +129,9 @@ class MusicBrainzScraper:
                 if isinstance(release, dict)
                 else None
             )
+            title_variants = localized_variants(title)
+            artist_variants = localized_variants(artist)
+            album_variants = localized_variants(album)
             candidates.append(
                 ScrapeCandidate(
                     source=self.name,
@@ -109,16 +139,134 @@ class MusicBrainzScraper:
                     media_type="track",
                     title=title,
                     artist=artist,
+                    album_artist=artist,
                     album=album,
                     year=year,
                     genres=_musicbrainz_names(item.get("genres")),
                     styles=_musicbrainz_names(item.get("tags")),
                     tags=_musicbrainz_names(item.get("tags")),
                     composers=_composer_names(item),
-                    confidence=music_confidence(query, title=title, artist=artist, album=album),
+                    confidence=_musicbrainz_confidence(
+                        item,
+                        query,
+                        title=title,
+                        artist=artist,
+                        album=album,
+                    ),
+                    external_ids={
+                        "musicbrainz_recording": str(item["id"]),
+                        **_artist_external_id(item),
+                        **_release_external_ids(release),
+                    },
+                    title_variants=title_variants,
+                    artist_variants=artist_variants,
+                    album_artist_variants=artist_variants,
+                    album_variants=album_variants,
                 )
             )
         return candidates
+
+    def details(
+        self,
+        candidate: ScrapeCandidate,
+        *,
+        query: ScrapeQuery | None = None,
+    ) -> ScrapeCandidate:
+        entity = "release-group" if candidate.media_type == "album" else "recording"
+        data = self.client.get(
+            f"{self.source.base_url.rstrip('/')}/{entity}/{candidate.source_id}",
+            {
+                "fmt": "json",
+                "inc": "aliases+artist-credits+genres+tags+releases",
+            },
+            {"User-Agent": self.user_agent},
+        )
+        title = str(data.get("title") or candidate.title)
+        title_variants = localized_variants(title, data.get("aliases"))
+        credits = _artist_credits(data)
+        if not credits and candidate.external_ids.get("musicbrainz_artist"):
+            credits = [
+                (
+                    candidate.artist,
+                    candidate.external_ids["musicbrainz_artist"],
+                )
+            ]
+        artist = ", ".join(name for name, _artist_id_value in credits if name)
+        artist = artist or candidate.artist
+        credit_variants: list[tuple[str, dict[str, str]]] = []
+        for credit_name, artist_id in credits:
+            variants = localized_variants(credit_name)
+            if not artist_id:
+                credit_variants.append((credit_name, variants))
+                continue
+            artist_data = self.client.get(
+                f"{self.source.base_url.rstrip('/')}/artist/{artist_id}",
+                {"fmt": "json", "inc": "aliases"},
+                {"User-Agent": self.user_agent},
+            )
+            canonical_name = str(artist_data.get("name") or credit_name)
+            credit_variants.append(
+                (
+                    canonical_name,
+                    localized_variants(canonical_name, artist_data.get("aliases")),
+                )
+            )
+        artist_variants = _combine_artist_variants(credit_variants)
+        album_variants = (
+            title_variants
+            if candidate.media_type == "album"
+            else candidate.album_variants or localized_variants(candidate.album)
+        )
+        localized_title = select_localized_name(
+            title_variants,
+            self.language,
+            title,
+        )
+        localized_artist = select_localized_name(
+            artist_variants,
+            self.language,
+            artist,
+        )
+        localized_album = select_localized_name(
+            album_variants,
+            self.language,
+            candidate.album,
+        )
+        external_ids = {
+            **candidate.external_ids,
+            f"musicbrainz_{'release_group' if entity == 'release-group' else 'recording'}": (
+                candidate.source_id
+            ),
+        }
+        artist_ids = [artist_id for _name, artist_id in credits if artist_id]
+        if artist_ids:
+            external_ids["musicbrainz_artist"] = artist_ids[0]
+            external_ids["musicbrainz_artist_credit"] = "+".join(artist_ids)
+            if candidate.media_type == "album":
+                external_ids["musicbrainz_album_artist_credit"] = "+".join(artist_ids)
+        return replace(
+            candidate,
+            title=localized_title,
+            original_title=(
+                candidate.original_title or (title if localized_title != title else "")
+            ),
+            artist=localized_artist,
+            album_artist=(
+                localized_artist if candidate.media_type == "album" else candidate.album_artist
+            ),
+            album=localized_album,
+            genres=_musicbrainz_names(data.get("genres")) or candidate.genres,
+            tags=_musicbrainz_names(data.get("tags")) or candidate.tags,
+            external_ids=external_ids,
+            title_variants=title_variants,
+            artist_variants=artist_variants,
+            album_artist_variants=(
+                artist_variants
+                if candidate.media_type == "album"
+                else candidate.album_artist_variants
+            ),
+            album_variants=album_variants,
+        )
 
     def album_tracks(
         self,
@@ -220,13 +368,18 @@ def _track_candidates(album: ScrapeCandidate, media: dict[str, Any]) -> list[Scr
             continue
         recording = track.get("recording")
         recording = recording if isinstance(recording, dict) else {}
+        artist = _artist_credit(recording) or album.artist
+        artist_variants = (
+            localized_variants(artist) if _artist_credit(recording) else album.artist_variants
+        )
         result.append(
             ScrapeCandidate(
                 source=album.source,
                 source_id=str(recording.get("id") or f"{album.source_id}:{disc}:{index}"),
                 media_type="track",
                 title=title,
-                artist=_artist_credit(recording) or album.artist,
+                artist=artist,
+                album_artist=album.album_artist or album.artist,
                 album=album.album or album.title,
                 year=album.year,
                 disc=disc,
@@ -237,6 +390,17 @@ def _track_candidates(album: ScrapeCandidate, media: dict[str, Any]) -> list[Scr
                 tags=album.tags,
                 composers=album.composers,
                 confidence=1,
+                external_ids={
+                    **album.external_ids,
+                    **_artist_external_id(recording),
+                    "musicbrainz_recording": str(
+                        recording.get("id") or f"{album.source_id}:{disc}:{index}"
+                    ),
+                },
+                title_variants=localized_variants(title),
+                artist_variants=artist_variants,
+                album_artist_variants=album.album_artist_variants or album.artist_variants,
+                album_variants=album.album_variants or album.title_variants,
             )
         )
     return result
@@ -251,6 +415,82 @@ def _artist_credit(item: dict[str, Any]) -> str:
         for credit in credits
         if isinstance(credit, dict) and isinstance(credit.get("name"), str)
     )
+
+
+def _artist_credits(item: dict[str, Any]) -> list[tuple[str, str]]:
+    credits = item.get("artist-credit")
+    if not isinstance(credits, list):
+        return []
+    result: list[tuple[str, str]] = []
+    for credit in credits:
+        if not isinstance(credit, dict):
+            continue
+        artist = credit.get("artist")
+        artist = artist if isinstance(artist, dict) else {}
+        name = str(credit.get("name") or artist.get("name") or "")
+        artist_id = str(artist.get("id") or "")
+        if name:
+            result.append((name, artist_id))
+    return result
+
+
+def _artist_external_id(item: dict[str, Any]) -> dict[str, str]:
+    artist_ids = [artist_id for _name, artist_id in _artist_credits(item) if artist_id]
+    if not artist_ids:
+        return {}
+    return {
+        "musicbrainz_artist": artist_ids[0],
+        "musicbrainz_artist_credit": "+".join(artist_ids),
+    }
+
+
+def _album_artist_external_id(item: dict[str, Any]) -> dict[str, str]:
+    artist_ids = [artist_id for _name, artist_id in _artist_credits(item) if artist_id]
+    return {"musicbrainz_album_artist_credit": "+".join(artist_ids)} if artist_ids else {}
+
+
+def _combine_artist_variants(
+    credits: list[tuple[str, dict[str, str]]],
+) -> dict[str, str]:
+    if not credits:
+        return {}
+    locales = {"und"}
+    for _name, variants in credits:
+        locales.update(variants)
+    return {
+        locale: ", ".join(
+            select_localized_name(variants, locale, name) for name, variants in credits
+        )
+        for locale in locales
+    }
+
+
+def _release_external_ids(release: Any) -> dict[str, str]:
+    if not isinstance(release, dict):
+        return {}
+    ids: dict[str, str] = {}
+    if release.get("id"):
+        ids["musicbrainz_release"] = str(release["id"])
+    release_group = release.get("release-group")
+    if isinstance(release_group, dict) and release_group.get("id"):
+        ids["musicbrainz_release_group"] = str(release_group["id"])
+    return ids
+
+
+def _musicbrainz_confidence(
+    item: dict[str, Any],
+    query: ScrapeQuery,
+    *,
+    title: str,
+    artist: str,
+    album: str,
+) -> float:
+    local_score = music_confidence(query, title=title, artist=artist, album=album)
+    try:
+        server_score = float(item.get("score") or 0) / 100
+    except (TypeError, ValueError):
+        server_score = 0
+    return max(local_score, min(1.0, round(server_score * 0.95, 3)))
 
 
 def _musicbrainz_names(value: Any) -> list[str]:

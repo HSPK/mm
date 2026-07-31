@@ -10,8 +10,6 @@ export function VideoHome({
     kind,
     movies = [],
     shows = [],
-    continueMovies = [],
-    continueShows = [],
     recentMovies = [],
     recentShows = [],
     selectedPath = "",
@@ -27,8 +25,6 @@ export function VideoHome({
     kind: VideoPageKind
     movies?: VideoLibraryItem[]
     shows?: ShowGroup[]
-    continueMovies?: VideoLibraryItem[]
-    continueShows?: ShowGroup[]
     recentMovies?: VideoLibraryItem[]
     recentShows?: ShowGroup[]
     selectedPath?: string
@@ -46,14 +42,12 @@ export function VideoHome({
         <div className="space-y-8">
             {isTv ? (
                 <>
-                    <ShowSection title="Continue Watching" shows={continueShows} selectedKey={selectedKey} onSelect={onSelectShow} />
                     <ShowSection title="Recently Added" shows={recentShows} selectedKey={selectedKey} onSelect={onSelectShow} />
                     <CollectionsSection labels={collectionLabels} active={activeCollection} onSelect={onCollection} />
                     <ShowGrid shows={shows} selectedKey={selectedKey} onSelect={onSelectShow!} hasMore={hasMore} onLoadMore={onLoadMore} />
                 </>
             ) : (
                 <>
-                    <MovieSection title="Continue Watching" movies={continueMovies} selectedPath={selectedPath} onSelect={onSelectMovie} />
                     <MovieSection title="Recently Added" movies={recentMovies} selectedPath={selectedPath} onSelect={onSelectMovie} />
                     <CollectionsSection labels={collectionLabels} active={activeCollection} onSelect={onCollection} />
                     <MovieGrid movies={movies} selectedPath={selectedPath} onSelect={onSelectMovie!} hasMore={hasMore} onLoadMore={onLoadMore} />
@@ -174,7 +168,7 @@ function CollectionsSection({
         <section className="space-y-3">
             <SectionTitle title="Collections" />
             <div className="flex flex-wrap gap-2">
-                {["All", "Favorites", "Unwatched", ...labels].map((label) => (
+                {["All", "Favorites", ...labels].map((label) => (
                     <button
                         key={label}
                         type="button"

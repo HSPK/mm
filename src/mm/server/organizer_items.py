@@ -13,7 +13,12 @@ from mm.server.organizer_assets import (
     _related_files,
     _sidecar_lyrics,
 )
-from mm.server.organizer_metadata import LocalMetadata, OrganizerScanContext, _read_local_metadata
+from mm.server.organizer_metadata import (
+    LocalMetadata,
+    OrganizerScanContext,
+    _read_local_metadata,
+    normalized_path_key,
+)
 from mm.server.organizer_schemas import OrganizerItem
 
 
@@ -26,11 +31,13 @@ def _item_from_parsed(
     related_files = _related_files(item.path, item.media_type, context)
     plain_lyrics, synced_lyrics = _sidecar_lyrics(item.path, context)
     display_artist = _display_artist(item, metadata)
+    display_album_artist = metadata.album_artist or item.album_artist or display_artist
     display_album = _display_album(item, metadata)
-    metadata_title = _display_metadata_title(item, metadata, display_artist)
+    metadata_title = _display_metadata_title(item, metadata, display_artist, context)
     display_title = _display_title(item, metadata_title)
     display_title = _normalize_chinese(display_title, context)
     display_artist = _normalize_chinese(display_artist, context)
+    display_album_artist = _normalize_chinese(display_album_artist, context)
     display_album = _normalize_chinese(display_album, context)
     metadata_title = _normalize_chinese(metadata_title, context)
     return OrganizerItem(
@@ -38,6 +45,7 @@ def _item_from_parsed(
         media_type=item.media_type,
         title=display_title,
         artist=display_artist,
+        album_artist=display_album_artist or item.album_artist,
         album=display_album,
         year=metadata.year or item.year,
         season=item.season,
@@ -48,8 +56,14 @@ def _item_from_parsed(
         parse_template=item.parse_template,
         parse_relative_path=item.parse_relative_path,
         confidence=item.confidence,
+        duration=item.duration,
+        mime_type=item.mime_type,
         metadata=metadata.exists,
         metadata_title=metadata_title,
+        metadata_title_variants=metadata.title_variants or {},
+        metadata_artist_variants=metadata.artist_variants or {},
+        metadata_album_artist_variants=metadata.album_artist_variants or {},
+        metadata_album_variants=metadata.album_variants or {},
         metadata_original_title=metadata.original_title,
         metadata_show_title=metadata.show_title,
         metadata_year=metadata.year,
@@ -86,16 +100,19 @@ def _light_item_from_parsed(
     local_metadata = _read_local_metadata(item.path, item.media_type, context)
     if item.media_type == "track":
         display_artist = _display_artist(item, local_metadata)
+        display_album_artist = local_metadata.album_artist or item.album_artist or display_artist
         display_album = _display_album(item, local_metadata)
-        metadata_title = _display_metadata_title(item, local_metadata, display_artist)
+        metadata_title = _display_metadata_title(item, local_metadata, display_artist, context)
         display_title = _display_title(item, metadata_title)
     else:
         display_title = item.title
         display_artist = item.artist
+        display_album_artist = item.artist
         display_album = item.album
         metadata_title = None
     display_title = _normalize_chinese(display_title, context)
     display_artist = _normalize_chinese(display_artist, context)
+    display_album_artist = _normalize_chinese(display_album_artist, context)
     display_album = _normalize_chinese(display_album, context)
     metadata_title = _normalize_chinese(metadata_title, context)
     images = _has_artwork(item.path, item.media_type, context)
@@ -105,6 +122,7 @@ def _light_item_from_parsed(
         media_type=item.media_type,
         title=display_title or item.title,
         artist=display_artist,
+        album_artist=display_album_artist or item.album_artist,
         album=display_album,
         year=local_metadata.year or item.year,
         season=item.season,
@@ -115,8 +133,14 @@ def _light_item_from_parsed(
         parse_template=item.parse_template,
         parse_relative_path=item.parse_relative_path,
         confidence=item.confidence,
+        duration=item.duration,
+        mime_type=item.mime_type,
         metadata=local_metadata.exists,
         metadata_title=metadata_title,
+        metadata_title_variants=local_metadata.title_variants or {},
+        metadata_artist_variants=local_metadata.artist_variants or {},
+        metadata_album_artist_variants=local_metadata.album_artist_variants or {},
+        metadata_album_variants=local_metadata.album_variants or {},
         metadata_original_title=local_metadata.original_title,
         metadata_show_title=local_metadata.show_title,
         metadata_year=local_metadata.year,
@@ -146,11 +170,18 @@ def _display_metadata_title(
     item: ParsedMediaFile,
     metadata: LocalMetadata,
     artist: str | None,
+    context: OrganizerScanContext | None = None,
 ) -> str | None:
     if not metadata.title:
         return None
-    if item.media_type == "track" and not item.path.with_suffix(".nfo").exists():
-        return None
+    if item.media_type == "track":
+        nfo_path = item.path.with_suffix(".nfo")
+        if context is not None:
+            track_metadata = context.metadata.get(normalized_path_key(nfo_path))
+            if track_metadata is None or not track_metadata.exists:
+                return None
+        elif not nfo_path.exists():
+            return None
     if item.media_type == "track":
         if item.parse_template:
             return item.title

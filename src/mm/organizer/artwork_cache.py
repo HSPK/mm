@@ -10,12 +10,18 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from mm.config import get_config
+from mm.music.grouping import music_album_directory, music_album_disc_directories
 
 ARTWORK_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def artwork_directories(path: Path, media_type: str) -> list[Path]:
     directories = [path.parent]
+    if media_type == "track":
+        album_directory = music_album_directory(path)
+        if album_directory != path.parent:
+            directories.append(album_directory)
+            directories.extend(music_album_disc_directories(path))
     if media_type == "tv":
         directories.append(path.parent.parent)
     return directories
@@ -26,6 +32,15 @@ def first_artwork_path(path: Path, media_type: str) -> Path | None:
         files = artwork_files(directory)
         if files:
             return files[0]
+    return None
+
+
+def artwork_path_by_kind(path: Path, media_type: str, kind: str) -> Path | None:
+    """Return the first artwork of a specific kind (poster/fanart/clearlogo)."""
+    for directory in artwork_directories(path, media_type):
+        for candidate in artwork_files(directory):
+            if artwork_kind(candidate) == kind:
+                return candidate
     return None
 
 
@@ -45,7 +60,7 @@ def artwork_files(directory: Path) -> list[Path]:
 
 def artwork_kind(path: Path) -> str:
     stem = path.stem.lower()
-    if stem in {"folder", "cover", "poster"}:
+    if stem in {"cd", "folder", "cover", "poster"}:
         return "poster"
     if stem in {"fanart", "backdrop", "background"}:
         return "fanart"

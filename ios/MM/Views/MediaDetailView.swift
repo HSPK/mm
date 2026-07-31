@@ -11,6 +11,7 @@ struct MediaDetailView: View {
     @State private var showShare = false
     @State private var showInfo = false
     @State private var shareURL: URL?
+    @State private var shareURLIsTemporary = false
     @State private var preparingShare = false
     @State private var deleting = false
     @State private var restoring = false
@@ -130,7 +131,16 @@ struct MediaDetailView: View {
         preparingShare = true
         defer { preparingShare = false }
         do {
+            #if os(macOS)
+            if let localURL = LocalMediaLibrary.shared.localURL(for: item.path) {
+                shareURL = localURL
+                shareURLIsTemporary = false
+                showShare = true
+                return
+            }
+            #endif
             shareURL = try await repo.downloadFile(for: item)
+            shareURLIsTemporary = true
             showShare = true
         } catch {
             self.error = error.localizedDescription
@@ -140,6 +150,11 @@ struct MediaDetailView: View {
     private func cleanupShareURL() {
         guard let shareURL else { return }
         self.shareURL = nil
+        guard shareURLIsTemporary else {
+            shareURLIsTemporary = false
+            return
+        }
+        shareURLIsTemporary = false
         do {
             try FileManager.default.removeItem(at: shareURL.deletingLastPathComponent())
         } catch {
@@ -187,8 +202,17 @@ private struct PageContent: View {
         if item.isVideo {
             VideoPageContent(item: item)
         } else {
-            ZoomableImage(url: MediaRepository.shared.previewURL(for: item.id))
+            ZoomableImage(url: imageURL)
         }
+    }
+
+    private var imageURL: URL {
+        #if os(macOS)
+        if let localURL = LocalMediaLibrary.shared.localURL(for: item.path) {
+            return localURL
+        }
+        #endif
+        return MediaRepository.shared.previewURL(for: item.id)
     }
 }
 
@@ -198,7 +222,12 @@ private struct VideoPageContent: View {
 
     init(item: Media) {
         self.item = item
-        self._player = State(initialValue: AVPlayer(url: MediaRepository.shared.fileURL(for: item.id)))
+        #if os(macOS)
+        let url = LocalMediaLibrary.shared.localURL(for: item.path) ?? MediaRepository.shared.fileURL(for: item.id)
+        #else
+        let url = MediaRepository.shared.fileURL(for: item.id)
+        #endif
+        self._player = State(initialValue: AVPlayer(url: url))
     }
 
     var body: some View {

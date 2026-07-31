@@ -2,6 +2,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AuthStore.self) private var auth
+    #if os(macOS)
+    @ObservedObject private var localMedia = LocalMediaLibrary.shared
+    #endif
     @State private var apiBaseURL = AppConfig.apiBaseURL.absoluteString
     @State private var savedURL = false
 
@@ -65,6 +68,9 @@ struct SettingsView: View {
             }
 
             librarySection
+            #if os(macOS)
+            localMediaSection
+            #endif
 
             Section("About") {
                 LabeledContent("Version") {
@@ -146,6 +152,42 @@ struct SettingsView: View {
         }
     }
 
+    #if os(macOS)
+    private var localMediaSection: some View {
+        Section("Local Media") {
+            if let root = localMedia.rootURL {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Direct local playback enabled", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(root.path(percentEncoded: false))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            } else {
+                Text("Choose the media library folder on this Mac to let photos and videos open directly from disk.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button {
+                    localMedia.chooseFolder()
+                } label: {
+                    Label(localMedia.rootURL == nil ? "Choose media folder" : "Change folder", systemImage: "folder.badge.gearshape")
+                }
+                if localMedia.rootURL != nil {
+                    Button(role: .destructive) {
+                        localMedia.clear()
+                    } label: {
+                        Label("Clear", systemImage: "xmark.circle")
+                    }
+                }
+            }
+        }
+    }
+    #endif
+
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
@@ -185,6 +227,9 @@ struct SettingsView: View {
 
 struct StatusBarSettingsView: View {
     @Environment(AuthStore.self) private var auth
+    #if os(macOS)
+    @ObservedObject private var localMedia = LocalMediaLibrary.shared
+    #endif
     @State private var apiBaseURL = AppConfig.apiBaseURL.absoluteString
     @State private var savedURL = false
     @State private var currentLibrary: LibraryInfo?
@@ -203,6 +248,9 @@ struct StatusBarSettingsView: View {
                 accountCard
                 serverCard
                 libraryCard
+                #if os(macOS)
+                localMediaCard
+                #endif
                 aboutCard
             }
             .padding(16)
@@ -350,6 +398,46 @@ struct StatusBarSettingsView: View {
             .disabled(newLibraryPath.trimmingCharacters(in: .whitespaces).isEmpty || switching)
         }
     }
+
+    #if os(macOS)
+    private var localMediaCard: some View {
+        settingsCard("Local Media", systemImage: "externaldrive.connected.to.line.below") {
+            if let root = localMedia.rootURL {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Direct local playback enabled")
+                        .font(.body.weight(.semibold))
+                    Text(root.path(percentEncoded: false))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+            } else {
+                Text("Use local files for native playback when this Mac can access the media folder.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                localMedia.chooseFolder()
+            } label: {
+                Label(localMedia.rootURL == nil ? "Choose Media Folder" : "Change Media Folder", systemImage: "folder")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+
+            if localMedia.rootURL != nil {
+                Button(role: .destructive) {
+                    localMedia.clear()
+                } label: {
+                    Label("Clear Local Folder", systemImage: "xmark.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+    #endif
 
     private var aboutCard: some View {
         settingsCard("About", systemImage: "info.circle") {

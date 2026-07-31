@@ -31,6 +31,8 @@ def build_nfo(item: ParsedMediaFile, candidate: ScrapeCandidate | None = None) -
         raise ValueError(f"Unsupported media type: {item.media_type}")
 
     _add(root, "title", _item_title(item, candidate))
+    if candidate:
+        _add_variants(root, "titlevariant", candidate.title_variants)
     if candidate and candidate.original_title:
         _add(root, "originaltitle", candidate.original_title)
     year = candidate.year if candidate and candidate.year else item.year
@@ -68,9 +70,16 @@ def build_nfo(item: ParsedMediaFile, candidate: ScrapeCandidate | None = None) -
             _add(root, "clearlogo", candidate.logo_url)
     if candidate and candidate.overview:
         _add(root, "plot", candidate.overview)
+    if candidate and candidate.tagline:
+        _add(root, "tagline", candidate.tagline)
     if candidate:
-        unique = ET.SubElement(root, "uniqueid", {"type": candidate.source, "default": "true"})
-        unique.text = candidate.source_id
+        if candidate.source != "local" and candidate.source_id:
+            unique = ET.SubElement(
+                root,
+                "uniqueid",
+                {"type": candidate.source, "default": "true"},
+            )
+            unique.text = candidate.source_id
         for source, source_id in candidate.external_ids.items():
             if source_id:
                 extra = ET.SubElement(root, "uniqueid", {"type": source, "default": "false"})
@@ -87,12 +96,24 @@ def build_nfo(item: ParsedMediaFile, candidate: ScrapeCandidate | None = None) -
         _add(root, "showtitle", show_title)
     elif item.media_type in {"album", "track"}:
         artist = candidate.artist if candidate and candidate.artist else item.artist
+        album_artist = (
+            candidate.album_artist if candidate and candidate.album_artist else item.artist
+        )
         album = _album_title(item, candidate)
         if artist:
             _add(root, "artist", artist)
+        if album_artist:
+            _add(root, "albumartist", album_artist)
         if album:
             _add(root, "album", album)
         if candidate:
+            _add_variants(root, "artistvariant", candidate.artist_variants)
+            _add_variants(
+                root,
+                "albumartistvariant",
+                candidate.album_artist_variants,
+            )
+            _add_variants(root, "albumvariant", candidate.album_variants)
             for composer in candidate.composers:
                 _add(root, "composer", composer)
             for style in candidate.styles:
@@ -130,9 +151,22 @@ def build_album_nfo(item: ParsedMediaFile, candidate: ScrapeCandidate | None = N
     target = item.path.parent / "album.nfo"
     title = _album_title(item, candidate) or item.path.parent.name
     _add(root, "title", title)
+    if candidate:
+        _add_variants(root, "titlevariant", candidate.title_variants)
     artist = candidate.artist if candidate and candidate.artist else item.artist
     if artist:
         _add(root, "artist", artist)
+    if candidate:
+        _add_variants(root, "artistvariant", candidate.artist_variants)
+        album_artist = candidate.album_artist or candidate.artist
+        if album_artist:
+            _add(root, "albumartist", album_artist)
+        _add_variants(
+            root,
+            "albumartistvariant",
+            candidate.album_artist_variants or candidate.artist_variants,
+        )
+        _add_variants(root, "albumvariant", candidate.album_variants)
     year = candidate.year if candidate and candidate.year else item.year
     if year:
         _add(root, "year", str(year))
@@ -146,8 +180,17 @@ def build_album_nfo(item: ParsedMediaFile, candidate: ScrapeCandidate | None = N
         for composer in candidate.composers:
             _add(root, "composer", composer)
     if candidate:
-        unique = ET.SubElement(root, "uniqueid", {"type": candidate.source, "default": "true"})
-        unique.text = candidate.source_id
+        if candidate.source != "local" and candidate.source_id:
+            unique = ET.SubElement(
+                root,
+                "uniqueid",
+                {"type": candidate.source, "default": "true"},
+            )
+            unique.text = candidate.source_id
+        for source, source_id in candidate.external_ids.items():
+            if source_id:
+                extra = ET.SubElement(root, "uniqueid", {"type": source, "default": "false"})
+                extra.text = source_id
         if candidate.poster_url:
             _add(root, "thumb", candidate.poster_url)
     return NfoDocument(target=target, xml=_serialize(root), media_type="album")
@@ -215,6 +258,12 @@ def write_nfo(document: NfoDocument, *, overwrite: bool = False) -> None:
 def _add(root: ET.Element, tag: str, value: str) -> None:
     child = ET.SubElement(root, tag)
     child.text = value
+
+
+def _add_variants(root: ET.Element, tag: str, variants: dict[str, str]) -> None:
+    for language, value in sorted(variants.items()):
+        child = ET.SubElement(root, tag, {"language": language})
+        child.text = value
 
 
 def _serialize(root: ET.Element) -> str:

@@ -12,6 +12,7 @@ export type ScrapeTarget = "missing" | "current" | "missing-metadata" | "missing
 export interface ScrapeApplyOptions {
     missingOnly: boolean
     sequentialRows?: boolean
+    language?: string
 }
 
 export interface MetadataEditValues {
@@ -30,11 +31,14 @@ export interface MetadataEditValues {
     plot: string
     tags: string
     cast: string
+    writeNfo: boolean
 }
 
 export interface OrganizerKindSession {
     recursive: boolean
     source: string
+    query?: string
+    order?: "name" | "year" | "incomplete"
     scanned: boolean
     items: OrganizerItem[]
     matches: OrganizerMatchResult[]

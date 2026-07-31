@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,16 +13,19 @@ from pydantic import BaseModel
 from mm.config import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, load_cli_config
 from mm.db.client import AsyncDBClient
 from mm.db.dto import User
-from mm.db.models import OrganizerMediaModel, VideoStateModel
+from mm.db.models import OrganizerMediaModel, VideoProbeCacheModel, VideoStateModel
 from mm.io import local_storage
-from mm.server.dependencies import get_current_user, get_db
+from mm.server.dependencies import get_current_user, get_db, get_media_user
+from mm.server.media_tickets import issue_media_ticket
 from mm.server.player_video import (
     VideoPlaybackSource,
+    invalidate_probe_cache,
     preview_frame_response,
+    probe_streams,
     subtitle_response,
     video_playback_source,
 )
-from mm.server.utils import stream_file
+from mm.server.utils import content_type_for, stream_file
 
 router = APIRouter(prefix="/api/player", tags=["player"])
 
@@ -46,6 +50,14 @@ class VideoStatePatch(BaseModel):
     notes: str | None = None
     progress: float | None = None
     duration: float | None = None
+
+
+class AudioPlaybackSource(BaseModel):
+    url: str = ""
+    mime_type: str = "application/octet-stream"
+    directly_supported: bool = False
+    known_unsupported: bool = False
+    unsupported_reason: str = ""
 
 
 @router.get("/file")
@@ -79,9 +91,74 @@ async def player_video_source(
     db: AsyncDBClient = Depends(get_db),
     playback_id: str = "",
     audio_stream: int | None = None,
+    refresh: bool = False,
 ) -> VideoPlaybackSource:
     media_path = await _safe_video_playback_path(db, playback_id)
-    return await asyncio.to_thread(video_playback_source, media_path, playback_id, _FFMPEG, audio_stream)
+    streams = await _probe_streams_cached(db, media_path, refresh=refresh)
+    return await asyncio.to_thread(
+        video_playback_source, media_path, playback_id, _FFMPEG, audio_stream, streams
+    )
+
+
+async def _probe_streams_cached(
+    db: AsyncDBClient, path: Path, *, refresh: bool
+) -> list[dict[str, object]] | None:
+    """Serve ffprobe stream metadata from the DB cache, re-probing only when the
+    file changed (size/mtime) or a refresh is requested."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    key = str(path)
+
+    if refresh:
+        invalidate_probe_cache(path)
+    else:
+        cached = await _get_probe_cache_row(db, key)
+        if (
+            cached is not None
+            and cached.size == stat.st_size
+            and cached.mtime_ns == stat.st_mtime_ns
+        ):
+            try:
+                parsed = json.loads(cached.streams)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, list):
+                return [s for s in parsed if isinstance(s, dict)]
+
+    streams = await asyncio.to_thread(probe_streams, path)
+    if streams:
+        await _store_probe_cache(db, key, stat.st_size, stat.st_mtime_ns, streams)
+    return streams
+
+
+async def _get_probe_cache_row(db: AsyncDBClient, path: str) -> VideoProbeCacheModel | None:
+    try:
+        return await db.objects.get(VideoProbeCacheModel, path=path)
+    except VideoProbeCacheModel.DoesNotExist:
+        return None
+
+
+async def _store_probe_cache(
+    db: AsyncDBClient, path: str, size: int, mtime_ns: int, streams: list[dict[str, object]]
+) -> None:
+    payload = json.dumps(streams)
+    existing = await _get_probe_cache_row(db, path)
+    if existing is not None:
+        await db.objects.execute(
+            VideoProbeCacheModel.update(
+                size=size, mtime_ns=mtime_ns, streams=payload, updated_at=dt.datetime.now()
+            ).where(VideoProbeCacheModel.id == existing.id)
+        )
+    else:
+        await db.objects.create(
+            VideoProbeCacheModel,
+            path=path,
+            size=size,
+            mtime_ns=mtime_ns,
+            streams=payload,
+        )
 
 
 @router.get("/video/info")
@@ -113,21 +190,21 @@ async def player_video_subtitle(
     stream_index: int = 0,
 ):
     media_path = await _safe_video_playback_path(db, playback_id)
-    return await asyncio.to_thread(subtitle_response, media_path, playback_id, stream_index, _FFMPEG)
+    return await asyncio.to_thread(
+        subtitle_response, media_path, playback_id, stream_index, _FFMPEG
+    )
 
 
 @router.get("/audio")
 async def player_audio(
     request: Request,
     path: str = "",
-    _u: User | None = Depends(get_current_user),
+    _u: User | None = Depends(get_media_user),
     db: AsyncDBClient = Depends(get_db),
     playback_id: str = "",
 ):
     media_path = (
-        await _safe_audio_playback_path(db, playback_id)
-        if playback_id
-        else _safe_media_path(path)
+        await _safe_audio_playback_path(db, playback_id) if playback_id else _safe_media_path(path)
     )
     if media_path.suffix.lower() not in AUDIO_EXTENSIONS:
         raise HTTPException(400, "Unsupported audio file")
@@ -141,14 +218,65 @@ async def player_audio_info(
     db: AsyncDBClient = Depends(get_db),
     playback_id: str = "",
 ):
-    media_path = (
-        await _safe_audio_playback_path(db, playback_id)
-        if playback_id
-        else _safe_media_path(path)
-    )
+    row: OrganizerMediaModel | None = None
+    if playback_id:
+        row = await _organizer_media_by_playback_id(db, playback_id)
+        media_path = await _safe_audio_playback_path(db, playback_id)
+    else:
+        media_path = _safe_media_path(path)
     if media_path.suffix.lower() not in AUDIO_EXTENSIONS:
         raise HTTPException(400, "Unsupported audio file")
-    return {"duration": _media_duration(media_path)}
+    duration = row.audio_duration if row and row.audio_duration is not None else None
+    if duration is None:
+        duration = await asyncio.to_thread(_media_duration, media_path)
+    return {"duration": duration}
+
+
+@router.get("/audio/source", response_model=AudioPlaybackSource)
+async def player_audio_source(
+    request: Request,
+    playback_id: str,
+    _u: User | None = Depends(get_current_user),
+    db: AsyncDBClient = Depends(get_db),
+) -> AudioPlaybackSource:
+    row = await _organizer_media_by_playback_id(db, playback_id)
+    media_path = await _safe_audio_playback_path(db, playback_id)
+    mime_type = row.audio_mime_type or content_type_for(media_path)
+    source = audio_playback_source(media_path, playback_id, mime_type)
+    if source.directly_supported:
+        config = request.app.state.config
+        ticket = issue_media_ticket(
+            request.app.state.media_ticket_secret,
+            library_id=config.library_id,
+            playback_id=playback_id,
+            ttl_seconds=6 * 60 * 60,
+        )
+        source.url = f"/api/player/audio?playback_id={playback_id}&ticket={ticket}"
+    return source
+
+
+def audio_playback_source(
+    media_path: Path,
+    playback_id: str,
+    mime_type: str,
+) -> AudioPlaybackSource:
+    if media_path.suffix.lower() == ".wma":
+        return AudioPlaybackSource(
+            mime_type=mime_type,
+            known_unsupported=True,
+            unsupported_reason="WMA audio is not directly supported by browsers",
+        )
+    if media_path.suffix.lower() not in {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav"}:
+        return AudioPlaybackSource(
+            mime_type=mime_type,
+            known_unsupported=True,
+            unsupported_reason="This audio format is not known to be directly browser-playable",
+        )
+    return AudioPlaybackSource(
+        url=f"/api/player/audio?playback_id={playback_id}",
+        mime_type=mime_type,
+        directly_supported=True,
+    )
 
 
 @router.get("/video/states", response_model=list[VideoStateResponse])
@@ -157,9 +285,7 @@ async def video_states(
     db: AsyncDBClient = Depends(get_db),
 ) -> list[VideoStateResponse]:
     owner = _state_owner(_u)
-    rows = await db.objects.fetchall(
-        VideoStateModel.select().where(VideoStateModel.owner == owner)
-    )
+    rows = await db.objects.fetchall(VideoStateModel.select().where(VideoStateModel.owner == owner))
     return [
         _video_state_response(row, playback_id)
         for row in rows
@@ -201,9 +327,7 @@ async def update_video_state(
         updates["progress"] = max(0.0, float(body.progress or 0))
     if "duration" in body.model_fields_set:
         updates["duration"] = max(0.0, float(body.duration or 0))
-    await db.objects.execute(
-        VideoStateModel.update(**updates).where(VideoStateModel.id == row.id)
-    )
+    await db.objects.execute(VideoStateModel.update(**updates).where(VideoStateModel.id == row.id))
     return _video_state_response(
         await db.objects.get(VideoStateModel, id=row.id),
         body.playback_id,

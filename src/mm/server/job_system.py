@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import hashlib
+import json
 import threading
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from fastapi import BackgroundTasks, HTTPException
+from peewee import IntegrityError
 
 from mm.db.client import AsyncDBClient
 from mm.db.models import JobEventModel, JobModel
 from mm.server.job_utils import job_event_response, job_response, update_job
 from mm.server.organizer_schemas import JobEventResponse, OrganizerJobResponse
 
-TERMINAL_STATUSES = {"done", "error", "canceled"}
+TERMINAL_STATUSES = {"done", "error", "canceled", "completed_with_errors"}
 ACTIVE_STATUSES = {"queued", "running", "canceling"}
 
 JobRunner = Callable[[AsyncDBClient, str], Awaitable[None]]
@@ -42,18 +45,22 @@ def default_job_registry() -> JobRegistry:
 
     async def scrape(db: AsyncDBClient, job_id: str) -> None:
         from mm.server.organizer_scrape_jobs import run_scrape_job
+
         await run_scrape_job(db, job_id)
 
     async def sync(db: AsyncDBClient, job_id: str) -> None:
         from mm.server.organizer_sync_jobs import run_sync_job
+
         await run_sync_job(db, job_id)
 
     async def rename(db: AsyncDBClient, job_id: str) -> None:
         from mm.server.organizer_rename_jobs import run_rename_job
+
         await run_rename_job(db, job_id)
 
     async def thumbnails(db: AsyncDBClient, job_id: str) -> None:
         from mm.server.routers.library import _run_thumbnail_job
+
         await _run_thumbnail_job(db, job_id)
 
     registry.register("scrape", scrape, resumable=True)
@@ -74,25 +81,45 @@ class JobService:
         kind: str,
         title: str,
         payload: str,
+        idempotency_key: str | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> OrganizerJobResponse:
         if self.registry.get(kind) is None:
             raise HTTPException(400, f"Unknown job kind: {kind}")
+        canonical_payload = json.dumps(json.loads(payload), sort_keys=True, separators=(",", ":"))
+        payload_hash = hashlib.sha256(canonical_payload.encode()).hexdigest()
+        active_claim = (
+            f"{kind}:idempotency:{idempotency_key}"
+            if idempotency_key
+            else f"{kind}:payload:{payload_hash}"
+        )
+        existing_query = JobModel.select().where(JobModel.active_claim == active_claim)
+        existing = await db.objects.fetchall(existing_query.limit(1))
+        if existing:
+            return job_response(existing[0])
         job_id = uuid.uuid4().hex
         now = dt.datetime.now()
-        await db.objects.create(
-            JobModel,
-            id=job_id,
-            kind=kind,
-            status="queued",
-            progress=0,
-            title=title,
-            message="Queued",
-            payload=payload,
-            created_at=now,
-            updated_at=now,
-        )
-        await update_job(db, job_id, status="queued", message="Queued")
+        try:
+            await db.objects.create(
+                JobModel,
+                id=job_id,
+                kind=kind,
+                status="queued",
+                progress=0,
+                title=title,
+                message="Queued",
+                payload=canonical_payload,
+                idempotency_key=idempotency_key,
+                payload_hash=payload_hash,
+                active_claim=active_claim,
+                created_at=now,
+                updated_at=now,
+            )
+        except IntegrityError:
+            existing = await db.objects.fetchall(existing_query.limit(1))
+            if existing:
+                return job_response(existing[0])
+            raise
         self.enqueue(db, job_id, background_tasks)
         return await self.get(db, job_id)
 
@@ -149,7 +176,13 @@ class JobService:
         row = await self._get_row(db, job_id)
         if row.status in TERMINAL_STATUSES:
             return job_response(row)
-        await update_job(db, job_id, status="canceling", message="Cancel requested")
+        affected = await db.objects.execute(
+            JobModel.update(
+                status="canceling", message="Cancel requested", updated_at=dt.datetime.now()
+            ).where((JobModel.id == job_id) & (JobModel.status.in_(("queued", "running"))))
+        )
+        if affected:
+            await update_job(db, job_id, event=True, message="Cancel requested")
         return await self.get(db, job_id)
 
     async def retry(
@@ -214,7 +247,9 @@ class JobService:
             )
             return
         final = await self._get_row(db, job_id)
-        if final.status not in TERMINAL_STATUSES and final.status != "canceling":
+        if final.status == "canceling":
+            await update_job(db, job_id, status="canceled", progress=100, message="Canceled")
+        elif final.status not in TERMINAL_STATUSES:
             await update_job(db, job_id, status="done", progress=100, message="Done")
 
     async def _get_row(self, db: AsyncDBClient, job_id: str) -> JobModel:

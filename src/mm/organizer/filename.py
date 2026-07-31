@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mm.config import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
+from mm.organizer.localization import canonicalize_music_artist
 
 _YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2}|2100)\b")
 _EPISODE_RE = re.compile(
@@ -76,6 +77,7 @@ class ParsedMediaFile:
     media_type: str
     title: str
     artist: str | None = None
+    album_artist: str | None = None
     album: str | None = None
     year: int | None = None
     season: int | None = None
@@ -86,6 +88,8 @@ class ParsedMediaFile:
     parse_template: str | None = None
     parse_relative_path: str | None = None
     confidence: float = 0.0
+    duration: float | None = None
+    mime_type: str | None = None
 
     @property
     def is_video(self) -> bool:
@@ -150,11 +154,17 @@ def _parse_audio_filename(file_path: Path) -> ParsedMediaFile | None:
     tags = _audio_tags(file_path)
     directory = _audio_directory_info(file_path)
     file_info = _audio_file_info(file_path.stem)
-    track_artist = tags.get("artist") or file_info.artist
-    artist = tags.get("album_artist") or directory.artist or _album_artist_from_track_artist(track_artist)
+    track_artist = _valid_artist_name(tags.get("artist")) or _valid_artist_name(
+        file_info.artist
+    )
+    album_artist = (
+        _valid_artist_name(tags.get("album_artist"))
+        or directory.artist
+        or _album_artist_from_track_artist(track_artist)
+    )
     title = strip_redundant_artist_prefix(
         tags.get("title") or file_info.title,
-        track_artist or artist,
+        track_artist or album_artist,
     )
     album = clean_music_title(tags.get("album") or file_info.album or directory.album)
     year = tags.get("year") or directory.year
@@ -163,13 +173,16 @@ def _parse_audio_filename(file_path: Path) -> ParsedMediaFile | None:
     return ParsedMediaFile(
         path=file_path,
         media_type="track",
-        artist=artist,
+        artist=canonicalize_music_artist(track_artist or album_artist),
+        album_artist=canonicalize_music_artist(album_artist),
         album=album,
         title=title or file_path.stem,
         year=year,
         disc=disc,
         track=track,
         confidence=0.95 if tags else 0.55 if album and track else 0.1,
+        duration=_float_or_none(tags.get("duration")),
+        mime_type=_audio_mime_type(file_path),
     )
 
 
@@ -203,11 +216,17 @@ class AudioDirectoryInfo:
 def _audio_directory_info(file_path: Path) -> AudioDirectoryInfo:
     disc = _disc_from_folder(file_path.parent.name)
     album_dir = file_path.parent.parent if disc is not None else file_path.parent
-    parent = album_dir.parent.name
     artist, album, year = _release_folder_info(album_dir.name)
     if not artist:
-        artist = _clean_artist(parent)
+        artist = _artist_from_dir(album_dir)
     return AudioDirectoryInfo(artist=artist, album=album, year=year, disc=disc)
+
+
+def _artist_from_dir(album_dir: Path) -> str | None:
+    parent = album_dir.parent
+    if parent.name.strip().lower() in _ARTIST_CATEGORY_FOLDERS:
+        parent = parent.parent
+    return _clean_artist(parent.name)
 
 
 def _release_folder_info(value: str) -> tuple[str | None, str | None, int | None]:
@@ -237,6 +256,12 @@ def _release_folder_info(value: str) -> tuple[str | None, str | None, int | None
     dated = re.match(r"^\[(?P<year>19\d{2}|20\d{2}|2100)-\d{2}-\d{2}\]\s*(?P<album>.+)$", value)
     if dated:
         return None, clean_music_title(dated.group("album")), int(dated.group("year"))
+    dated_dot = re.match(
+        r"^\[(?P<year>19\d{2}|20\d{2}|2100)(?:[.\-_]\d{1,2}){0,2}\]\s*(?P<album>.+)$",
+        value,
+    )
+    if dated_dot:
+        return None, clean_music_title(dated_dot.group("album")), int(dated_dot.group("year"))
     artist_album_year = re.match(
         r"^(?P<artist>.+?)\s+-\s+(?P<album>.+?)\s+\((?P<year>19\d{2}|20\d{2}|2100)\)",
         value,
@@ -269,7 +294,7 @@ def _release_folder_info(value: str) -> tuple[str | None, str | None, int | None
     return None, clean_music_title(clean), None
 
 
-def _audio_tags(file_path: Path) -> dict[str, str | int | None]:
+def _audio_tags(file_path: Path) -> dict[str, str | int | float | None]:
     try:
         from mutagen import File as MutagenFile
     except ImportError:
@@ -288,18 +313,62 @@ def _audio_tags(file_path: Path) -> dict[str, str | int | None]:
         "year": _year_from_tag(_first_tag(audio, "date") or _first_tag(audio, "year")),
         "disc": _number_from_slash_tag(_first_tag(audio, "discnumber")),
         "track": _number_from_slash_tag(_first_tag(audio, "tracknumber")),
+        "duration": _audio_duration(audio),
     }
+
+
+def _audio_duration(audio: object) -> float | None:
+    try:
+        value = float(audio.info.length)  # type: ignore[attr-defined]
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _audio_mime_type(path: Path) -> str:
+    return {
+        ".aac": "audio/aac",
+        ".aif": "audio/aiff",
+        ".aiff": "audio/aiff",
+        ".flac": "audio/flac",
+        ".m4a": "audio/mp4",
+        ".mp3": "audio/mpeg",
+        ".ogg": "audio/ogg",
+        ".oga": "audio/ogg",
+        ".opus": "audio/ogg",
+        ".wav": "audio/wav",
+        ".wma": "audio/x-ms-wma",
+    }.get(path.suffix.lower(), "application/octet-stream")
+
+
+def _float_or_none(value: object) -> float | None:
+    try:
+        result = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    return result if result > 0 else None
 
 
 def _album_artist_from_track_artist(value: str | None) -> str | None:
     if not value:
         return None
-    return re.split(
-        r"\s*(?:&|,|，|、|\+)\s*|\s+(?:x|feat\.?|ft\.?|with|vs\.?)\s+",
-        value,
-        maxsplit=1,
-        flags=re.IGNORECASE,
-    )[0].strip() or None
+    return (
+        re.split(
+            r"\s*(?:&|,|，|、|\+)\s*|\s+(?:x|feat\.?|ft\.?|with|vs\.?)\s+",
+            value,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip()
+        or None
+    )
+
+
+def _valid_artist_name(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    normalized = re.sub(r"[\W_]+", "", text)
+    return None if normalized.isdigit() else text
 
 
 def _first_tag(audio: object, key: str) -> str | None:
@@ -378,13 +447,15 @@ def clean_music_title(value: str | None) -> str | None:
     text = _clean_title(value)
     while True:
         next_text = re.sub(
-            r"\s*[\[\(（【]\s*(?:live|disc\s*\d+|cd\s*\d+)\s*[\]\)）】]\s*$",
+            r"\s*[\[\(（【]\s*(?:live|disc\s*(?:\d+|[ivx]{1,4})|cd\s*(?:\d+|[ivx]{1,4}))\s*[\]\)）】]\s*$",
             "",
             text,
             flags=re.IGNORECASE,
         ).strip()
         if next_text == text:
-            return re.sub(r"\s*(?:disc|cd)\s*\d+\s*$", "", text, flags=re.IGNORECASE).strip()
+            return re.sub(
+                r"\s*(?:disc|cd)\s*(?:\d+|[ivx]{1,4})\s*$", "", text, flags=re.IGNORECASE
+            ).strip()
         text = next_text
 
 
@@ -425,9 +496,92 @@ def _fallback_track_and_title(stem: str) -> tuple[int | None, str]:
     return int(match.group("track")), _clean_track_title(_BRACKET_RE.sub(" ", match.group("title")))
 
 
+_ROMAN_DISC = {
+    "i": 1,
+    "ii": 2,
+    "iii": 3,
+    "iv": 4,
+    "v": 5,
+    "vi": 6,
+    "vii": 7,
+    "viii": 8,
+    "ix": 9,
+    "x": 10,
+}
+
+# Folders that group an artist's releases (artist/<category>/<album>) rather than
+# being the artist themselves; skipped when resolving the artist from the path.
+_ARTIST_CATEGORY_FOLDERS = {
+    # English
+    "albums",
+    "album",
+    "studio albums",
+    "major albums",
+    "other albums",
+    "ep",
+    "eps",
+    "ep's",
+    "e.p.",
+    "e.p.'s",
+    "singles",
+    "single",
+    "compilations",
+    "compilation",
+    "live albums",
+    "live",
+    "remixes",
+    "bootlegs",
+    "soundtracks",
+    "soundtrack",
+    "collections",
+    "collection",
+    "discography",
+    "best of",
+    "b-sides",
+    "demos",
+    "mixtapes",
+    "extended plays",
+    "concerts",
+    "live performances",
+    # Russian (Синглы = Singles, Сборники = Compilations, ...)
+    "синглы",
+    "сингл",
+    "сборники",
+    "сборник",
+    "альбомы",
+    "альбом",
+    "мини-альбомы",
+    "концертные альбомы",
+    "концерты",
+    "бутлеги",
+    "ремиксы",
+    "демо",
+    "дискография",
+    # Chinese
+    "专辑",
+    "精选集",
+    "精选",
+    "单曲",
+    "现场",
+    "合辑",
+    "演唱会",
+    "现场专辑",
+    "合集",
+    # Japanese
+    "シングル",
+    "アルバム",
+    "ベスト",
+    "ライブ",
+    "コンピレーション",
+}
+
+
 def _disc_from_folder(name: str) -> int | None:
-    match = re.search(r"\bcd\s*(\d{1,3})\b", name, re.IGNORECASE)
-    return int(match.group(1)) if match else None
+    match = re.search(r"\b(?:cd|disc|disk)\s*(\d{1,3})\b", name, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    roman = re.search(r"\b(?:cd|disc|disk)\s*([ivx]{1,4})\b", name, re.IGNORECASE)
+    return _ROMAN_DISC.get(roman.group(1).lower()) if roman else None
 
 
 def _clean_artist(value: str) -> str | None:

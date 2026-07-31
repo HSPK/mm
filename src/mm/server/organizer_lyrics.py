@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from hashlib import blake2b
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -8,6 +9,7 @@ from fastapi import HTTPException
 from mm.config import AUDIO_EXTENSIONS
 from mm.organizer.lyrics import (
     get_lrclib_lyrics,
+    search_kugou_lyrics,
     search_lrclib_lyrics,
     search_netease_lyrics,
     search_qq_lyrics,
@@ -27,6 +29,32 @@ def safe_audio_path(path: str) -> Path:
     return media_path
 
 
+def local_lyrics_resource(path: Path) -> tuple[str, str, str]:
+    plain = ""
+    synced = ""
+    version = blake2b(digest_size=16)
+    for candidate, synced_lyrics in (
+        (path.with_suffix(".lyrics.txt"), False),
+        (path.with_suffix(".lyric.txt"), False),
+        (path.with_suffix(".lrc"), True),
+    ):
+        if not candidate.is_file():
+            continue
+        try:
+            content = candidate.read_text(encoding="utf-8")
+            stat = candidate.stat()
+        except OSError:
+            continue
+        version.update(candidate.name.encode("utf-8"))
+        version.update(str(stat.st_mtime_ns).encode("ascii"))
+        version.update(content.encode("utf-8"))
+        if synced_lyrics:
+            synced = content
+        elif not plain:
+            plain = content
+    return plain, synced, version.hexdigest() if plain or synced else ""
+
+
 def search_lyrics_source(
     source: str,
     title: str,
@@ -37,11 +65,13 @@ def search_lyrics_source(
 ) -> list[dict[str, object]]:
     if source == "all":
         results: list[dict[str, object]] = []
-        for name in ("lrclib", "netease", "qq"):
+        for name in ("lrclib", "netease", "kugou", "qq"):
             results.extend(search_lyrics_source(name, title, artist, album, limit=limit))
         return results[:limit]
     if source == "netease":
         return search_netease_lyrics(title, artist, album, limit=limit)
+    if source == "kugou":
+        return search_kugou_lyrics(title, artist, album, limit=limit)
     if source == "qq":
         return search_qq_lyrics(title, artist, album, limit=limit)
     raw = search_lrclib_lyrics(title, artist, album, limit=limit)

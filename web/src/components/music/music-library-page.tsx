@@ -1,25 +1,18 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react"
 import { Music, Search } from "lucide-react"
-import {
-    organizerRepo,
-    type OrganizerItem,
-    type OrganizerMusicAlbum,
-} from "@/api/organizer"
+import { musicRepo, type MusicQuery } from "@/api/music"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
-import { usePlayerStore } from "@/stores/player"
+import { notify } from "@/stores/notifications"
+import { usePlayerStore, type PlayerTrack } from "@/stores/player"
 import {
     type AlbumGroup,
     type ArtistGroup,
-    albumTrackSort,
+    albumFromSummary,
     buildAlbumGroups,
-    filterAlbums,
-    filterTracks,
-    groupArtists,
-    loadMusicDetailsByAlbum,
-    mergeOrganizerItems,
+    buildArtistGroups,
     shuffleTracks,
-    trackSort,
+    trackFromSummary,
 } from "./music-library-model"
 import {
     AlbumDetail,
@@ -28,176 +21,371 @@ import {
     MusicToolbar,
     ViewTabs,
     type AlbumDisplay,
-    type MusicView,
 } from "./music-library-ui"
-import { primePlayerTrackDetails } from "@/components/player/use-enriched-player-track"
 import { ArtistDetail, ArtistGrid } from "./music-artist-views"
 import { InfiniteScrollSentinel } from "./music-infinite-scroll"
+import {
+    MUSIC_ALBUM_PAGE_SIZE,
+    MUSIC_ARTIST_PAGE_SIZE,
+    MUSIC_TRACK_PAGE_SIZE,
+    loadMusicAlbums,
+    loadMusicArtists,
+    loadMusicLibrary,
+    loadMusicTracks,
+} from "./music-library-loader"
 import { TrackTable } from "./music-track-table"
-
-const INITIAL_ALBUM_LIMIT = 96
-const ALBUM_PAGE_SIZE = 96
-const INITIAL_TRACK_LIMIT = 200
-const TRACK_PAGE_SIZE = 200
+import { loadMusicQueue } from "./music-queue-loader"
+import { useMusicNavigation } from "./use-music-navigation"
 
 export function MusicLibraryPage() {
-    const [items, setItems] = useState<OrganizerItem[]>([])
-    const [albumSummaries, setAlbumSummaries] = useState<OrganizerMusicAlbum[]>([])
+    const [albums, setAlbums] = useState<AlbumGroup[]>([])
+    const [albumTotal, setAlbumTotal] = useState(0)
+    const [tracks, setTracks] = useState<PlayerTrack[]>([])
+    const [trackTotal, setTrackTotal] = useState(0)
+    const [artists, setArtists] = useState<ArtistGroup[]>([])
+    const [artistTotal, setArtistTotal] = useState(0)
+    const [selectedAlbum, setSelectedAlbum] = useState<AlbumGroup | null>(null)
+    const [selectedAlbumTracks, setSelectedAlbumTracks] = useState<PlayerTrack[]>([])
+    const [selectedAlbumTrackTotal, setSelectedAlbumTrackTotal] = useState(0)
+    const [selectedArtist, setSelectedArtist] = useState<ArtistGroup | null>(null)
+    const [selectedArtistAlbums, setSelectedArtistAlbums] = useState<AlbumGroup[]>([])
+    const [selectedArtistAlbumTotal, setSelectedArtistAlbumTotal] = useState(0)
+    const [selectedArtistTracks, setSelectedArtistTracks] = useState<PlayerTrack[]>([])
+    const [selectedArtistTrackTotal, setSelectedArtistTrackTotal] = useState(0)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [view, setView] = useState<MusicView>("home")
     const [albumDisplay, setAlbumDisplay] = useState<AlbumDisplay>("grid")
-    const [selectedAlbumKey, setSelectedAlbumKey] = useState<string | null>(null)
-    const [selectedArtistName, setSelectedArtistName] = useState<string | null>(null)
-    const [albumLimit, setAlbumLimit] = useState(INITIAL_ALBUM_LIMIT)
-    const [trackLimit, setTrackLimit] = useState(INITIAL_TRACK_LIMIT)
-    const [albumTrackLimit, setAlbumTrackLimit] = useState(INITIAL_TRACK_LIMIT)
-    const [artistAlbumLimit, setArtistAlbumLimit] = useState(INITIAL_ALBUM_LIMIT)
-    const [artistTrackLimit, setArtistTrackLimit] = useState(INITIAL_TRACK_LIMIT)
     const [query, setQuery] = useState("")
-    const deferredQuery = useDeferredValue(query)
+    const deferredQuery = useDeferredValue(query.trim())
+    const requestVersion = useRef(0)
+    const albumDetailVersion = useRef(0)
+    const artistDetailVersion = useRef(0)
+    const loadingMore = useRef(new Set<string>())
+    const {
+        view,
+        albumKey,
+        artistId,
+        setView,
+        openAlbum: openAlbumKey,
+        openArtist: openArtistId,
+        backToList,
+    } = useMusicNavigation()
     const setQueue = usePlayerStore((state) => state.setQueue)
     const playTrack = usePlayerStore((state) => state.playTrack)
     const playNext = usePlayerStore((state) => state.playNext)
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (search: string) => {
+        const version = ++requestVersion.current
         setLoading(true)
         setError(null)
         try {
-            const [baseItems, albums] = await Promise.all([
-                organizerRepo.items("music"),
-                organizerRepo.musicAlbums(),
-            ])
-            setItems(baseItems)
-            setAlbumSummaries(albums)
-            void loadMusicDetailsByAlbum(baseItems, (detailItems) => {
-                setItems((current) => mergeOrganizerItems(current, detailItems))
-            })
+            const data = await loadMusicLibrary(search)
+            if (version !== requestVersion.current) return
+            setAlbums(buildAlbumGroups(data.albums.albums))
+            setAlbumTotal(data.albums.total)
+            setTracks(data.tracks.tracks.map(trackFromSummary))
+            setTrackTotal(data.tracks.total)
+            setArtists(buildArtistGroups(data.artists.artists))
+            setArtistTotal(data.artists.total)
+            loadingMore.current.clear()
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Could not load music")
+            if (version === requestVersion.current) {
+                setError(err instanceof Error ? err.message : "Could not load music")
+            }
         } finally {
-            setLoading(false)
+            if (version === requestVersion.current) setLoading(false)
         }
     }, [])
 
     useEffect(() => {
-        const id = window.setTimeout(() => { void load() }, 0)
+        const id = window.setTimeout(() => {
+            void load(deferredQuery)
+        }, 80)
         return () => window.clearTimeout(id)
-    }, [load])
+    }, [deferredQuery, load])
 
     useEffect(() => {
-        const ids = albumSummaries
-            .map((album) => album.cover_playback_id)
-            .filter((id): id is string => Boolean(id))
-            .slice(0, 120)
-        if (ids.length > 0) void organizerRepo.artworkBatch(ids, 320).catch(() => undefined)
-    }, [albumSummaries])
-
-    useEffect(() => {
-        setAlbumLimit(INITIAL_ALBUM_LIMIT)
-        setTrackLimit(INITIAL_TRACK_LIMIT)
-        setAlbumTrackLimit(INITIAL_TRACK_LIMIT)
-        setArtistAlbumLimit(INITIAL_ALBUM_LIMIT)
-        setArtistTrackLimit(INITIAL_TRACK_LIMIT)
-    }, [albumDisplay, deferredQuery, view])
-
-    useEffect(() => {
-        setAlbumTrackLimit(INITIAL_TRACK_LIMIT)
-    }, [deferredQuery, selectedAlbumKey])
-
-    useEffect(() => {
-        setArtistAlbumLimit(INITIAL_ALBUM_LIMIT)
-        setArtistTrackLimit(INITIAL_TRACK_LIMIT)
-    }, [deferredQuery, selectedArtistName])
-
-    const baseAlbums = useMemo(
-        () => buildAlbumGroups(albumSummaries, items),
-        [albumSummaries, items],
-    )
-    const albums = useMemo(() => filterAlbums(baseAlbums, deferredQuery), [baseAlbums, deferredQuery])
-    const allTracks = useMemo(() => baseAlbums.flatMap((album) => album.tracks), [baseAlbums])
-    const tracks = useMemo(() => filterTracks(allTracks, deferredQuery).sort(trackSort), [allTracks, deferredQuery])
-    const baseArtists = useMemo(() => groupArtists(baseAlbums), [baseAlbums])
-    const artists = useMemo(() => groupArtists(albums), [albums])
-    const selectedAlbum = useMemo(
-        () => baseAlbums.find((album) => album.key === selectedAlbumKey) ?? null,
-        [baseAlbums, selectedAlbumKey],
-    )
-    const selectedAlbumTracks = useMemo(
-        () => selectedAlbum
-            ? filterTracks(selectedAlbum.tracks, deferredQuery).sort(albumTrackSort)
-            : [],
-        [deferredQuery, selectedAlbum],
-    )
-    const visibleSelectedAlbumTracks = useMemo(
-        () => selectedAlbumTracks.slice(0, albumTrackLimit),
-        [albumTrackLimit, selectedAlbumTracks],
-    )
-    const selectedArtist = useMemo(
-        () => baseArtists.find((artist) => artist.name === selectedArtistName) ?? null,
-        [baseArtists, selectedArtistName],
-    )
-    const selectedArtistAlbums = useMemo(
-        () => selectedArtist
-            ? filterAlbums(baseAlbums.filter((album) => album.artist === selectedArtist.name), deferredQuery)
-            : [],
-        [baseAlbums, deferredQuery, selectedArtist],
-    )
-    const selectedArtistTracks = useMemo(
-        () => selectedArtist
-            ? filterTracks(selectedArtist.tracks, deferredQuery).sort(trackSort)
-            : [],
-        [deferredQuery, selectedArtist],
-    )
-    const visibleSelectedArtistAlbums = useMemo(
-        () => selectedArtistAlbums.slice(0, artistAlbumLimit),
-        [artistAlbumLimit, selectedArtistAlbums],
-    )
-    const visibleSelectedArtistTracks = useMemo(
-        () => selectedArtistTracks.slice(0, artistTrackLimit),
-        [artistTrackLimit, selectedArtistTracks],
-    )
-    const visibleAlbums = useMemo(() => albums.slice(0, albumLimit), [albumLimit, albums])
-    const visibleTracks = useMemo(() => tracks.slice(0, trackLimit), [trackLimit, tracks])
-    const hasMusic = albumSummaries.length > 0 || items.length > 0
-    const showNoMatches = hasMusic && albums.length === 0 && tracks.length === 0
-
-    useEffect(() => {
-        if (view === "album" && selectedAlbumKey && !selectedAlbum) {
-            setView("albums")
-            setSelectedAlbumKey(null)
+        const reload = () => {
+            void load(deferredQuery)
         }
-        if (view === "artist" && selectedArtistName && !selectedArtist) {
-            setView("artists")
-            setSelectedArtistName(null)
-        }
-    }, [selectedAlbum, selectedAlbumKey, selectedArtist, selectedArtistName, view])
+        window.addEventListener("mm:library-changed", reload)
+        return () => window.removeEventListener("mm:library-changed", reload)
+    }, [deferredQuery, load])
 
-    const openAlbum = useCallback((album: AlbumGroup) => {
-        setSelectedAlbumKey(album.key)
-        setView("album")
-    }, [])
+    useEffect(() => {
+        const version = ++albumDetailVersion.current
+        if (!albumKey) return
+        let cancelled = false
+        const existing = albums.find((album) => album.id === albumKey)
+        void Promise.all([
+            existing ? Promise.resolve(existing) : musicRepo.album(albumKey).then(albumFromSummary),
+            loadMusicTracks({
+                album_id: albumKey,
+                query: deferredQuery || undefined,
+                offset: 0,
+                limit: MUSIC_TRACK_PAGE_SIZE,
+            }),
+        ]).then(([album, page]) => {
+            if (cancelled || version !== albumDetailVersion.current) return
+            setSelectedAlbum({ ...album, tracks: page.tracks.map(trackFromSummary) })
+            setSelectedAlbumTracks(page.tracks.map(trackFromSummary))
+            setSelectedAlbumTrackTotal(page.total)
+        }).catch(() => {
+            if (!cancelled && version === albumDetailVersion.current) backToList("albums")
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [albumKey, albums, backToList, deferredQuery])
+
+    useEffect(() => {
+        const version = ++artistDetailVersion.current
+        if (!artistId) return
+        let cancelled = false
+        const existing = artists.find((artist) => artist.id === artistId)
+        void Promise.all([
+            existing ? Promise.resolve(existing) : musicRepo.artist(artistId).then((artist) => (
+                buildArtistGroups([artist])[0]
+            )),
+            loadMusicAlbums({
+                artist_id: artistId,
+                query: deferredQuery || undefined,
+                offset: 0,
+                limit: MUSIC_ALBUM_PAGE_SIZE,
+            }),
+            loadMusicTracks({
+                artist_id: artistId,
+                query: deferredQuery || undefined,
+                offset: 0,
+                limit: MUSIC_TRACK_PAGE_SIZE,
+            }),
+        ]).then(([artist, albumPage, trackPage]) => {
+            if (cancelled || version !== artistDetailVersion.current) return
+            const artistTracks = trackPage.tracks.map(trackFromSummary)
+            setSelectedArtist({ ...artist, tracks: artistTracks })
+            setSelectedArtistAlbums(buildAlbumGroups(albumPage.albums))
+            setSelectedArtistAlbumTotal(albumPage.total)
+            setSelectedArtistTracks(artistTracks)
+            setSelectedArtistTrackTotal(trackPage.total)
+        }).catch(() => {
+            if (!cancelled && version === artistDetailVersion.current) backToList("artists")
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [artistId, artists, backToList, deferredQuery])
+
+    const loadMoreAlbums = useCallback(async () => {
+        const version = requestVersion.current
+        const key = `albums:${version}`
+        if (albums.length >= albumTotal || loadingMore.current.has(key)) return
+        loadingMore.current.add(key)
+        try {
+            const page = await loadMusicAlbums({
+                query: deferredQuery || undefined,
+                offset: albums.length,
+                limit: MUSIC_ALBUM_PAGE_SIZE,
+            })
+            if (version !== requestVersion.current) return
+            setAlbums((current) => appendUnique(
+                current,
+                buildAlbumGroups(page.albums),
+                (album) => album.id,
+            ))
+            setAlbumTotal(page.total)
+        } catch (error) {
+            if (version === requestVersion.current) reportCatalogPageError(error)
+        } finally {
+            loadingMore.current.delete(key)
+        }
+    }, [albumTotal, albums.length, deferredQuery])
+
+    const loadMoreTracks = useCallback(async () => {
+        const version = requestVersion.current
+        const key = `tracks:${version}`
+        if (tracks.length >= trackTotal || loadingMore.current.has(key)) return
+        loadingMore.current.add(key)
+        try {
+            const page = await loadMusicTracks({
+                query: deferredQuery || undefined,
+                offset: tracks.length,
+                limit: MUSIC_TRACK_PAGE_SIZE,
+            })
+            if (version !== requestVersion.current) return
+            setTracks((current) => appendUnique(
+                current,
+                page.tracks.map(trackFromSummary),
+                (track) => track.id,
+            ))
+            setTrackTotal(page.total)
+        } catch (error) {
+            if (version === requestVersion.current) reportCatalogPageError(error)
+        } finally {
+            loadingMore.current.delete(key)
+        }
+    }, [deferredQuery, trackTotal, tracks.length])
+
+    const loadMoreArtists = useCallback(async () => {
+        const version = requestVersion.current
+        const key = `artists:${version}`
+        if (artists.length >= artistTotal || loadingMore.current.has(key)) return
+        loadingMore.current.add(key)
+        try {
+            const page = await loadMusicArtists({
+                query: deferredQuery || undefined,
+                offset: artists.length,
+                limit: MUSIC_ARTIST_PAGE_SIZE,
+            })
+            if (version !== requestVersion.current) return
+            setArtists((current) => appendUnique(
+                current,
+                buildArtistGroups(page.artists),
+                (artist) => artist.id,
+            ))
+            setArtistTotal(page.total)
+        } catch (error) {
+            if (version === requestVersion.current) reportCatalogPageError(error)
+        } finally {
+            loadingMore.current.delete(key)
+        }
+    }, [artistTotal, artists.length, deferredQuery])
+
+    const loadMoreAlbumTracks = useCallback(async () => {
+        const version = albumDetailVersion.current
+        const key = `album-tracks:${version}`
+        if (
+            !albumKey
+            || selectedAlbumTracks.length >= selectedAlbumTrackTotal
+            || loadingMore.current.has(key)
+        ) return
+        loadingMore.current.add(key)
+        try {
+            const page = await loadMusicTracks({
+                album_id: albumKey,
+                query: deferredQuery || undefined,
+                offset: selectedAlbumTracks.length,
+                limit: MUSIC_TRACK_PAGE_SIZE,
+            })
+            if (version !== albumDetailVersion.current) return
+            setSelectedAlbumTracks((current) => appendUnique(
+                current,
+                page.tracks.map(trackFromSummary),
+                (track) => track.id,
+            ))
+            setSelectedAlbumTrackTotal(page.total)
+        } catch (error) {
+            if (version === albumDetailVersion.current) reportCatalogPageError(error)
+        } finally {
+            loadingMore.current.delete(key)
+        }
+    }, [albumKey, deferredQuery, selectedAlbumTrackTotal, selectedAlbumTracks.length])
+
+    const loadMoreArtistAlbums = useCallback(async () => {
+        const version = artistDetailVersion.current
+        const key = `artist-albums:${version}`
+        if (
+            !artistId
+            || selectedArtistAlbums.length >= selectedArtistAlbumTotal
+            || loadingMore.current.has(key)
+        ) return
+        loadingMore.current.add(key)
+        try {
+            const page = await loadMusicAlbums({
+                artist_id: artistId,
+                query: deferredQuery || undefined,
+                offset: selectedArtistAlbums.length,
+                limit: MUSIC_ALBUM_PAGE_SIZE,
+            })
+            if (version !== artistDetailVersion.current) return
+            setSelectedArtistAlbums((current) => appendUnique(
+                current,
+                buildAlbumGroups(page.albums),
+                (album) => album.id,
+            ))
+            setSelectedArtistAlbumTotal(page.total)
+        } catch (error) {
+            if (version === artistDetailVersion.current) reportCatalogPageError(error)
+        } finally {
+            loadingMore.current.delete(key)
+        }
+    }, [artistId, deferredQuery, selectedArtistAlbumTotal, selectedArtistAlbums.length])
+
+    const loadMoreArtistTracks = useCallback(async () => {
+        const version = artistDetailVersion.current
+        const key = `artist-tracks:${version}`
+        if (
+            !artistId
+            || selectedArtistTracks.length >= selectedArtistTrackTotal
+            || loadingMore.current.has(key)
+        ) return
+        loadingMore.current.add(key)
+        try {
+            const page = await loadMusicTracks({
+                artist_id: artistId,
+                query: deferredQuery || undefined,
+                offset: selectedArtistTracks.length,
+                limit: MUSIC_TRACK_PAGE_SIZE,
+            })
+            if (version !== artistDetailVersion.current) return
+            setSelectedArtistTracks((current) => appendUnique(
+                current,
+                page.tracks.map(trackFromSummary),
+                (track) => track.id,
+            ))
+            setSelectedArtistTrackTotal(page.total)
+        } catch (error) {
+            if (version === artistDetailVersion.current) reportCatalogPageError(error)
+        } finally {
+            loadingMore.current.delete(key)
+        }
+    }, [artistId, deferredQuery, selectedArtistTrackTotal, selectedArtistTracks.length])
 
     const playAlbum = useCallback((album: AlbumGroup) => {
-        primePlayerTrackDetails(album.tracks.slice(0, 8))
-        setQueue(album.tracks, 0, true)
-    }, [setQueue])
+        void queueAllTracks(
+            { album_id: album.id, query: deferredQuery || undefined },
+            (items) => setQueue(items, 0, true),
+        )
+    }, [deferredQuery, setQueue])
 
-    const openArtist = useCallback((artist: ArtistGroup) => {
-        setSelectedArtistName(artist.name)
-        setView("artist")
-    }, [])
+    const playNextAlbum = useCallback((album: AlbumGroup) => {
+        void queueAllTracks(
+            { album_id: album.id, query: deferredQuery || undefined },
+            playNext,
+        )
+    }, [deferredQuery, playNext])
+
+    const playArtist = useCallback((artist: ArtistGroup) => {
+        void queueAllTracks(
+            { artist_id: artist.id, query: deferredQuery || undefined },
+            (items) => setQueue(items, 0, true),
+        )
+    }, [deferredQuery, setQueue])
+
+    const playNextArtist = useCallback((artist: ArtistGroup) => {
+        void queueAllTracks(
+            { artist_id: artist.id, query: deferredQuery || undefined },
+            playNext,
+        )
+    }, [deferredQuery, playNext])
 
     const playFilteredTracks = useCallback(() => {
-        primePlayerTrackDetails(tracks.slice(0, 8))
-        setQueue(tracks, 0, true)
-    }, [setQueue, tracks])
+        void queueAllTracks(
+            { query: deferredQuery || undefined },
+            (items) => setQueue(items, 0, true),
+        )
+    }, [deferredQuery, setQueue])
 
     const shuffleFilteredTracks = useCallback(() => {
-        const shuffled = shuffleTracks(tracks)
-        primePlayerTrackDetails(shuffled.slice(0, 8))
-        setQueue(shuffled, 0, true)
-    }, [setQueue, tracks])
+        void queueAllTracks(
+            { query: deferredQuery || undefined },
+            (items) => setQueue(shuffleTracks(items), 0, true),
+        )
+    }, [deferredQuery, setQueue])
+
+    const hasMusic = albumTotal > 0 || trackTotal > 0 || artistTotal > 0
+    const showNoMatches = !loading && Boolean(deferredQuery) && !hasMusic
+    const activeAlbum = selectedAlbum?.id === albumKey ? selectedAlbum : null
+    const activeArtist = selectedArtist?.id === artistId ? selectedArtist : null
 
     return (
         <div className="min-h-screen pb-32">
@@ -219,102 +407,155 @@ export function MusicLibraryPage() {
                         icon={Music}
                         title="Couldn’t load music"
                         description={error}
-                        action={{ label: "Retry", onClick: () => void load(), variant: "primary" }}
+                        action={{ label: "Retry", onClick: () => void load(deferredQuery), variant: "primary" }}
                     />
                 )}
-                {!loading && !error && !hasMusic && (
+                {!loading && !error && !hasMusic && !showNoMatches && (
                     <EmptyState icon={Music} title="No music yet" description="Sync music sources in Organize to build the music library." />
                 )}
                 {showNoMatches && (
                     <EmptyState icon={Search} title="No music matched" description="Try a different song, album, or artist search." />
                 )}
+                {((view === "album" && !activeAlbum) || (view === "artist" && !activeArtist))
+                    && <div className="flex justify-center py-16"><Spinner /></div>}
 
-                {hasMusic && !showNoMatches && view === "home" && albums.length > 0 && (
+                {hasMusic && !showNoMatches && view === "home" && (
                     <HomeView
                         albums={albums}
                         tracks={tracks}
+                        albumTotal={albumTotal}
+                        trackTotal={trackTotal}
                         onViewAlbums={() => setView("albums")}
                         onViewSongs={() => setView("songs")}
-                        onOpenAlbum={openAlbum}
+                        onOpenAlbum={(album) => openAlbumKey(album.id)}
                         onPlayAlbum={playAlbum}
                         onPlayTrack={(track) => playTrack(track, tracks)}
-                        onPlayNext={(tracksToInsert) => playNext(tracksToInsert)}
+                        onPlayNextAlbum={playNextAlbum}
+                        onPlayNextTrack={playNext}
                     />
                 )}
                 {hasMusic && !showNoMatches && view === "albums" && (
                     <AlbumsView
-                        albums={visibleAlbums}
-                        total={albums.length}
+                        albums={albums}
+                        total={albumTotal}
                         display={albumDisplay}
                         onDisplayChange={setAlbumDisplay}
-                        onOpenAlbum={openAlbum}
+                        onOpenAlbum={(album) => openAlbumKey(album.id)}
                         onPlayAlbum={playAlbum}
-                        onPlayNext={(tracksToInsert) => playNext(tracksToInsert)}
-                        hasMore={visibleAlbums.length < albums.length}
-                        onLoadMore={() => setAlbumLimit((value) => value + ALBUM_PAGE_SIZE)}
+                        onPlayNextAlbum={playNextAlbum}
+                        hasMore={albums.length < albumTotal}
+                        onLoadMore={() => void loadMoreAlbums()}
                     />
                 )}
                 {hasMusic && !showNoMatches && view === "artists" && (
-                    <ArtistGrid
-                        artists={artists}
-                        onOpenArtist={openArtist}
-                        onPlay={(artist) => setQueue(artist.tracks, 0, true)}
-                        onPlayNext={(artist) => playNext(artist.tracks)}
-                    />
+                    <div className="space-y-4">
+                        <ArtistGrid
+                            artists={artists}
+                            onOpenArtist={(artist) => openArtistId(artist.id)}
+                            onPlay={playArtist}
+                            onPlayNext={playNextArtist}
+                        />
+                        <InfiniteScrollSentinel
+                            key={artists.length}
+                            hasMore={artists.length < artistTotal}
+                            onLoadMore={() => void loadMoreArtists()}
+                        />
+                    </div>
                 )}
                 {hasMusic && !showNoMatches && view === "songs" && (
                     <div className="space-y-4">
                         <TrackTable
-                            tracks={visibleTracks}
+                            tracks={tracks}
                             onPlay={(track) => playTrack(track, tracks)}
-                            onPlayNext={(track) => playNext(track)}
+                            onPlayNext={playNext}
                         />
                         <InfiniteScrollSentinel
-                            key={visibleTracks.length}
-                            hasMore={visibleTracks.length < tracks.length}
-                            onLoadMore={() => setTrackLimit((value) => value + TRACK_PAGE_SIZE)}
+                            key={tracks.length}
+                            hasMore={tracks.length < trackTotal}
+                            onLoadMore={() => void loadMoreTracks()}
                         />
                     </div>
                 )}
-                {hasMusic && !showNoMatches && view === "album" && selectedAlbum && (
+                {view === "album" && activeAlbum && (
                     <AlbumDetail
-                        album={selectedAlbum}
-                        tracks={visibleSelectedAlbumTracks}
-                        matchedCount={selectedAlbumTracks.length}
+                        album={activeAlbum}
+                        tracks={selectedAlbumTracks}
+                        matchedCount={selectedAlbumTrackTotal}
                         query={deferredQuery}
-                        onBack={() => setView("albums")}
-                        onPlay={() => setQueue(selectedAlbumTracks, 0, true)}
-                        onShuffle={() => setQueue(shuffleTracks(selectedAlbumTracks), 0, true)}
-                        onPlayNext={() => playNext(selectedAlbumTracks)}
+                        onBack={() => backToList("albums")}
+                        onPlay={() => playAlbum(activeAlbum)}
+                        onShuffle={() => {
+                            void queueAllTracks(
+                                { album_id: activeAlbum.id, query: deferredQuery || undefined },
+                                (items) => setQueue(shuffleTracks(items), 0, true),
+                            )
+                        }}
+                        onPlayNext={() => playNextAlbum(activeAlbum)}
                         onPlayTrack={(track) => playTrack(track, selectedAlbumTracks)}
-                        onPlayNextTrack={(track) => playNext(track)}
-                        hasMore={visibleSelectedAlbumTracks.length < selectedAlbumTracks.length}
-                        onLoadMore={() => setAlbumTrackLimit((value) => value + TRACK_PAGE_SIZE)}
+                        onPlayNextTrack={playNext}
+                        hasMore={selectedAlbumTracks.length < selectedAlbumTrackTotal}
+                        onLoadMore={() => void loadMoreAlbumTracks()}
                     />
                 )}
-                {hasMusic && !showNoMatches && view === "artist" && selectedArtist && (
+                {view === "artist" && activeArtist && (
                     <ArtistDetail
-                        artist={selectedArtist}
-                        albums={visibleSelectedArtistAlbums}
-                        tracks={visibleSelectedArtistTracks}
-                        matchedTrackCount={selectedArtistTracks.length}
+                        artist={activeArtist}
+                        albums={selectedArtistAlbums}
+                        tracks={selectedArtistTracks}
+                        matchedTrackCount={selectedArtistTrackTotal}
                         query={deferredQuery}
-                        hasMoreAlbums={visibleSelectedArtistAlbums.length < selectedArtistAlbums.length}
-                        hasMoreTracks={visibleSelectedArtistTracks.length < selectedArtistTracks.length}
-                        onBack={() => setView("artists")}
-                        onOpenAlbum={openAlbum}
-                        onLoadMoreAlbums={() => setArtistAlbumLimit((value) => value + ALBUM_PAGE_SIZE)}
-                        onLoadMoreTracks={() => setArtistTrackLimit((value) => value + TRACK_PAGE_SIZE)}
-                        onPlay={() => setQueue(selectedArtistTracks, 0, true)}
-                        onShuffle={() => setQueue(shuffleTracks(selectedArtistTracks), 0, true)}
-                        onPlayNext={() => playNext(selectedArtistTracks)}
+                        hasMoreAlbums={selectedArtistAlbums.length < selectedArtistAlbumTotal}
+                        hasMoreTracks={selectedArtistTracks.length < selectedArtistTrackTotal}
+                        onBack={() => backToList("artists")}
+                        onOpenAlbum={(album) => openAlbumKey(album.id)}
+                        onLoadMoreAlbums={() => void loadMoreArtistAlbums()}
+                        onLoadMoreTracks={() => void loadMoreArtistTracks()}
+                        onPlay={() => playArtist(activeArtist)}
+                        onShuffle={() => {
+                            void queueAllTracks(
+                                { artist_id: activeArtist.id, query: deferredQuery || undefined },
+                                (items) => setQueue(shuffleTracks(items), 0, true),
+                            )
+                        }}
+                        onPlayNext={() => playNextArtist(activeArtist)}
                         onPlayAlbum={playAlbum}
-                        onPlayNextAlbum={(album) => playNext(album.tracks)}
+                        onPlayNextAlbum={playNextAlbum}
                         onPlayTrack={(track) => playTrack(track, selectedArtistTracks)}
-                        onPlayNextTrack={(track) => playNext(track)}
+                        onPlayNextTrack={playNext}
                     />
                 )}
             </div>
         </div>
+    )
+}
+
+async function queueAllTracks(
+    params: Omit<MusicQuery, "offset" | "limit">,
+    consume: (tracks: PlayerTrack[]) => void,
+) {
+    try {
+        const tracks = await loadMusicQueue(params)
+        if (tracks?.length) consume(tracks)
+    } catch (error) {
+        notify.error(
+            "Couldn’t load music",
+            error instanceof Error ? error.message : "The music queue could not be created.",
+        )
+    }
+}
+
+function appendUnique<T>(
+    current: T[],
+    incoming: T[],
+    key: (item: T) => string,
+) {
+    const seen = new Set(current.map(key))
+    return [...current, ...incoming.filter((item) => !seen.has(key(item)))]
+}
+
+function reportCatalogPageError(error: unknown) {
+    notify.error(
+        "Couldn’t load more music",
+        error instanceof Error ? error.message : "The next page could not be loaded.",
     )
 }

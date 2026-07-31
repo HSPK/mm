@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Security
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from mm.db.dto import User
@@ -17,6 +17,8 @@ from mm.server.schemas import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 _bearer = HTTPBearer(auto_error=False)
+_AUTH_COOKIE = "mm_token"
+_AUTH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60
 
 
 def _user_summary(user: User) -> UserSummary:
@@ -34,7 +36,7 @@ async def auth_status(request: Request) -> AuthStatus:
 
 
 @router.post("/setup", response_model=LoginResponse)
-async def auth_setup(request: Request, body: SetupBody) -> LoginResponse:
+async def auth_setup(request: Request, response: Response, body: SetupBody) -> LoginResponse:
     db = get_db(request)
     if await db.user.count() > 0:
         raise HTTPException(400, "Setup already completed")
@@ -45,36 +47,61 @@ async def auth_setup(request: Request, body: SetupBody) -> LoginResponse:
         is_admin=True,
     )
     token = await db.user.generate_token(user.id)  # type: ignore[arg-type]
+    _set_auth_cookie(response, request, token)
     return LoginResponse(token=token, user=_user_summary(user))
 
 
 @router.post("/login", response_model=LoginResponse)
-async def auth_login(request: Request, body: LoginBody) -> LoginResponse:
+async def auth_login(request: Request, response: Response, body: LoginBody) -> LoginResponse:
     db = get_db(request)
     user = await db.user.verify(body.username, body.password)
     if not user:
         raise HTTPException(401, "Invalid username or password")
     token = await db.user.generate_token(user.id)  # type: ignore[arg-type]
+    _set_auth_cookie(response, request, token)
     return LoginResponse(token=token, user=_user_summary(user))
 
 
 @router.post("/logout", response_model=StatusMessage)
 async def auth_logout(
     request: Request,
+    response: Response,
     cred: HTTPAuthorizationCredentials | None = Security(_bearer),
 ) -> StatusMessage:
-    token = cred.credentials if cred else request.cookies.get("mm_token")
+    token = cred.credentials if cred else request.cookies.get(_AUTH_COOKIE)
     if token:
         await get_db(request).user.invalidate(token)
         invalidate_token_cache(token)
+    response.delete_cookie(_AUTH_COOKIE, path="/")
     return StatusMessage(message="ok")
 
 
 @router.get("/me", response_model=UserSummary)
-async def auth_me(user: User | None = Depends(get_current_user)) -> UserSummary:
+async def auth_me(
+    request: Request,
+    response: Response,
+    cred: HTTPAuthorizationCredentials | None = Security(_bearer),
+    user: User | None = Depends(get_current_user),
+) -> UserSummary:
+    token = cred.credentials if cred else request.cookies.get(_AUTH_COOKIE)
+    if token:
+        _set_auth_cookie(response, request, token)
     if user is None:
         return UserSummary(id=0, username="admin", display_name="Admin", is_admin=True)
     return _user_summary(user)
+
+
+def _set_auth_cookie(response: Response, request: Request, token: str) -> None:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    response.set_cookie(
+        _AUTH_COOKIE,
+        token,
+        max_age=_AUTH_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=request.url.scheme == "https" or forwarded_proto == "https",
+        samesite="strict",
+        path="/",
+    )
 
 
 @router.post("/password", response_model=StatusMessage)

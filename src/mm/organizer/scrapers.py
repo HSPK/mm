@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
-from mm.config import CliConfig, get_config
+from mm.config import CliConfig, ScraperSourceConfig, get_config
 from mm.organizer.lyrics import (
     get_lrclib_lyrics,
     search_lrclib_lyrics,
@@ -23,6 +25,7 @@ __all__ = [
     "ScrapeCandidate",
     "ScrapeQuery",
     "Scraper",
+    "album_signature_candidates",
     "album_track_candidates",
     "build_scrapers",
     "configured_source_rows",
@@ -34,7 +37,50 @@ __all__ = [
     "search_qq_lyrics",
 ]
 
-IMPLEMENTED_SOURCES = {"tmdb", "omdb", "musicbrainz", "itunes", "netease", "qqmusic"}
+ScraperFactory = Callable[[ScraperSourceConfig, CliConfig], Scraper]
+
+
+def _tmdb_factory(source: ScraperSourceConfig, cfg: CliConfig) -> Scraper:
+    return TmdbScraper(
+        source,
+        language=cfg.scrapers.language,
+        timeout=cfg.scrapers.timeout,
+    )
+
+
+def _musicbrainz_factory(source: ScraperSourceConfig, cfg: CliConfig) -> Scraper:
+    return MusicBrainzScraper(
+        source,
+        timeout=cfg.scrapers.timeout,
+        language=cfg.scrapers.language,
+    )
+
+
+def _itunes_factory(source: ScraperSourceConfig, cfg: CliConfig) -> Scraper:
+    return ItunesScraper(
+        source,
+        timeout=cfg.scrapers.timeout,
+        language=cfg.scrapers.language,
+    )
+
+
+def _timeout_factory(scraper_type) -> ScraperFactory:
+    return lambda source, cfg: scraper_type(source, timeout=cfg.scrapers.timeout)
+
+
+SCRAPER_FACTORIES: dict[str, ScraperFactory] = {
+    "tmdb": _tmdb_factory,
+    "omdb": _timeout_factory(OmdbScraper),
+    "musicbrainz": _musicbrainz_factory,
+    "itunes": _itunes_factory,
+    "netease": _timeout_factory(NeteaseScraper),
+    "qqmusic": _timeout_factory(QqMusicScraper),
+}
+IMPLEMENTED_SOURCES = frozenset(SCRAPER_FACTORIES)
+
+
+def register_scraper(name: str, factory: ScraperFactory) -> None:
+    SCRAPER_FACTORIES[name] = factory
 
 
 def build_scrapers(
@@ -49,24 +95,9 @@ def build_scrapers(
         source = cfg.scrapers.sources.get(name)
         if not source or not source.enabled:
             continue
-        if name == "tmdb":
-            result.append(
-                TmdbScraper(
-                    source,
-                    language=cfg.scrapers.language,
-                    timeout=cfg.scrapers.timeout,
-                )
-            )
-        elif name == "omdb":
-            result.append(OmdbScraper(source, timeout=cfg.scrapers.timeout))
-        elif name == "musicbrainz":
-            result.append(MusicBrainzScraper(source, timeout=cfg.scrapers.timeout))
-        elif name == "itunes":
-            result.append(ItunesScraper(source, timeout=cfg.scrapers.timeout))
-        elif name == "netease":
-            result.append(NeteaseScraper(source, timeout=cfg.scrapers.timeout))
-        elif name == "qqmusic":
-            result.append(QqMusicScraper(source, timeout=cfg.scrapers.timeout))
+        factory = SCRAPER_FACTORIES.get(name)
+        if factory:
+            result.append(factory(source, cfg))
     return result
 
 
@@ -77,10 +108,42 @@ def search_all(
     source: str | None = None,
     limit: int = 5,
 ) -> list[ScrapeCandidate]:
+    scrapers = build_scrapers(cfg, only=source)
+    if not scrapers:
+        return []
+    # Each source is a distinct host with its own rate-limit lock, so query them
+    # concurrently: wall time drops from the sum of per-source latencies to the
+    # slowest single source. A source that errors is isolated so the others'
+    # results are still used; only a total wipeout (every source failed) is
+    # surfaced as an error instead of a misleading "no match".
+    if len(scrapers) == 1:
+        outcomes = [_run_scraper_search(scrapers[0], query, limit)]
+    else:
+        with ThreadPoolExecutor(max_workers=len(scrapers)) as pool:
+            outcomes = list(
+                pool.map(lambda scraper: _run_scraper_search(scraper, query, limit), scrapers)
+            )
     candidates: list[ScrapeCandidate] = []
-    for scraper in build_scrapers(cfg, only=source):
-        candidates.extend(scraper.search(query, limit=limit))
+    errors: list[Exception] = []
+    for outcome in outcomes:
+        if isinstance(outcome, Exception):
+            errors.append(outcome)
+        else:
+            candidates.extend(outcome)
+    if not candidates and len(errors) == len(scrapers):
+        raise errors[0]
     return sorted(candidates, key=lambda candidate: candidate.confidence, reverse=True)[:limit]
+
+
+def _run_scraper_search(
+    scraper: Scraper,
+    query: ScrapeQuery,
+    limit: int,
+) -> list[ScrapeCandidate] | Exception:
+    try:
+        return list(scraper.search(query, limit=limit))
+    except Exception as exc:  # noqa: BLE001 - isolate one source; others still count
+        return exc
 
 
 def album_track_candidates(
@@ -96,6 +159,22 @@ def album_track_candidates(
         if callable(album_tracks):
             return album_tracks(candidate, expected_count=expected_count)
     return []
+
+
+def album_signature_candidates(
+    query: ScrapeQuery,
+    durations: list[float],
+    *,
+    cfg: CliConfig | None = None,
+    source: str | None = None,
+) -> tuple[ScrapeCandidate, list[ScrapeCandidate]] | None:
+    if source not in {None, "netease"}:
+        return None
+    for scraper in build_scrapers(cfg, only="netease"):
+        album_by_signature = getattr(scraper, "album_by_signature", None)
+        if callable(album_by_signature):
+            return album_by_signature(query, durations)
+    return None
 
 
 def enrich_candidate(
@@ -136,19 +215,36 @@ def _enrich_music_candidate(
     query: ScrapeQuery | None,
     cfg: CliConfig | None,
 ) -> ScrapeCandidate:
-    if candidate.media_type != "track":
-        return candidate
-    source = (cfg or get_config()).organizer.lyrics_source
-    track = candidate.title or (query.title if query else "")
-    artist = candidate.artist or (query.artist if query else "")
-    album = candidate.album or (query.album if query else "")
-    lyrics = _lyrics_from_source(source, track, artist, album)
-    if not lyrics and album:
-        lyrics = _lyrics_from_source(source, track, artist, "")
+    config = cfg or get_config()
+    enriched = candidate
+    for scraper in build_scrapers(config, only=candidate.source):
+        details = getattr(scraper, "details", None)
+        if callable(details):
+            enriched = details(candidate, query=query)
+            break
+    if enriched.media_type != "track":
+        return enriched
+    source = config.organizer.lyrics_source
+    track = enriched.title or (query.title if query else "")
+    artist = enriched.artist or (query.artist if query else "")
+    album = enriched.album or (query.album if query else "")
+    lyrics = None
+    if source == "all":
+        sources = ("lrclib", "netease", "kugou", "qq")
+    elif source == "qq":
+        sources = ("lrclib", "netease", "kugou")
+    else:
+        sources = tuple(dict.fromkeys((source, "lrclib", "netease", "kugou", "qq")))
+    for lyrics_source in sources:
+        lyrics = _lyrics_from_source(lyrics_source, track, artist, album)
+        if not lyrics and album:
+            lyrics = _lyrics_from_source(lyrics_source, track, artist, "")
+        if lyrics:
+            break
     if not lyrics:
-        return candidate
+        return enriched
     return replace(
-        candidate,
+        enriched,
         lyrics=str(lyrics.get("plainLyrics") or ""),
         synced_lyrics=str(lyrics.get("syncedLyrics") or ""),
     )

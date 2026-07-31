@@ -25,7 +25,7 @@ export function createApiClient(opts: ApiClientOptions = {}): AxiosInstance {
     const tokenStorage = opts.tokenStorage ?? browserTokenStorage
     const onUnauthorized = opts.onUnauthorized ?? defaultUnauthorized
 
-    const instance = axios.create({ baseURL })
+    const instance = axios.create({ baseURL, withCredentials: true })
 
     instance.interceptors.request.use((req) => {
         const token = tokenStorage.get()

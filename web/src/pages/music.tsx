@@ -1,3 +1,3 @@
-import { MusicPage } from "@/pages/organized-library"
+import { MusicLibraryPage } from "@/components/music/music-library-page"
 
-export default MusicPage
+export default MusicLibraryPage

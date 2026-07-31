@@ -11,6 +11,7 @@ from mm.db.client import AsyncDBClient
 from mm.db.dto import User
 from mm.library.settings import LibraryConfig
 from mm.media.thumbnails import cache_dir_for_library
+from mm.server.media_tickets import verify_media_ticket
 from mm.utils.paths import resolve_media_path
 
 _bearer = HTTPBearer(auto_error=False)
@@ -95,6 +96,30 @@ async def get_current_user(
     _evict_cache(_TOKEN_CACHE, get_config().server.token_cache.max)
 
     return user
+
+
+async def get_media_user(
+    request: Request,
+    cred: HTTPAuthorizationCredentials | None = Security(_bearer),
+) -> User | None:
+    ticket = request.query_params.get("ticket") or ""
+    playback_id = request.query_params.get("playback_id") or ""
+    config: LibraryConfig | None = getattr(request.app.state, "config", None)
+    secret: bytes | None = getattr(request.app.state, "media_ticket_secret", None)
+    if (
+        ticket
+        and playback_id
+        and config is not None
+        and secret is not None
+        and verify_media_ticket(
+            secret,
+            ticket,
+            library_id=config.library_id,
+            playback_id=playback_id,
+        )
+    ):
+        return None
+    return await get_current_user(request, cred)
 
 
 def require_admin(user: User | None = Depends(get_current_user)) -> User | None:

@@ -1,20 +1,20 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react"
-import { Film, Search, Tv } from "lucide-react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { Film, RefreshCw, Search, Tv } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { videoRepo, type VideoLibraryItem } from "@/api/videos"
 import { useHeaderRegistration } from "@/components/navigation/header-context"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
+import { cn } from "@/lib/utils"
 import { MovieDetail, ShowDetail } from "./video-detail"
 import { VideoHome } from "./video-home"
+import { useVideoSelection } from "./use-video-selection"
 import {
     collectionNames,
     filterCollectionMovies,
     filterCollectionShows,
-    hasProgress,
     recentItems,
     recentShowsList,
-    showHasProgress,
 } from "./video-home-model"
 import {
     filterShows,
@@ -32,11 +32,12 @@ export function VideoLibraryPage({ kind }: { kind: VideoPageKind }) {
     const [error, setError] = useState<string | null>(null)
     const [query, setQuery] = useState("")
     const [limit, setLimit] = useState(PAGE_SIZE)
-    const [selectedKey, setSelectedKey] = useState<string | null>(null)
+    const { selectedKey, select, clear } = useVideoSelection()
     const [activeCollection, setActiveCollection] = useState("All")
     const [userStateVersion, setUserStateVersion] = useState(0)
     const location = useLocation()
     const registerHeader = useHeaderRegistration()
+    const rootRef = useRef<HTMLDivElement>(null)
     const deferredQuery = useDeferredValue(query)
     const isTv = kind === "tv"
     const title = isTv ? "TV Shows" : "Movies"
@@ -90,7 +91,7 @@ export function VideoLibraryPage({ kind }: { kind: VideoPageKind }) {
         [isTv, searchedMovies, searchedShows],
     )
     const collectionOptions = useMemo(
-        () => ["All", "Favorites", "Unwatched", ...collectionLabels],
+        () => ["All", "Favorites", ...collectionLabels],
         [collectionLabels],
     )
     const selectedCollection = collectionOptions.includes(activeCollection) ? activeCollection : "All"
@@ -104,16 +105,14 @@ export function VideoLibraryPage({ kind }: { kind: VideoPageKind }) {
     )
     const visibleMovies = useMemo(() => movies.slice(0, limit), [limit, movies])
     const visibleShows = useMemo(() => shows.slice(0, limit), [limit, shows])
-    const continueMovies = useMemo(() => searchedMovies.filter(hasProgress).slice(0, 12), [searchedMovies, userStateVersion])
-    const continueShows = useMemo(() => searchedShows.filter(showHasProgress).slice(0, 12), [searchedShows, userStateVersion])
     const recentMovies = useMemo(() => recentItems(searchedMovies), [searchedMovies])
     const recentShows = useMemo(() => recentShowsList(searchedShows), [searchedShows])
     const selectedMovie = useMemo(
-        () => searchedMovies.find((item) => item.path === selectedKey) ?? null,
+        () => searchedMovies.find((item) => item.playback_id === selectedKey) ?? null,
         [searchedMovies, selectedKey],
     )
     const selectedShow = useMemo(
-        () => searchedShows.find((show) => show.key === selectedKey) ?? null,
+        () => searchedShows.find((show) => show.id === selectedKey) ?? null,
         [selectedKey, searchedShows],
     )
     const hasItems = items.length > 0
@@ -129,80 +128,118 @@ export function VideoLibraryPage({ kind }: { kind: VideoPageKind }) {
         ),
         [isTv, query],
     )
+    const headerActions = useMemo(
+        () => (
+            <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading}
+                aria-label="Refresh"
+                title="Refresh"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+            >
+                <RefreshCw className={cn("h-[18px] w-[18px]", loading && "animate-spin")} />
+            </button>
+        ),
+        [load, loading],
+    )
     useEffect(() => registerHeader({
         locationKey: `${location.pathname}?${location.search}`,
         title,
-        back: selectedKey ? () => setSelectedKey(null) : false,
+        immersive: Boolean(selectedKey),
+        back: selectedKey ? clear : false,
         backLabel: selectedKey ? "Back to list" : "Back",
-        search: headerSearch,
-    }), [headerSearch, location.pathname, location.search, registerHeader, selectedKey, title])
+        search: selectedKey ? undefined : headerSearch,
+        actions: selectedKey ? undefined : headerActions,
+    }), [clear, headerActions, headerSearch, location.pathname, location.search, registerHeader, selectedKey, title])
+
+    useEffect(() => {
+        if (!selectedKey) return
+        let node = rootRef.current?.parentElement
+        while (node) {
+            if (node.scrollHeight > node.clientHeight && getComputedStyle(node).overflowY !== "visible") {
+                node.scrollTop = 0
+                break
+            }
+            node = node.parentElement
+        }
+    }, [selectedKey])
+
+    const detailReady = Boolean(selectedKey) && hasItems && !noMatches
+    const activeDetail = detailReady ? (isTv ? selectedShow : selectedMovie) : null
 
     return (
-        <div className="min-h-screen pb-24">
-            <div className="space-y-5 px-4 pt-5 sm:px-6 sm:pt-7">
-                {loading && !hasItems && <div className="flex justify-center py-16"><Spinner /></div>}
-                {error && !hasItems && (
-                    <EmptyState
-                        icon={Icon}
-                        title={`Couldn’t load ${title.toLowerCase()}`}
-                        description={error}
-                        action={{ label: "Retry", onClick: () => void load(), variant: "primary" }}
-                    />
-                )}
-                {!loading && !error && !hasItems && (
-                    <EmptyState icon={Icon} title={`No ${title.toLowerCase()} yet`} description="Sync this media source in Organize first." />
-                )}
-                {noMatches && (
-                    <EmptyState icon={Search} title="No matches" description="Try a shorter title, year, genre, or cast search." />
-                )}
-
-                {!noMatches && hasItems && (
-                    <>
-                        <div>
-                            {isTv && selectedShow ? (
-                                <ShowDetail
-                                    show={selectedShow}
-                                    onUserStateChange={() => setUserStateVersion((value) => value + 1)}
-                                />
-                            ) : selectedMovie ? (
-                                <MovieDetail
-                                    item={selectedMovie}
-                                    onUserStateChange={() => setUserStateVersion((value) => value + 1)}
-                                />
-                            ) : null}
-                        </div>
-                        {selectedKey ? null : isTv ? (
+        <div ref={rootRef} className="min-h-screen pb-24">
+            {activeDetail && isTv && selectedShow ? (
+                <ShowDetail
+                    key={selectedShow.id}
+                    show={selectedShow}
+                    onBack={clear}
+                    onUserStateChange={() => setUserStateVersion((value) => value + 1)}
+                />
+            ) : activeDetail && !isTv && selectedMovie ? (
+                <MovieDetail
+                    key={selectedMovie.playback_id}
+                    item={selectedMovie}
+                    onBack={clear}
+                    onUserStateChange={() => setUserStateVersion((value) => value + 1)}
+                />
+            ) : (
+                <div className="space-y-5 px-4 pt-5 sm:px-6 sm:pt-7">
+                    {loading && !hasItems && <div className="flex justify-center py-16"><Spinner /></div>}
+                    {error && !hasItems && (
+                        <EmptyState
+                            icon={Icon}
+                            title={`Couldn’t load ${title.toLowerCase()}`}
+                            description={error}
+                            action={{ label: "Retry", onClick: () => void load(), variant: "primary" }}
+                        />
+                    )}
+                    {!loading && !error && !hasItems && (
+                        <EmptyState icon={Icon} title={`No ${title.toLowerCase()} yet`} description="Sync this media source in Organize first." />
+                    )}
+                    {noMatches && (
+                        <EmptyState icon={Search} title="No matches" description="Try a shorter title, year, genre, or cast search." />
+                    )}
+                    {selectedKey && hasItems && !noMatches && !activeDetail && (
+                        <EmptyState
+                            icon={Icon}
+                            title="Title not found"
+                            description="This item is no longer in your library."
+                            action={{ label: "Back to list", onClick: clear, variant: "primary" }}
+                        />
+                    )}
+                    {!selectedKey && hasItems && !noMatches && (
+                        isTv ? (
                             <VideoHome
                                 kind="tv"
-                                continueShows={continueShows}
                                 recentShows={recentShows}
                                 shows={visibleShows}
-                                selectedKey={selectedShow?.key ?? ""}
+                                selectedKey=""
                                 collectionLabels={collectionLabels}
                                 activeCollection={selectedCollection}
                                 hasMore={visibleShows.length < shows.length}
-                                onSelectShow={(show) => setSelectedKey(show.key)}
+                                onSelectShow={(show) => select(show.id)}
                                 onLoadMore={() => setLimit((value) => value + PAGE_SIZE)}
                                 onCollection={setActiveCollection}
                             />
                         ) : (
                             <VideoHome
                                 kind="movies"
-                                continueMovies={continueMovies}
                                 recentMovies={recentMovies}
                                 movies={visibleMovies}
-                                selectedPath={selectedMovie?.path ?? ""}
+                                selectedPath=""
                                 collectionLabels={collectionLabels}
                                 activeCollection={selectedCollection}
                                 hasMore={visibleMovies.length < movies.length}
-                                onSelectMovie={(item) => setSelectedKey(item.path)}
+                                onSelectMovie={(item) => select(item.playback_id ?? "")}
                                 onLoadMore={() => setLimit((value) => value + PAGE_SIZE)}
                                 onCollection={setActiveCollection}
                             />
-                        )}
-                    </>
-                )}
-            </div>
+                        )
+                    )}
+                </div>
+            )}
         </div>
     )
 }

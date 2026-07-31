@@ -1,16 +1,19 @@
 import type {
     OrganizerCandidate,
+    OrganizerItemPatchRequest,
     OrganizerItem,
     OrganizerMatchResult,
 } from "@/api/organizer"
 import type {
     MediaRow,
+    MetadataEditValues,
     OrganizerKind,
     OrganizerKindSession,
     ScrapeTarget,
     StatusValue,
 } from "./organize-types"
 import { tvSeriesTitle } from "./organize-tv"
+import { itemSelectionKey } from "./organize-selection"
 
 export type {
     MediaRow,
@@ -32,6 +35,7 @@ export {
 
 export {
     actionKey,
+    itemSelectionKey,
     selectedCandidateMap,
     toggleKey,
     visibleRangeKeys,
@@ -41,7 +45,6 @@ export {
     errorMessage,
     hasScraperCredentialStatus,
     languageDisplayName,
-    pollOrganizerJob,
     scrapeEmptyMessage,
     scrapeFieldChips,
     scrapeResultMessage,
@@ -57,7 +60,7 @@ export function buildRows(
     kind: OrganizerKind,
     expandedKeys: string[],
 ): MediaRow[] {
-    const matchesByPath = new Map(matches.map((result) => [result.item.path, result.candidates]))
+    const matchesByPath = new Map(matches.map((result) => [itemSelectionKey(result.item), result.candidates]))
     const expanded = new Set(expandedKeys)
     if (kind === "tv") return buildTvRows(items, matchesByPath, selectedCandidates, expanded)
     if (kind === "music") return buildMusicRows(items, matchesByPath, selectedCandidates)
@@ -76,13 +79,15 @@ export function mergeMatches(
     session: OrganizerKindSession,
     results: OrganizerMatchResult[],
 ): OrganizerKindSession {
-    const matches = new Map(session.matches.map((result) => [result.item.path, result]))
+    const matches = new Map(session.matches.map((result) => [itemSelectionKey(result.item), result]))
     const selectedCandidates = { ...session.selectedCandidates }
     for (const result of results) {
-        matches.set(result.item.path, result)
-        if (!selectedCandidates[result.item.path] && result.candidates[0]) {
-            selectedCandidates[result.item.path] = result.candidates[0]
+        const key = itemSelectionKey(result.item)
+        matches.set(key, result)
+        if (!selectedCandidates[key] && result.candidates[0]) {
+            selectedCandidates[key] = result.candidates[0]
         }
+
     }
     return {
         ...session,
@@ -92,6 +97,83 @@ export function mergeMatches(
         renamePlanKey: null,
     }
 }
+
+export function metadataPatchRequests(
+    row: MediaRow,
+    values: MetadataEditValues,
+): OrganizerItemPatchRequest[] {
+    return row.files.map((item) => ({
+        item_uid: item.item_uid!,
+        revision: item.revision!,
+        title: row.kind === "tv" ? undefined : values.title,
+        artist: item.artist,
+        album: item.album,
+        year: values.year,
+        metadata_title: row.kind === "tv" ? undefined : values.title,
+        metadata_original_title: values.originalTitle || null,
+        metadata_show_title: row.kind === "tv" ? values.title : undefined,
+        metadata_premiered: values.premiered || null,
+        metadata_certification: values.certification || null,
+        metadata_runtime: values.runtime,
+        metadata_genres: splitMetadataList(values.genres),
+        metadata_status: values.status || null,
+        metadata_countries: splitMetadataList(values.countries),
+        metadata_tagline: values.tagline || null,
+        metadata_plot: values.plot || null,
+        metadata_tags: splitMetadataList(values.tags),
+        metadata_rating: values.rating,
+        metadata_studios: splitMetadataList(values.studios),
+        metadata_cast: splitMetadataList(values.cast),
+        write_nfo: values.writeNfo,
+    }))
+}
+
+export type OrganizerSortMode = "name" | "year" | "incomplete"
+
+export function filterAndSortRows(
+    rows: MediaRow[],
+    query: string,
+    sort: OrganizerSortMode,
+): MediaRow[] {
+    const q = query.trim().toLowerCase()
+    let groups = groupRowsByParent(rows)
+    if (q) {
+        groups = groups.filter((group) => group.some((row) => rowMatchesQuery(row, q)))
+    }
+    groups.sort((a, b) => compareRows(a[0], b[0], sort))
+    return groups.flat()
+}
+
+function groupRowsByParent(rows: MediaRow[]): MediaRow[][] {
+    const groups: MediaRow[][] = []
+    for (const row of rows) {
+        if (row.depth === 0 || groups.length === 0) groups.push([row])
+        else groups[groups.length - 1].push(row)
+    }
+    return groups
+}
+
+function rowMatchesQuery(row: MediaRow, q: string): boolean {
+    if (row.title.toLowerCase().includes(q) || row.subtitle.toLowerCase().includes(q)) return true
+    return row.files.some((file) => (
+        (file.title ?? "").toLowerCase().includes(q)
+        || (file.artist ?? "").toLowerCase().includes(q)
+        || (file.album ?? "").toLowerCase().includes(q)
+    ))
+}
+
+function compareRows(a: MediaRow, b: MediaRow, sort: OrganizerSortMode): number {
+    if (sort === "year") return (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title)
+    if (sort === "incomplete") {
+        return rowCompleteness(a) - rowCompleteness(b) || a.title.localeCompare(b.title)
+    }
+    return a.title.localeCompare(b.title)
+}
+
+function rowCompleteness(row: MediaRow): number {
+    return [row.metadata, row.images, row.lyrics].filter((value) => value === "yes").length
+}
+
 
 export function scrapeItemsForRows(
     kind: OrganizerKind,
@@ -315,7 +397,7 @@ export function rowFromFiles(
     selectedCandidates: Record<string, OrganizerCandidate>,
     overrides: Partial<Pick<MediaRow, "title" | "subtitle" | "depth" | "expandable" | "expanded" | "season" | "track">> = {},
 ): MediaRow {
-    const candidates = uniqueCandidates(files.flatMap((file) => matchesByPath.get(file.path) ?? []))
+    const candidates = uniqueCandidates(files.flatMap((file) => matchesByPath.get(itemSelectionKey(file)) ?? []))
     const candidate = firstCandidate(files, selectedCandidates, matchesByPath)
     return {
         key,
@@ -342,9 +424,38 @@ export function rowFromFiles(
 }
 
 function rowKey(item: OrganizerItem, kind: OrganizerKind) {
-    if (kind === "movies") return `movie:${item.path}`
-    if (kind === "tv") return `tv:${tvSeriesTitle(item).toLowerCase()}`
+    if (kind === "movies") return `movie:${item.item_uid ?? item.path}`
+    if (kind === "tv") return `tv:${tvSeriesIdentity(item)}`
     return `music:${musicAlbumDirectory(item.path).toLowerCase()}`
+}
+
+function tvSeriesIdentity(item: OrganizerItem) {
+    const title = tvSeriesTitle(item).trim().toLowerCase()
+    const year = item.metadata_year ?? item.year ?? ""
+    const source = tvSeriesRoot(item.path).toLowerCase()
+    return `${opaqueKey(source)}:${year}:${opaqueKey(title)}`
+}
+
+function tvSeriesRoot(path: string) {
+    const parts = path.split(/[\\/]/).filter(Boolean)
+    parts.pop()
+    if (/^(?:s(?:eason)?|series)\s*\d{1,3}$/i.test(parts.at(-1) ?? "") || /^第\s*\d{1,3}\s*季$/.test(parts.at(-1) ?? "")) {
+        parts.pop()
+    }
+    return parts.join("/")
+}
+
+function opaqueKey(value: string) {
+    let hash = 5381
+    for (let index = 0; index < value.length; index += 1) hash = (hash * 33) ^ value.charCodeAt(index)
+    return (hash >>> 0).toString(36)
+}
+
+function splitMetadataList(value: string) {
+    return value
+        .split(/[,，\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
 }
 
 function musicAlbumDirectory(path: string) {
@@ -457,11 +568,11 @@ function firstCandidate(
     matchesByPath: Map<string, OrganizerCandidate[]>,
 ) {
     for (const file of files) {
-        const selected = selectedCandidates[file.path]
+        const selected = selectedCandidates[itemSelectionKey(file)]
         if (selected) return selected
     }
     for (const file of files) {
-        const candidate = matchesByPath.get(file.path)?.[0]
+        const candidate = matchesByPath.get(itemSelectionKey(file))?.[0]
         if (candidate) return candidate
     }
     return null

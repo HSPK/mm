@@ -257,7 +257,7 @@ class OrganizerConfig(BaseModel):
     chinese_script: str = "simplified"
     lyrics_source: str = "lrclib"
     default_scrapers: dict[str, str] = Field(
-        default_factory=lambda: {"movies": "tmdb", "tv": "tmdb", "music": "musicbrainz"}
+        default_factory=lambda: {"movies": "tmdb", "tv": "tmdb", "music": "netease"}
     )
     media_sources: dict[str, list[str]] = Field(
         default_factory=lambda: {"movies": [], "tv": [], "music": []}

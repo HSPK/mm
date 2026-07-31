@@ -9,7 +9,7 @@ export function loadSession(): OrganizerSessionState {
     try {
         const parsed = JSON.parse(raw) as {
             activeKind?: unknown
-            sessions?: Partial<Record<OrganizerKind, Pick<OrganizerKindSession, "recursive" | "source">>>
+            sessions?: Partial<Record<OrganizerKind, Pick<OrganizerKindSession, "recursive" | "source" | "query" | "order">>>
         }
         return {
             activeKind: isOrganizerKind(parsed.activeKind) ? parsed.activeKind : "movies",
@@ -65,14 +65,18 @@ function pickPersistedKindState(session: OrganizerKindSession) {
     return {
         recursive: session.recursive,
         source: session.source,
+        query: session.query,
+        order: session.order,
     }
 }
 
-function restoreKindSession(saved?: Pick<OrganizerKindSession, "recursive" | "source">) {
+function restoreKindSession(saved?: Pick<OrganizerKindSession, "recursive" | "source" | "query" | "order">) {
     return {
         ...emptyKindSession(),
         recursive: saved?.recursive ?? true,
         source: saved?.source ?? "",
+        query: saved?.query ?? "",
+        order: saved?.order ?? "name",
     }
 }
 

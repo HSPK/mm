@@ -223,10 +223,14 @@ class LibraryConfigModel(BaseModel):
 class OrganizerMediaModel(BaseModel):
     id = AutoField()
     path = TextField(unique=True)
+    item_uid = CharField(max_length=64, null=True)
+    revision = IntegerField(default=1)
+    source_root = TextField(null=True, default=None)
     source_kind = CharField(max_length=16)
     media_type = CharField(max_length=16)
     title = TextField(default="")
     artist = TextField(null=True, default=None)
+    album_artist = TextField(null=True, default=None)
     album = TextField(null=True, default=None)
     year = IntegerField(null=True, default=None)
     season = IntegerField(null=True, default=None)
@@ -241,6 +245,20 @@ class OrganizerMediaModel(BaseModel):
     has_images = SmallIntegerField(default=0)
     has_subtitles = SmallIntegerField(default=0)
     has_lyrics = SmallIntegerField(default=0)
+    audio_duration = FloatField(null=True, default=None)
+    audio_mime_type = CharField(max_length=128, null=True, default=None)
+    music_track_id = CharField(max_length=64, null=True, default=None)
+    music_album_id = CharField(max_length=64, null=True, default=None)
+    music_artist_id = CharField(max_length=64, null=True, default=None)
+    music_album_artist_id = CharField(max_length=64, null=True, default=None)
+    music_title_variants = TextField(default="{}")
+    music_artist_variants = TextField(default="{}")
+    music_album_artist_variants = TextField(default="{}")
+    music_album_variants = TextField(default="{}")
+    file_size = BigIntegerField(default=0)
+    mtime_ns = BigIntegerField(default=0)
+    sidecar_signature = CharField(max_length=64, default="")
+    scan_version = SmallIntegerField(default=0)
     payload = TextField(default="{}")
     missing = SmallIntegerField(default=0)
     first_seen_at = DateTimeField(default=dt.datetime.now)
@@ -252,6 +270,7 @@ class OrganizerMediaModel(BaseModel):
             (("source_kind",), False),
             (("media_type",), False),
             (("missing",), False),
+            (("source_kind", "media_type", "missing"), False),
         )
 
 
@@ -282,6 +301,9 @@ class JobModel(BaseModel):
     message = TextField(default="")
     detail = TextField(default="")
     payload = TextField(default="{}")
+    idempotency_key = CharField(max_length=256, null=True, default=None)
+    payload_hash = CharField(max_length=64, null=True, default=None)
+    active_claim = CharField(max_length=320, null=True, default=None)
     result = TextField(default="{}")
     error = TextField(default="")
     created_at = DateTimeField(default=dt.datetime.now)
@@ -333,6 +355,28 @@ class VideoStateModel(BaseModel):
         )
 
 
+class VideoProbeCacheModel(BaseModel):
+    id = AutoField()
+    path = TextField(unique=True)
+    size = BigIntegerField(default=0)
+    mtime_ns = BigIntegerField(default=0)
+    streams = TextField(default="[]")
+    updated_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "video_probe_cache"
+
+
+class ScrapeCacheModel(BaseModel):
+    id = AutoField()
+    cache_key = TextField(unique=True)
+    payload = TextField(default="[]")
+    created_at = DateTimeField(default=dt.datetime.now)
+
+    class Meta:
+        table_name = "scrape_cache"
+
+
 class SchemaMigrationModel(BaseModel):
     name = CharField(max_length=128, primary_key=True)
     applied_at = DateTimeField(default=dt.datetime.now)
@@ -357,5 +401,7 @@ ALL_TABLES = [
     JobModel,
     JobEventModel,
     VideoStateModel,
+    VideoProbeCacheModel,
+    ScrapeCacheModel,
     SchemaMigrationModel,
 ]

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Captions, Film, Play, Star, Tv } from "lucide-react"
+import { Captions, Film, Star, Tv } from "lucide-react"
 import type { VideoLibraryItem } from "@/api/videos"
 import { cn } from "@/lib/utils"
 import {
@@ -104,12 +104,6 @@ function Poster({ artworkUrl, fallback }: { artworkUrl?: string, fallback: "movi
                     className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                 />
             )}
-            <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-xl">
-                    <Play className="ml-0.5 h-5 w-5" />
-                </span>
-            </div>
         </div>
     )
 }

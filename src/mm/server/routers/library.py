@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 
 from mm.config import get_config
 from mm.db.backend import DatabaseTarget
@@ -23,6 +25,7 @@ from mm.server.dependencies import (
     get_db,
     invalidate_media_path_cache,
     invalidate_token_cache,
+    require_admin,
 )
 from mm.server.job_utils import update_job
 from mm.server.schemas import (
@@ -122,7 +125,7 @@ async def list_recent_libraries(
 async def switch_library(
     body: SwitchLibraryBody,
     request: Request,
-    user: User | None = Depends(get_current_user),
+    user: User | None = Depends(require_admin),
 ) -> SwitchLibraryResponse:
     """Switch the active library database."""
     target = DatabaseTarget.from_value(body.db_path)
@@ -142,6 +145,7 @@ async def switch_library(
     await new_db.connect()
     await new_db.init_db()
 
+    old_db: AsyncDBClient | None = getattr(request.app.state, "db", None)
     request.app.state.db = new_db
     request.app.state.db_path = resolved
     request.app.state.config = await new_db.library_config.get()
@@ -149,12 +153,86 @@ async def switch_library(
 
     invalidate_token_cache()
     invalidate_media_path_cache()
+    await _publish_library_change(request, request.app.state.config.library_id)
+    if old_db is not None and old_db is not new_db:
+        asyncio.create_task(_close_retired_database(old_db))
 
     return SwitchLibraryResponse(
         db_path=resolved,
         name=target.local_path.parent.name if target.local_path else "postgres",
+        library_id=request.app.state.config.library_id,
         message="Library switched successfully",
     )
+
+
+@router.get("/events")
+async def library_events(
+    request: Request,
+    user: User | None = Depends(get_current_user),
+) -> StreamingResponse:
+    subscribers = _library_subscribers(request)
+    queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=8)
+    subscribers.add(queue)
+
+    async def events():
+        try:
+            generation = int(getattr(request.app.state, "library_generation", 0))
+            config = getattr(request.app.state, "config", None)
+            yield _sse_event(
+                {
+                    "generation": generation,
+                    "library_id": getattr(config, "library_id", ""),
+                }
+            )
+            while not await request.is_disconnected():
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                yield _sse_event(event)
+        finally:
+            subscribers.discard(queue)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _publish_library_change(request: Request, library_id: str) -> None:
+    generation = int(getattr(request.app.state, "library_generation", 0)) + 1
+    request.app.state.library_generation = generation
+    event: dict[str, object] = {"generation": generation, "library_id": library_id}
+    subscribers = _library_subscribers(request)
+    for queue in tuple(subscribers):
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        queue.put_nowait(event)
+
+
+async def _close_retired_database(db: AsyncDBClient) -> None:
+    await asyncio.sleep(5)
+    await db.close()
+
+
+def _sse_event(event: dict[str, object]) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+def _library_subscribers(request: Request) -> set[asyncio.Queue[dict[str, object]]]:
+    subscribers = getattr(request.app.state, "library_event_subscribers", None)
+    if subscribers is None:
+        subscribers = set()
+        request.app.state.library_event_subscribers = subscribers
+    return subscribers
 
 
 # ── Library config (key-value settings stored in DB) ──────
@@ -190,9 +268,7 @@ async def thumbnail_status(
     config = await db.library_config.get()
     stats = thumbnail_cache_stats(config.library_id, storage=local_storage)
     media_rows = [
-        media
-        for media in await db.media.list()
-        if media.id is not None and not media.deleted_at
+        media for media in await db.media.list() if media.id is not None and not media.deleted_at
     ]
     valid_sizes = get_config().thumbnails.sizes
     cache_dir = stats.cache_dir
@@ -250,8 +326,7 @@ def _build_thumbnails_sync(db_path: str, body: ThumbnailBuildBody) -> ThumbnailB
             failed=result.failed,
             failed_count=stats.failed_count,
             message=(
-                f"{result.generated} generated, {result.cached} cached, "
-                f"{result.failed} failed."
+                f"{result.generated} generated, {result.cached} cached, {result.failed} failed."
             ),
         )
     finally:

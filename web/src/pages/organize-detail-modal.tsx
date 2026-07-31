@@ -57,15 +57,19 @@ function MediaDetailModalContent({
 }) {
     const [tab, setTab] = useState<DetailTab>("details")
     const [detailFiles, setDetailFiles] = useState<OrganizerItem[] | null>(null)
+    const [detailError, setDetailError] = useState<string | null>(null)
 
     useEffect(() => {
         let cancelled = false
         setDetailFiles(null)
+        setDetailError(null)
         void organizerRepo.details(row.files)
             .then((items) => {
                 if (!cancelled) setDetailFiles(items)
             })
-            .catch(() => undefined)
+            .catch((error) => {
+                if (!cancelled) setDetailError(error instanceof Error ? error.message : "Could not load read-only details.")
+            })
         return () => {
             cancelled = true
         }
@@ -137,6 +141,8 @@ function MediaDetailModalContent({
                             type="button"
                             onClick={onEdit}
                             aria-label={editing ? "Stop editing" : "Edit details"}
+                            disabled={!detailRow.files[0]?.item_uid || detailRow.files[0]?.revision == null}
+                            title={!detailRow.files[0]?.item_uid ? "Legacy items cannot be saved until they are synced." : undefined}
                             className={cn(
                                 "flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors",
                                 editing ? "bg-primary/10 text-primary" : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground",
@@ -157,6 +163,8 @@ function MediaDetailModalContent({
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                    {detailError && <p role="alert" className="mb-4 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{detailError}</p>}
+                    <p className="mb-3 text-xs text-muted-foreground">Details are a read-only projection. Saving edits updates the projection only unless Write NFO is selected.</p>
                     {tab === "details" && (
                         <DetailsTab
                             row={detailRow}

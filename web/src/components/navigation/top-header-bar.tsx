@@ -102,6 +102,10 @@ export function TopHeaderBar({ isTabRoute }: { isTabRoute: boolean }) {
         return null
     }
 
+    if (routeHeader?.immersive) {
+        return null
+    }
+
     return (
         <header
             className="material-bar hairline-b relative z-30 shrink-0"

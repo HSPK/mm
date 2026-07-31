@@ -1,4 +1,3 @@
-import { browserTokenStorage } from "@/lib/token-storage"
 import { config } from "@/lib/config"
 import type { PlayerTrack, RepeatMode } from "@/stores/player"
 
@@ -14,32 +13,44 @@ export interface AudioInfoResponse {
 export function parseLyrics(track: PlayerTrack | null) {
     const synced = parseSyncedLyrics(track?.syncedLyrics)
     const plainSource = synced.length > 0 ? "" : track?.lyrics || track?.syncedLyrics || ""
-    const plain = plainSource.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    const plain = plainSource.split(/\r?\n/).map((line) => line.trim())
+    while (plain[0] === "") plain.shift()
+    while (plain[plain.length - 1] === "") plain.pop()
     return { synced, plain }
 }
 
 export function parseSyncedLyrics(value?: string) {
     if (!value) return []
     const lines: LyricLine[] = []
+    const offset = Number(value.match(/^\[offset:([+-]?\d+)\]$/im)?.[1] ?? 0) / 1000
     for (const row of value.split(/\r?\n/)) {
-        const matches = [...row.matchAll(/\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g)]
+        const matches = [...row.matchAll(/\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g)]
         if (matches.length === 0) continue
-        const text = row.replace(/\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g, "").trim()
+        const text = row.replace(/\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g, "").trim()
         for (const match of matches) {
             const minutes = Number(match[1])
             const seconds = Number(match[2])
+            if (seconds >= 60) continue
             const fraction = match[3] ? Number(match[3].padEnd(3, "0").slice(0, 3)) / 1000 : 0
-            lines.push({ time: minutes * 60 + seconds + fraction, text })
+            lines.push({ time: Math.max(0, minutes * 60 + seconds + fraction + offset), text })
         }
     }
     return lines.sort((a, b) => a.time - b.time)
 }
 
 export function activeLyricLine(lines: LyricLine[], currentTime: number) {
+    const target = currentTime + 0.15
+    let low = 0
+    let high = lines.length - 1
     let active = -1
-    for (let index = 0; index < lines.length; index += 1) {
-        if (lines[index].time <= currentTime + 0.15) active = index
-        else break
+    while (low <= high) {
+        const middle = Math.floor((low + high) / 2)
+        if (lines[middle].time <= target) {
+            active = middle
+            low = middle + 1
+        } else {
+            high = middle - 1
+        }
     }
     return active
 }
@@ -68,9 +79,16 @@ export function formatTime(seconds: number) {
     return `${mins}:${String(secs).padStart(2, "0")}`
 }
 
-export function organizerFileUrl(playbackId: string) {
+export function organizerFileUrl(playbackId: string, signedUrl?: string) {
+    if (signedUrl && typeof window !== "undefined") {
+        const apiOrigin = new URL(config.apiBaseUrl, window.location.href).origin
+        return new URL(signedUrl, apiOrigin).href
+    }
     const params = new URLSearchParams({ playback_id: playbackId })
-    const token = browserTokenStorage.get()
-    if (token) params.set("token", token)
     return `${config.apiBaseUrl}/player/audio?${params.toString()}`
+}
+
+export function usesCrossOriginApi() {
+    if (typeof window === "undefined") return false
+    return new URL(config.apiBaseUrl, window.location.href).origin !== window.location.origin
 }

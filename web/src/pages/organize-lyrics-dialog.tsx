@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Captions, FileSearch, X } from "lucide-react"
 import { organizerRepo, type OrganizerItem, type OrganizerLyricsCandidate } from "@/api/organizer"
 import { Button } from "@/components/ui/button"
@@ -9,43 +9,62 @@ import { cn } from "@/lib/utils"
 import { LabeledSearchInput } from "./organize-form-controls"
 import { basename, cleanTrackTitle, errorMessage } from "./organize-model"
 
-export function LyricsSearchDialog({
-    file,
-    sourcePaths,
-    defaultSource,
-    onClose,
-    onApplied,
-}: {
+interface LyricsSearchDialogProps {
     file: OrganizerItem | null
     sourcePaths: string[]
     defaultSource: string
     onClose: () => void
     onApplied: () => Promise<void>
-}) {
-    const [title, setTitle] = useState("")
-    const [artist, setArtist] = useState("")
-    const [album, setAlbum] = useState("")
+}
+
+export function LyricsSearchDialog(props: LyricsSearchDialogProps) {
+    if (!props.file) return null
+    return (
+        <LyricsDialogContent
+            key={`${props.file.item_uid ?? props.file.path}:${props.defaultSource}`}
+            {...props}
+            file={props.file}
+        />
+    )
+}
+
+function LyricsDialogContent({
+    file,
+    sourcePaths,
+    defaultSource,
+    onClose,
+    onApplied,
+}: Omit<LyricsSearchDialogProps, "file"> & { file: OrganizerItem }) {
+    const [title, setTitle] = useState(() => cleanTrackTitle(file))
+    const [artist, setArtist] = useState(() => file.artist ?? "")
+    const [album, setAlbum] = useState(() => file.album ?? "")
     const [lyricsSource, setLyricsSource] = useState(defaultSource)
     const [candidates, setCandidates] = useState<OrganizerLyricsCandidate[]>([])
     const [activeKey, setActiveKey] = useState("")
     const [loading, setLoading] = useState(false)
     const [applying, setApplying] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const requestRef = useRef<{ generation: number, controller?: AbortController }>({ generation: 0 })
     const active = candidates.find((candidate) => candidate.source_id === activeKey) ?? candidates[0] ?? null
+    const close = () => {
+        requestRef.current.controller?.abort()
+        requestRef.current.generation += 1
+        onClose()
+    }
 
-    useEffect(() => {
-        if (!file) return
-        setTitle(cleanTrackTitle(file))
-        setArtist(file.artist ?? "")
-        setAlbum(file.album ?? "")
-        setLyricsSource(defaultSource)
-        setCandidates([])
-        setActiveKey("")
-    }, [defaultSource, file])
-
-    if (!file) return null
+    useEffect(() => () => {
+        requestRef.current.controller?.abort()
+        requestRef.current.generation += 1
+    }, [])
 
     const runSearch = async () => {
+        requestRef.current.controller?.abort()
+        requestRef.current.generation += 1
+        const generation = requestRef.current.generation
+        const controller = new AbortController()
+        requestRef.current.controller = controller
         setLoading(true)
+        setError(null)
         try {
             const results = await organizerRepo.lyricsSearch({
                 path: file.path,
@@ -54,37 +73,47 @@ export function LyricsSearchDialog({
                 album,
                 source: lyricsSource,
                 limit: 8,
-            })
+            }, { signal: controller.signal })
+            if (generation !== requestRef.current.generation) return
             setCandidates(results)
             setActiveKey(results[0]?.source_id ?? "")
         } catch (error) {
-            notify.error("Lyrics search failed", errorMessage(error))
+            if (!controller.signal.aborted && generation === requestRef.current.generation) {
+                setError(errorMessage(error))
+            }
         } finally {
-            setLoading(false)
+            if (generation === requestRef.current.generation) setLoading(false)
         }
     }
 
     const applyLyrics = async () => {
         if (!active) return
+        const exists = Boolean(
+            file.lyrics
+            || file.metadata_lyrics?.trim()
+            || file.metadata_synced_lyrics?.trim(),
+        )
+        if (exists && !window.confirm("This track already has lyrics. Overwrite them?")) return
         setApplying(true)
+        setError(null)
         try {
             const result = await organizerRepo.lyricsApply({
                 path: file.path,
                 lyrics: active.lyrics,
                 synced_lyrics: active.synced_lyrics,
-                overwrite: true,
+                overwrite: exists,
             })
             notify.success("Lyrics saved", result.message)
             await onApplied()
         } catch (error) {
-            notify.error("Lyrics save failed", errorMessage(error))
+            setError(errorMessage(error))
         } finally {
             setApplying(false)
         }
     }
 
     return createPortal(
-        <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+        <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-black/40 p-4" onClick={close}>
             <section
                 role="dialog"
                 aria-modal="true"
@@ -101,7 +130,7 @@ export function LyricsSearchDialog({
                     </div>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={close}
                         className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
                         aria-label="Close lyrics dialog"
                     >
@@ -144,6 +173,7 @@ export function LyricsSearchDialog({
                             <div className="h-full w-1/3 animate-[shimmer_1s_infinite] bg-primary" />
                         </div>
                     )}
+                    {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
                 </div>
                 <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)]">
                     <div className="min-h-0 overflow-y-auto border-r border-border p-3">
@@ -187,7 +217,7 @@ export function LyricsSearchDialog({
                     </aside>
                 </div>
                 <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-                    <Button size="sm" variant="plain" onClick={onClose}>Cancel</Button>
+                    <Button size="sm" variant="plain" onClick={close}>Cancel</Button>
                     <Button size="sm" loading={applying} disabled={!active} onClick={() => void applyLyrics()}>
                         Save
                     </Button>

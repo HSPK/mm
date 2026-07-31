@@ -7,6 +7,7 @@ export interface HeaderConfig {
     backLabel?: string
     search?: ReactNode
     actions?: ReactNode
+    immersive?: boolean
 }
 
 export const HeaderConfigContext = createContext<HeaderConfig | null>(null)

@@ -1,19 +1,38 @@
 from __future__ import annotations
 
+import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
 from mm.config import load_cli_config
+from mm.music.grouping import music_album_directory
+
+
+def normalized_path_key(path: Path) -> Path:
+    """Absolute, normalized cache key that never touches the filesystem.
+
+    ``Path.resolve()`` stats every path component and follows symlinks, which is
+    needless for a cache key and slow on network mounts where a scan reads
+    thousands of sidecars. ``os.path.abspath`` normalizes ``.``/``..`` and makes
+    the path absolute purely from the string (+ cwd), so equivalent paths still
+    collapse to one cache entry without any I/O.
+    """
+    return Path(os.path.abspath(path.expanduser()))
 
 
 @dataclass(frozen=True)
 class LocalMetadata:
     exists: bool = False
     title: str | None = None
+    title_variants: dict[str, str] | None = None
+    artist_variants: dict[str, str] | None = None
+    album_artist_variants: dict[str, str] | None = None
+    album_variants: dict[str, str] | None = None
     original_title: str | None = None
     show_title: str | None = None
     artist: str | None = None
+    album_artist: str | None = None
     album: str | None = None
     year: int | None = None
     premiered: str | None = None
@@ -45,25 +64,27 @@ class OrganizerScanContext:
     chinese_script: str
 
     @classmethod
-    def create(cls) -> OrganizerScanContext:
+    def create(cls, *, chinese_script: str | None = None) -> OrganizerScanContext:
         return cls(
             children={},
             artwork_files={},
             metadata={},
             image_sizes={},
-            chinese_script=load_cli_config().organizer.chinese_script,
+            chinese_script=chinese_script or load_cli_config().organizer.chinese_script,
         )
 
     def list_children(self, directory: Path) -> list[Path]:
-        key = directory.expanduser().resolve()
+        key = normalized_path_key(directory)
         if key not in self.children:
             self.children[key] = (
-                sorted(directory.iterdir(), key=lambda item: item.name.lower())
+                sorted(
+                    (child for child in directory.iterdir() if not child.name.startswith("._")),
+                    key=lambda item: item.name.lower(),
+                )
                 if directory.is_dir()
                 else []
             )
         return self.children[key]
-
 
 
 def _read_local_metadata(
@@ -84,7 +105,10 @@ def _read_local_metadata(
 
 def _has_metadata(path: Path, media_type: str) -> bool:
     if media_type == "track":
-        return path.with_suffix(".nfo").is_file() or (path.parent / "album.nfo").is_file()
+        return (
+            path.with_suffix(".nfo").is_file()
+            or (music_album_directory(path) / "album.nfo").is_file()
+        )
     if media_type == "tv":
         return (
             path.with_suffix(".nfo").is_file()
@@ -96,7 +120,7 @@ def _has_metadata(path: Path, media_type: str) -> bool:
 
 def _read_track_metadata(path: Path, context: OrganizerScanContext | None = None) -> LocalMetadata:
     track = _read_metadata_file(path.with_suffix(".nfo"), context)
-    album = _read_metadata_file(path.parent / "album.nfo", context)
+    album = _read_metadata_file(music_album_directory(path) / "album.nfo", context)
     if not track.exists:
         return _album_metadata_for_track(album)
     if not album.exists:
@@ -104,9 +128,14 @@ def _read_track_metadata(path: Path, context: OrganizerScanContext | None = None
     return LocalMetadata(
         exists=True,
         title=track.title,
+        title_variants=track.title_variants,
+        artist_variants={**(album.artist_variants or {}), **(track.artist_variants or {})},
+        album_artist_variants=album.album_artist_variants or track.album_artist_variants,
+        album_variants=album.album_variants or track.album_variants,
         original_title=track.original_title,
         show_title=track.show_title,
         artist=track.artist or album.artist,
+        album_artist=track.album_artist or album.album_artist or album.artist,
         album=album.title or album.album or track.album,
         year=album.year or track.year,
         premiered=track.premiered or album.premiered,
@@ -136,9 +165,14 @@ def _album_metadata_for_track(album: LocalMetadata) -> LocalMetadata:
     return LocalMetadata(
         exists=True,
         title=album.title,
+        title_variants={},
+        artist_variants=album.artist_variants,
+        album_artist_variants=album.album_artist_variants or album.artist_variants,
+        album_variants=album.album_variants or album.title_variants,
         original_title=album.original_title,
         show_title=album.show_title,
         artist=album.artist,
+        album_artist=album.album_artist or album.artist,
         album=album.album or album.title,
         year=album.year,
         premiered=album.premiered,
@@ -178,6 +212,10 @@ def _read_tv_metadata(path: Path, context: OrganizerScanContext | None = None) -
     return LocalMetadata(
         exists=True,
         title=episode.title,
+        title_variants=episode.title_variants,
+        artist_variants=episode.artist_variants or show.artist_variants,
+        album_artist_variants=episode.album_artist_variants or show.album_artist_variants,
+        album_variants=episode.album_variants or show.album_variants,
         original_title=episode.original_title or show.original_title,
         show_title=episode.show_title or show.show_title or show.title,
         year=episode.year or show.year,
@@ -217,7 +255,7 @@ def _read_metadata_file(
     metadata_path: Path,
     context: OrganizerScanContext | None = None,
 ) -> LocalMetadata:
-    key = metadata_path.expanduser().resolve()
+    key = normalized_path_key(metadata_path)
     if context and key in context.metadata:
         return context.metadata[key]
     if not metadata_path.exists():
@@ -236,9 +274,14 @@ def _read_metadata_file(
     metadata = LocalMetadata(
         exists=True,
         title=_metadata_text(root, "title"),
+        title_variants=_metadata_variants(root, "titlevariant"),
+        artist_variants=_metadata_variants(root, "artistvariant"),
+        album_artist_variants=_metadata_variants(root, "albumartistvariant"),
+        album_variants=_metadata_variants(root, "albumvariant"),
         original_title=_metadata_text(root, "originaltitle"),
         show_title=_metadata_text(root, "showtitle"),
         artist=_metadata_text(root, "artist"),
+        album_artist=_metadata_text(root, "albumartist"),
         album=_metadata_text(root, "album"),
         year=_metadata_year(root),
         premiered=_metadata_text(root, "premiered") or _metadata_text(root, "aired"),
@@ -289,7 +332,7 @@ def _metadata_paths(
     deduped: list[Path] = []
     seen: set[Path] = set()
     for candidate in candidates:
-        normalized = candidate.expanduser().resolve()
+        normalized = normalized_path_key(candidate)
         if normalized in seen:
             continue
         seen.add(normalized)
@@ -298,8 +341,10 @@ def _metadata_paths(
 
 
 def _adjacent_nfo_files(path: Path, context: OrganizerScanContext | None = None) -> list[Path]:
-    children = context.list_children(path) if context else (
-        sorted(path.iterdir(), key=lambda item: item.name.lower()) if path.is_dir() else []
+    children = (
+        context.list_children(path)
+        if context
+        else (sorted(path.iterdir(), key=lambda item: item.name.lower()) if path.is_dir() else [])
     )
     return sorted(
         (
@@ -428,3 +473,13 @@ def _metadata_ids(root: ET.Element) -> dict[str, str]:
         if value:
             ids.setdefault(source, value)
     return ids
+
+
+def _metadata_variants(root: ET.Element, tag: str) -> dict[str, str]:
+    variants: dict[str, str] = {}
+    for element in root.findall(f".//{tag}"):
+        language = (element.attrib.get("language") or "und").strip()
+        value = (element.text or "").strip()
+        if value:
+            variants[language] = value
+    return variants

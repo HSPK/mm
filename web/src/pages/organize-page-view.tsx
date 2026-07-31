@@ -1,6 +1,6 @@
 import { Settings2 } from "lucide-react"
 import type { Dispatch, SetStateAction } from "react"
-import { organizerRepo, type OrganizerCandidate, type OrganizerConfig } from "@/api/organizer"
+import { type OrganizerCandidate, type OrganizerConfig } from "@/api/organizer"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -16,7 +16,8 @@ import { MediaDetailModal } from "./organize-detail-modal"
 import { MatchDialog as ScrapeMatchDialog } from "./organize-match-dialog"
 import { MusicDetailsSidebar } from "./organize-music-details"
 import { MediaTable } from "./organize-table"
-import { FolderOpenIcon, OrganizerToolbar } from "./organize-toolbar"
+import { OrganizerToolbar } from "./organize-toolbar"
+import { folderOpenIcon } from "./organize-options"
 
 export function OrganizePageView({
     activeKind,
@@ -32,6 +33,11 @@ export function OrganizePageView({
     loadedKinds,
     expandedKeys,
     loading,
+    loadError,
+    canScrape,
+    canRename,
+    searchQuery,
+    sortMode,
     renameLogs,
     renameMenuOpen,
     detailsOpen,
@@ -52,8 +58,9 @@ export function OrganizePageView({
     setScrapeSequential,
     setOperationStatus,
     updateActiveSession,
-    updateKindSession,
     updateSources,
+    refreshItems,
+    retrySetup,
     scrape,
     rename,
     toggleRenameMenu,
@@ -77,6 +84,11 @@ export function OrganizePageView({
     loadedKinds: string[]
     expandedKeys: string[]
     loading: string | null
+    loadError: string | null
+    canScrape: boolean
+    canRename: boolean
+    searchQuery: string
+    sortMode: "name" | "year" | "incomplete"
     renameLogs: Array<{ batch_id: string; count: number; status: string; created_at: string }>
     renameMenuOpen: boolean
     detailsOpen: boolean
@@ -97,15 +109,16 @@ export function OrganizePageView({
     setScrapeSequential: Dispatch<SetStateAction<boolean>>
     setOperationStatus: Dispatch<SetStateAction<{ state: "idle" | "error"; text?: string }>>
     updateActiveSession: (updater: (session: OrganizerKindSession) => OrganizerKindSession) => void
-    updateKindSession: (kind: OrganizerKind, updater: (session: OrganizerKindSession) => OrganizerKindSession) => void
     updateSources: () => Promise<void>
+    refreshItems: () => Promise<void>
+    retrySetup: () => Promise<void>
     scrape: (target?: "missing" | "current" | "missing-metadata" | "missing-lyrics") => Promise<void>
     rename: () => Promise<void>
     toggleRenameMenu: () => void
     undoRename: (batchId: string) => Promise<void>
     openMediaSettings: () => void
-    selectTableRow: (key: string, shiftKey: boolean) => void
-    saveEdit: (row: MediaRow, values: MetadataEditValues) => void
+    selectTableRow: (key: string, shiftKey: boolean, visibleRows: MediaRow[]) => void
+    saveEdit: (row: MediaRow, values: MetadataEditValues) => Promise<void>
     selectCandidateForRow: (row: MediaRow, candidate: OrganizerCandidate) => void
     applyScrape: (rows: MediaRow[], options: ScrapeApplyOptions) => Promise<void>
 }) {
@@ -121,13 +134,15 @@ export function OrganizePageView({
     }
 
     return (
-        <div className="min-h-screen pb-10">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
             <OrganizerToolbar
                 activeKind={activeKind}
                 sourceCount={sourcePaths.length}
                 loading={loading}
                 hasRows={rows.length > 0}
                 hasSelected={selectedRows.length > 0}
+                canScrape={canScrape}
+                canRename={canRename}
                 renameLogs={renameLogs}
                 renameMenuOpen={renameMenuOpen}
                 onKindChange={(kind) => {
@@ -137,6 +152,10 @@ export function OrganizePageView({
                     setOperationStatus({ state: "idle" })
                     setSessionState((prev) => ({ ...prev, activeKind: kind }))
                 }}
+                search={searchQuery}
+                onSearchChange={(query) => updateActiveSession((session) => ({ ...session, query }))}
+                sortMode={sortMode}
+                onSortChange={(order) => updateActiveSession((session) => ({ ...session, order }))}
                 onUpdateSources={() => void updateSources()}
                 onScrape={() => void scrape(actionRows.length > 0 ? "current" : "missing")}
                 onRename={() => void rename()}
@@ -144,7 +163,7 @@ export function OrganizePageView({
                 onUndoRename={(batchId) => void undoRename(batchId)}
                 onSettings={openMediaSettings}
             />
-            <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-7xl flex-col px-5 py-4 sm:px-7 sm:py-5">
+            <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-5 py-4 sm:px-7 sm:py-5">
                 <OrganizerBody
                     activeKind={activeKind}
                     activeSession={activeSession}
@@ -165,9 +184,11 @@ export function OrganizePageView({
                         updateActiveSession((session) => ({ ...session, selectedKey: key }))
                     }}
                     onLyricsApplied={async () => {
-                        const refreshed = await organizerRepo.items("music")
-                        updateKindSession("music", (session) => ({ ...session, items: refreshed }))
+                        await refreshItems()
                     }}
+                    loadError={loadError}
+                    refreshItems={refreshItems}
+                    retrySetup={retrySetup}
                 />
             </div>
             <MediaDetailModal
@@ -222,6 +243,9 @@ function OrganizerBody({
     onToggleExpand,
     onOpenDetail,
     onLyricsApplied,
+    loadError,
+    refreshItems,
+    retrySetup,
 }: {
     activeKind: OrganizerKind
     activeSession: OrganizerKindSession
@@ -234,18 +258,26 @@ function OrganizerBody({
     sourcePaths: string[]
     expandedKeys: string[]
     onOpenMediaSettings: () => void
-    onSelectTableRow: (key: string, shiftKey: boolean) => void
+    onSelectTableRow: (key: string, shiftKey: boolean, visibleRows: MediaRow[]) => void
     onToggleExpand: (key: string) => void
     onOpenDetail: (key: string) => void
     onLyricsApplied: () => Promise<void>
+    loadError: string | null
+    refreshItems: () => Promise<void>
+    retrySetup: () => Promise<void>
 }) {
     if (config == null) {
+        if (loadError) return <RetryState message={loadError} onRetry={retrySetup} />
         return <EmptyState icon={Settings2} title="Loading organizer settings" description="Media paths are inherited from Settings > Media." className="flex-1" />
     }
-    if (noSources) {
+    if (!loadedKinds.includes(activeKind)) {
+        if (loadError) return <RetryState message={loadError} onRetry={refreshItems} />
+        return <div className="flex flex-1 items-center justify-center py-20"><Spinner /></div>
+    }
+    if (noSources && activeSession.items.length === 0) {
         return (
             <EmptyState
-                icon={FolderOpenIcon(activeKind)}
+                icon={folderOpenIcon(activeKind)}
                 title={`No ${activeOption.label.toLowerCase()} source folders`}
                 description="Add source folders in Settings > Media before syncing."
                 action={{ label: "Open Media settings", onClick: onOpenMediaSettings, variant: "primary" }}
@@ -253,31 +285,31 @@ function OrganizerBody({
             />
         )
     }
-    if (!loadedKinds.includes(activeKind)) {
-        return <div className="flex flex-1 items-center justify-center py-20"><Spinner /></div>
-    }
     if (rows.length === 0) {
+        const hasStoredItems = activeSession.items.length > 0
         return (
             <EmptyState
                 icon={activeOption.icon}
-                title={activeSession.scanned ? `No ${activeOption.label.toLowerCase()} found` : `Sync ${activeOption.label.toLowerCase()}`}
-                description={activeSession.scanned ? "No identifiable media was found in the configured source folders." : "Use Sync to parse media from configured folders."}
+                title={hasStoredItems ? `No matching ${activeOption.label.toLowerCase()}` : activeSession.scanned ? `No ${activeOption.label.toLowerCase()} found` : `Sync ${activeOption.label.toLowerCase()}`}
+                description={hasStoredItems ? "Try a different search." : activeSession.scanned ? "No identifiable media was found in the configured source folders." : "Use Sync to parse media from configured folders."}
                 className="flex-1"
             />
         )
     }
     if (activeKind === "music") {
         return (
-            <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_34rem]">
-                <MediaTable
-                    rows={rows}
-                    kind={activeKind}
-                    selectedKey={selectedRow?.key ?? null}
-                    selectedKeys={activeSession.selectedKeys}
-                    onOpenDetail={() => undefined}
-                    onSelect={onSelectTableRow}
-                    onToggleExpand={() => undefined}
-                />
+            <div className="grid h-full min-h-0 gap-4 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_34rem] xl:overflow-visible">
+                <div className="min-h-[28rem] xl:min-h-0">
+                    <MediaTable
+                        rows={rows}
+                        kind={activeKind}
+                        selectedKey={selectedRow?.key ?? null}
+                        selectedKeys={activeSession.selectedKeys}
+                        onOpenDetail={() => undefined}
+                        onSelect={onSelectTableRow}
+                        onToggleExpand={() => undefined}
+                    />
+                </div>
                 <MusicDetailsSidebar
                     row={selectedRow}
                     sourcePaths={sourcePaths}
@@ -288,14 +320,20 @@ function OrganizerBody({
         )
     }
     return (
-        <MediaTable
-            rows={rows}
-            kind={activeKind}
-            selectedKey={selectedRow?.key ?? null}
-            selectedKeys={activeSession.selectedKeys}
-            onOpenDetail={onOpenDetail}
-            onSelect={onSelectTableRow}
-            onToggleExpand={onToggleExpand}
-        />
+        <div className="h-full min-h-0">
+            <MediaTable
+                rows={rows}
+                kind={activeKind}
+                selectedKey={selectedRow?.key ?? null}
+                selectedKeys={activeSession.selectedKeys}
+                onOpenDetail={onOpenDetail}
+                onSelect={onSelectTableRow}
+                onToggleExpand={onToggleExpand}
+            />
+        </div>
     )
+}
+
+function RetryState({ message, onRetry }: { message: string, onRetry: () => Promise<void> }) {
+    return <EmptyState icon={Settings2} title="Could not load organizer" description={message} action={{ label: "Retry", onClick: () => void onRetry(), variant: "primary" }} className="flex-1" />
 }

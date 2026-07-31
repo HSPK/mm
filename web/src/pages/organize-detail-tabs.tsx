@@ -123,6 +123,7 @@ function EditPanel({
         plot: meta.plot,
         tags: meta.tags.join(", "),
         cast: meta.cast.join(", "),
+        writeNfo: false,
     })
     const setValue = (key: keyof typeof values, value: string) => {
         setValues((prev) => ({ ...prev, [key]: value }))
@@ -130,7 +131,8 @@ function EditPanel({
 
     return (
         <div className="space-y-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Edit metadata draft</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Edit organizer projection</p>
+            <p className="text-sm text-muted-foreground">Changes stay in the organizer projection unless you explicitly write an NFO.</p>
             <div className="grid gap-3 md:grid-cols-2">
                 <Input value={values.title} onChange={(event) => setValue("title", event.target.value)} placeholder="Title" />
                 <Input value={values.originalTitle} onChange={(event) => setValue("originalTitle", event.target.value)} placeholder="Original title" />
@@ -172,10 +174,15 @@ function EditPanel({
                         plot: values.plot.trim(),
                         tags: values.tags,
                         cast: values.cast,
+                        writeNfo: values.writeNfo,
                     })}
                 >
-                    Save draft
+                    Save projection
                 </Button>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input type="checkbox" checked={values.writeNfo} onChange={(event) => setValues((prev) => ({ ...prev, writeNfo: event.target.checked }))} />
+                    Write NFO
+                </label>
                 <Button size="sm" variant="plain" onClick={onCancel}>Cancel</Button>
             </div>
         </div>
@@ -257,13 +264,13 @@ function StreamTable({
     type,
 }: {
     title: string
-    streams: NonNullable<OrganizerItem["media_info"]>["audio_streams"]
+    streams: NonNullable<OrganizerItem["media_info"]>["audio_streams"] | undefined
     type: "audio" | "subtitle"
 }) {
     return (
         <section className="space-y-2">
             <h3 className="text-[15px] font-semibold">{title}</h3>
-            {streams.length === 0 ? (
+            {!streams || streams.length === 0 ? (
                 <p className="rounded-2xl bg-secondary/35 px-3 py-3 text-sm text-muted-foreground">
                     No {title.toLowerCase()} tracks detected.
                 </p>

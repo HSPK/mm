@@ -1,7 +1,9 @@
 import axios from "axios"
 import { useCallback, useEffect, useState } from "react"
 import { libraryRepo, type LibraryInfo } from "@/api/library"
+import { resetMusicRuntime } from "@/components/player/music-runtime"
 import { useMediaQueryStore } from "@/stores/media-query"
+import { useAuthStore } from "@/stores/auth"
 
 export interface UseCurrentLibraryResult {
     current: LibraryInfo | null
@@ -13,6 +15,7 @@ export interface UseCurrentLibraryResult {
 
 export function useCurrentLibrary(): UseCurrentLibraryResult {
     const fetchMedia = useMediaQueryStore((s) => s.fetchMedia)
+    const fetchUser = useAuthStore((state) => state.fetchUser)
     const [current, setCurrent] = useState<LibraryInfo | null>(null)
     const [recent, setRecent] = useState<LibraryInfo[]>([])
     const [switching, setSwitching] = useState(false)
@@ -33,8 +36,11 @@ export function useCurrentLibrary(): UseCurrentLibraryResult {
         setError(null)
         try {
             const res = await libraryRepo.switchTo(dbPath)
+            resetMusicRuntime()
             setCurrent(res)
             libraryRepo.listRecent().then(setRecent).catch(() => { })
+            await fetchUser()
+            if (!useAuthStore.getState().token) return
             fetchMedia(true)
         } catch (err: unknown) {
             const detail = axios.isAxiosError<{ detail?: string }>(err) ? err.response?.data?.detail : null
@@ -43,7 +49,7 @@ export function useCurrentLibrary(): UseCurrentLibraryResult {
         } finally {
             setSwitching(false)
         }
-    }, [fetchMedia])
+    }, [fetchMedia, fetchUser])
 
     return { current, recent, switching, error, switchTo }
 }

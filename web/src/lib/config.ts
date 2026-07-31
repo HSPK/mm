@@ -4,7 +4,6 @@
 export interface AppConfig {
     apiBaseUrl: string
     tokenStorageKey: string
-    tokenCookieName: string
     viewPrefs: {
         viewModeKey: string
         dateGroupModeKey: string
@@ -26,7 +25,6 @@ function readEnv(key: string, fallback: string): string {
 export const config: AppConfig = {
     apiBaseUrl: readEnv("VITE_API_BASE_URL", "/api"),
     tokenStorageKey: "mm_token",
-    tokenCookieName: "mm_token",
     viewPrefs: {
         viewModeKey: "mm-view-mode",
         dateGroupModeKey: "mm-date-group-mode",

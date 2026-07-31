@@ -47,7 +47,6 @@ export function useVideoUserState(playbackId: string) {
         pendingPatches.set(playbackId, { ...(pendingPatches.get(playbackId) ?? {}), ...patch })
         const existing = patchTimers.get(playbackId)
         if (existing != null) window.clearTimeout(existing)
-        const delay = "progress" in patch || "duration" in patch ? 1200 : 80
         patchTimers.set(playbackId, window.setTimeout(() => {
             patchTimers.delete(playbackId)
             const nextPatch = pendingPatches.get(playbackId)
@@ -59,19 +58,12 @@ export function useVideoUserState(playbackId: string) {
                     notifyVideoStateListeners()
                 })
                 .catch(() => undefined)
-        }, delay))
+        }, 80))
     }
 
     return {
         state,
         setFavorite: (favorite: boolean) => patchState({ favorite }),
-        setWatched: (watched: boolean) => patchState({ watched }),
-        setNotes: (notes: string) => patchState({ notes }),
-        setProgress: (progress: number, duration: number) => patchState({
-            progress,
-            duration,
-            updatedAt: Date.now(),
-        }),
     }
 }
 
